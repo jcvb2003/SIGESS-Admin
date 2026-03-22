@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { Home, Users, Globe, KeyRound, Settings, Database, LogOut } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/features/auth";
+import { supabase } from "@/lib/supabase";
 
 const navigation = [
   { name: "Início", href: "/", icon: Home },
@@ -24,7 +24,7 @@ export function AppSidebar() {
 
   const fetchClientCount = async () => {
     try {
-      const { count, error } = await supabase
+      const { count, error } = await (supabase as any)
         .from("entidades")
         .select("*", { count: "exact", head: true });
 

@@ -1,0 +1,15 @@
+export interface Client {
+  id: string;
+  nome_entidade: string;
+  email: string | null;
+  telefone: string | null;
+  supabase_url: string;
+  supabase_publishable_key: string | null;
+  supabase_secret_keys: string | null;
+  logo_url: string | null;
+  assinatura: "mensal" | "anual";
+  data_cadastro: string;
+}
+
+export type ClientCreate = Omit<Client, "id" | "data_cadastro">;
+export type ClientUpdate = Partial<ClientCreate>;

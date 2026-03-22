@@ -1,11 +1,20 @@
-import type { Tables } from "@/integrations/supabase/types";
+// Client / Entidade type
+export interface Client {
+  id: string;
+  nome_entidade: string;
+  email: string | null;
+  telefone: string | null;
+  supabase_url: string;
+  supabase_publishable_key: string | null;
+  supabase_secret_keys: string | null;
+  logo_url: string | null;
+  assinatura: string;
+  data_cadastro: string;
+}
 
-// Database types
-export type Entidade = Tables<"entidades">;
-export type Client = Tables<"entidades">;
-export type DocumentTemplateDB = Tables<"document_templates">;
+export type Entidade = Client;
 
-// Extended document type for UI (with additional fields for local state)
+// Extended document type for UI
 export interface DocumentTemplate {
   id: string;
   name: string;

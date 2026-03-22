@@ -1,0 +1,11 @@
+export { useClients, clientsQueryKey } from "./hooks/useClients";
+export { useClientDetail } from "./hooks/useClientDetail";
+export { useCreateClient, useUpdateClient, useDeleteClient } from "./hooks/useClientMutations";
+export * from "./types";
+export * from "./components/ClientCard";
+export * from "./components/AddClientModal";
+export * from "./components/EditClientModal";
+export * from "./components/HealthCheckCard";
+export * from "./components/MigrationsTab";
+export * from "./components/TablesTab";
+export * from "./components/UsersTab";

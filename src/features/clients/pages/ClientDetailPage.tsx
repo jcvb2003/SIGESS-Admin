@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket } from "lucide-react";
+import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket, Trash2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import { ptBR } from "date-fns/locale";
 import {
   useClientDetail,
   EditClientModal,
+  DeleteClientDialog,
+  useDeleteClient,
   HealthCheckCard,
   TablesTab,
   UsersTab,
@@ -26,15 +28,29 @@ interface StorageBucket {
   created_at: string;
 }
 
+interface ClientMember {
+  id: string;
+  email: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  acesso_expira_em: string | null;
+  max_socios: number | null;
+}
+
+interface TableInfo {
+  name: string;
+  schema: string;
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
-  const [usersCount, setUsersCount] = useState(0);
-  const [tablesCount, setTablesCount] = useState(0);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
+  const deleteClientMutation = useDeleteClient();
 
   // Independent query for buckets using the secure Proxy
   const {
@@ -49,6 +65,44 @@ export default function ClientDetailPage() {
     staleTime: 1000 * 60 * 10, // 10 minutes cache
   });
 
+  // Query for users
+  const { data: users = [] } = useQuery({
+    queryKey: ["client-users", id],
+    queryFn: async () => {
+      const data = await proxyAction(id!, "list-client-members");
+      return (data.users || []).map((u: Record<string, unknown>) => ({
+        id: u.id as string,
+        email: (u.email as string) || "Sem email",
+        created_at: u.created_at as string,
+        last_sign_in_at: (u.last_sign_in_at as string) || null,
+        acesso_expira_em: (u.acesso_expira_em as string) || null,
+        max_socios: (u.max_socios as number) || null,
+      })) as ClientMember[];
+    },
+    enabled: !!client,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Query for tables
+  const { data: tables = [] } = useQuery({
+    queryKey: ["client-tables", id],
+    queryFn: async () => {
+      const data = await proxyAction(id!, "list-tables");
+      let rawList: Array<{ name?: string; table_name?: string; schema?: string } | string> = [];
+      if (Array.isArray(data)) {
+        rawList = data;
+      } else if (data && typeof data === 'object' && 'definitions' in data) {
+        rawList = Object.keys(data.definitions).map(name => ({ name, schema: "public" }));
+      }
+      return rawList.map((t) => ({
+        name: typeof t === 'string' ? t : (t.name || (t as Record<string, unknown>).table_name as string || ""),
+        schema: (typeof t === 'object' && (t as Record<string, unknown>).schema as string) || "public"
+      })).filter((t: TableInfo) => t.name);
+    },
+    enabled: !!client,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const handleRefresh = async () => {
     // Invalidate all queries related to this client
     await Promise.all([
@@ -57,6 +111,13 @@ export default function ClientDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['client-users', id] }),
       queryClient.invalidateQueries({ queryKey: ['client-tables', id] }),
     ]);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (client) {
+      await deleteClientMutation.mutateAsync(client.id);
+      navigate("/clients");
+    }
   };
 
   if (isLoading) {
@@ -158,6 +219,10 @@ export default function ClientDetailPage() {
               <Pencil className="mr-2 h-4 w-4" />
               Editar
             </Button>
+            <Button variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Excluir
+            </Button>
             <Button variant="outline" onClick={handleRefresh}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Atualizar
@@ -182,7 +247,7 @@ export default function ClientDetailPage() {
               <div className="rounded-lg bg-primary/20 p-2"><Users className="h-5 w-5 text-primary" /></div>
               <div>
                 <p className="text-sm text-muted-foreground">Usuários</p>
-                <p className="text-xl font-bold text-foreground">{usersCount}</p>
+                <p className="text-xl font-bold text-foreground">{users.length}</p>
               </div>
             </div>
           </Card>
@@ -191,7 +256,7 @@ export default function ClientDetailPage() {
               <div className="rounded-lg bg-primary/20 p-2"><Table className="h-5 w-5 text-primary" /></div>
               <div>
                 <p className="text-sm text-muted-foreground">Tabelas</p>
-                <p className="text-xl font-bold text-foreground">{tablesCount}</p>
+                <p className="text-xl font-bold text-foreground">{tables.length}</p>
               </div>
             </div>
           </Card>
@@ -221,11 +286,11 @@ export default function ClientDetailPage() {
             </TabsTrigger>
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
-              Usuários ({usersCount})
+              Usuários ({users.length})
             </TabsTrigger>
             <TabsTrigger value="tables" className="gap-2">
               <Table className="h-4 w-4" />
-              Tabelas ({tablesCount})
+              Tabelas ({tables.length})
             </TabsTrigger>
             <TabsTrigger value="migrations" className="gap-2">
               <Rocket className="h-4 w-4" />
@@ -241,7 +306,7 @@ export default function ClientDetailPage() {
             <UsersTab
               clientId={client.id}
               connectionError={connectionError}
-              onUsersLoaded={setUsersCount}
+              onUsersLoaded={() => {}} // No longer needed for parent updates
             />
           </TabsContent>
 
@@ -249,12 +314,12 @@ export default function ClientDetailPage() {
             <TablesTab
               clientId={client.id}
               connectionError={connectionError}
-              onTablesLoaded={setTablesCount}
+              onTablesLoaded={() => {}} // No longer needed for parent updates
             />
           </TabsContent>
 
           <TabsContent value="migrations">
-            <MigrationsTab clientId={client.id} />
+            <MigrationsTab clientId={client.id} tables={tables} />
           </TabsContent>
         </Tabs>
 
@@ -263,6 +328,13 @@ export default function ClientDetailPage() {
           open={editOpen}
           onOpenChange={setEditOpen}
           onUpdated={() => refetchClient()}
+        />
+
+        <DeleteClientDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          clientName={client.nome_entidade}
+          onConfirm={handleConfirmDelete}
         />
       </div>
     </MainLayout>

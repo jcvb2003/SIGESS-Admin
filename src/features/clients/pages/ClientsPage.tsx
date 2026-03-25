@@ -4,7 +4,8 @@ import { Plus, Users, Loader2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/features/dashboard";
-import { useClients, useDeleteClient, ClientCard, AddClientModal } from "@/features/clients";
+import { useClients, useDeleteClient, ClientCard, AddClientModal, DeleteClientDialog } from "@/features/clients";
+import { type Client } from "@/features/clients/types";
 
 export default function ClientsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -12,14 +13,21 @@ export default function ClientsPage() {
   
   const { data: clients = [], isLoading } = useClients();
   const deleteClientMutation = useDeleteClient();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
-  const handleClientClick = (client: any) => {
+  const handleClientClick = (client: Client) => {
     navigate(`/clients/${client.id}`);
   };
 
-  const handleDeleteClient = async (client: any) => {
-    if (confirm(`Tem certeza que deseja excluir ${client.nome_entidade}?`)) {
-      await deleteClientMutation.mutateAsync(client.id);
+  const handleDeleteClick = (client: Client) => {
+    setClientToDelete(client);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (clientToDelete) {
+      await deleteClientMutation.mutateAsync(clientToDelete.id);
     }
   };
 
@@ -72,7 +80,7 @@ export default function ClientsPage() {
             <ClientCard
               key={client.id}
               client={client}
-              onDelete={() => handleDeleteClient(client)}
+              onDelete={() => handleDeleteClick(client)}
               onClick={() => handleClientClick(client)}
             />
           ))}
@@ -98,6 +106,15 @@ export default function ClientsPage() {
           open={isModalOpen}
           onOpenChange={setIsModalOpen}
         />
+
+        {clientToDelete && (
+          <DeleteClientDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            clientName={clientToDelete.nome_entidade}
+            onConfirm={handleConfirmDelete}
+          />
+        )}
       </div>
     </MainLayout>
   );

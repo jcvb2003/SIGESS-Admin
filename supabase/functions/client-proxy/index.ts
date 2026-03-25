@@ -1,7 +1,7 @@
 // @ts-expect-error: Deno-specific URL imports
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// @ts-expect-error: Deno-specific URL imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sigessSchema } from "./sigess_schema.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,8 +145,7 @@ async function executeMigration(projectUrl: string, clientKey: string, accessTok
     console.log("Health check before migration: table not found or error, proceeding...");
   }
 
-  // @ts-expect-error: Deno global is available in Edge Functions runtime
-  const sql = await Deno.readTextFile(new URL("./sigess_schema.sql", import.meta.url));
+  const sql = sigessSchema;
   
   // Extract project ref from URL (e.g., https://ref.supabase.co)
   const projectRef = projectUrl.split(".")[0].split("//")[1];

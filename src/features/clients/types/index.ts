@@ -6,8 +6,11 @@ export interface Client {
   supabase_url: string;
   supabase_publishable_key: string | null;
   supabase_secret_keys: string | null;
+  supabase_access_token: string | null;
   logo_url: string | null;
-  assinatura: "mensal" | "anual";
+  assinatura: "mensal" | "anual" | "trial";
+  acesso_expira_em: string | null;
+  max_socios: number | null;
   data_cadastro: string;
 }
 

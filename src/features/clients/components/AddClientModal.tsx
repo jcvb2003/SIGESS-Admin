@@ -23,20 +23,23 @@ import { useCreateClient } from "../hooks/useClientMutations";
 import type { ClientCreate } from "../types";
 
 interface AddClientModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
-  const [formData, setFormData] = useState<ClientCreate>({
+  const [formData, setFormData] = useState<ClientCreate & { acesso_expira_em: string | null }>({
     nome_entidade: "",
     email: "",
     telefone: "",
     supabase_url: "",
     supabase_publishable_key: "",
     supabase_secret_keys: "",
+    supabase_access_token: "",
     logo_url: "",
     assinatura: "mensal",
+    acesso_expira_em: null,
+    max_socios: 5,
   });
   const [testing, setTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -44,7 +47,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
   
   const createClientMutation = useCreateClient();
 
-  const handleChange = (field: keyof ClientCreate, value: string) => {
+  const handleChange = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setConnectionStatus('idle');
     setConnectionDetails(null);
@@ -75,9 +78,10 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
         setConnectionStatus('error');
         toast.error(result.message);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       setConnectionStatus('error');
-      toast.error("Falha ao testar conexão: " + error.message);
+      toast.error("Falha ao testar conexão: " + err.message);
     } finally {
       setTesting(false);
     }
@@ -92,7 +96,17 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
     }
 
     try {
-      await createClientMutation.mutateAsync(formData);
+      let acesso_expira_em: string | null = null;
+      if (formData.assinatura === "trial" && formData.acesso_expira_em) {
+        acesso_expira_em = new Date(formData.acesso_expira_em).toISOString();
+      }
+
+      const payload: ClientCreate = {
+        ...formData,
+        acesso_expira_em,
+        max_socios: formData.assinatura === "trial" ? formData.max_socios : null,
+      };
+      await createClientMutation.mutateAsync(payload);
       toast.success("Cliente adicionado com sucesso!");
       onOpenChange(false);
       setFormData({
@@ -102,14 +116,16 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
         supabase_url: "",
         supabase_publishable_key: "",
         supabase_secret_keys: "",
+        supabase_access_token: "",
         logo_url: "",
         assinatura: "mensal",
+        acesso_expira_em: null,
+        max_socios: 5,
       });
       setConnectionStatus('idle');
       setConnectionDetails(null);
-    } catch (error: any) {
-      // Erro já é tratado pelo toast no error.handler se configurado, 
-      // ou podemos tratar aqui se necessário.
+    } catch (error) {
+      console.error("Erro ao adicionar cliente:", error);
     }
   };
 
@@ -194,24 +210,25 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             onClick={testConnection}
             disabled={testing}
           >
-            {testing ? (
+            {testing && (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Testando conexão...
               </>
-            ) : connectionStatus === 'success' ? (
+            )}
+            {!testing && connectionStatus === 'success' && (
               <>
                 <CheckCircle className="mr-2 h-4 w-4 text-primary" />
                 Conexão OK
               </>
-            ) : connectionStatus === 'error' ? (
+            )}
+            {!testing && connectionStatus === 'error' && (
               <>
                 <XCircle className="mr-2 h-4 w-4 text-destructive" />
                 Falha na conexão
               </>
-            ) : (
-              "Testar Conexão"
             )}
+            {!testing && connectionStatus === 'idle' && "Testar Conexão"}
           </Button>
 
           {connectionDetails && (
@@ -220,6 +237,25 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               <p>✓ Auth: {connectionDetails.hasAuth ? "Acessível" : "Sem acesso"}</p>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="supabase_access_token" className="flex items-center gap-2">
+              Supabase Access Token (PAT){" "}
+              <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                Acesso Conta Completa
+              </span>
+            </Label>
+            <Input
+              id="supabase_access_token"
+              type="password"
+              placeholder="sbp_..."
+              value={formData.supabase_access_token || ""}
+              onChange={(e) => handleChange("supabase_access_token", e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Necessário para migrações de schema. Este token dá acesso administrativo a TODOS os projetos da conta Supabase do cliente.
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="logo_url">URL do Logo</Label>
@@ -235,7 +271,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             <Label htmlFor="assinatura">Plano de Assinatura</Label>
             <Select
               value={formData.assinatura}
-              onValueChange={(value) => handleChange("assinatura", value as 'mensal' | 'anual')}
+              onValueChange={(value) => handleChange("assinatura", value as 'mensal' | 'anual' | 'trial')}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o plano" />
@@ -243,9 +279,37 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               <SelectContent>
                 <SelectItem value="mensal">Mensal</SelectItem>
                 <SelectItem value="anual">Anual</SelectItem>
+                <SelectItem value="trial">Trial</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {formData.assinatura === "trial" && (
+            <div className="space-y-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50/50">
+              <p className="text-xs font-semibold text-yellow-800 uppercase">Configurações do Trial</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="acesso_expira_em">Data de Expiração</Label>
+                  <Input
+                    id="acesso_expira_em"
+                    type="datetime-local"
+                    value={formData.acesso_expira_em || ""}
+                    onChange={(e) => handleChange("acesso_expira_em", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max_socios">Limite de Sócios</Label>
+                  <Input
+                    id="max_socios"
+                    type="number"
+                    min={1}
+                    value={formData.max_socios ?? 5}
+                    onChange={(e) => setFormData(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button
@@ -256,7 +320,14 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             >
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1" disabled={createClientMutation.isPending}>
+            <Button 
+              type="submit" 
+              className="flex-1" 
+              disabled={
+                createClientMutation.isPending ||
+                (formData.assinatura === "trial" && !formData.acesso_expira_em)
+              }
+            >
               {createClientMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -47,39 +47,48 @@ export type Database = {
       }
       entidades: {
         Row: {
+          acesso_expira_em: string | null
           assinatura: string
           data_cadastro: string
           email: string | null
           id: string
           logo_url: string | null
+          max_socios: number | null
           nome_entidade: string
           supabase_publishable_key: string | null
           supabase_secret_keys: string | null
           supabase_url: string
+          supabase_access_token: string | null
           telefone: string | null
         }
         Insert: {
+          acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
           email?: string | null
           id?: string
           logo_url?: string | null
+          max_socios?: number | null
           nome_entidade: string
           supabase_publishable_key?: string | null
           supabase_secret_keys?: string | null
           supabase_url: string
+          supabase_access_token?: string | null
           telefone?: string | null
         }
         Update: {
+          acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
           email?: string | null
           id?: string
           logo_url?: string | null
+          max_socios?: number | null
           nome_entidade?: string
           supabase_publishable_key?: string | null
           supabase_secret_keys?: string | null
           supabase_url?: string
+          supabase_access_token?: string | null
           telefone?: string | null
         }
         Relationships: []

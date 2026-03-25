@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createClient, updateClient, deleteClient } from "@/services/clients.service";
+import { createClient, updateClient, deleteClient, proxyAction } from "@/services/clients.service";
 import type { ClientCreate, ClientUpdate } from "@/features/clients/types";
 import { clientsQueryKey } from "./useClients";
 
@@ -35,5 +35,16 @@ export function useDeleteClient() {
   return useMutation({
     mutationFn: (id: string) => deleteClient(id),
     onSuccess: invalidate,
+  });
+}
+
+export function useUpdateClientUserLicense(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, updates }: { userId: string; updates: Record<string, unknown> }) =>
+      proxyAction(clientId, "update-client-member", { userId, updates }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
+    },
   });
 }

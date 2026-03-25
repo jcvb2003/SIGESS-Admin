@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { 
-  useClientDetail, 
-  EditClientModal, 
-  HealthCheckCard, 
-  TablesTab, 
-  UsersTab, 
-  MigrationsTab 
+import {
+  useClientDetail,
+  EditClientModal,
+  HealthCheckCard,
+  TablesTab,
+  UsersTab,
+  MigrationsTab
 } from "@/features/clients";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { proxyAction } from "@/services/clients.service";
@@ -33,13 +33,13 @@ export default function ClientDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [usersCount, setUsersCount] = useState(0);
   const [tablesCount, setTablesCount] = useState(0);
-  
+
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
 
   // Independent query for buckets using the secure Proxy
-  const { 
-    data: buckets = [], 
-    isLoading: isLoadingBuckets, 
+  const {
+    data: buckets = [],
+    isLoading: isLoadingBuckets,
     error: bucketError
   } = useQuery({
     queryKey: ['client-buckets', id],
@@ -246,7 +246,7 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           <TabsContent value="tables">
-            <TablesTab 
+            <TablesTab
               clientId={client.id}
               connectionError={connectionError}
               onTablesLoaded={setTablesCount}
@@ -254,7 +254,7 @@ export default function ClientDetailPage() {
           </TabsContent>
 
           <TabsContent value="migrations">
-            <MigrationsTab />
+            <MigrationsTab clientId={client.id} />
           </TabsContent>
         </Tabs>
 

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useUpdateClient } from "../hooks/index";
+import { proxyAction } from "@/services/clients.service";
 
 interface EditClientModalProps {
   readonly client: Client;
@@ -16,6 +17,18 @@ interface EditClientModalProps {
 }
 
 export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditClientModalProps) {
+  const formatForInput = (isoString: string | null) => {
+    if (!isoString) return "";
+    try {
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return "";
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    } catch {
+      return "";
+    }
+  };
+
   const [form, setForm] = useState({
     nome_entidade: client.nome_entidade,
     email: client.email || "",
@@ -23,8 +36,11 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
     supabase_url: client.supabase_url,
     supabase_publishable_key: client.supabase_publishable_key || "",
     supabase_secret_keys: client.supabase_secret_keys || "",
+    supabase_access_token: client.supabase_access_token || "",
     logo_url: client.logo_url || "",
     assinatura: client.assinatura,
+    acesso_expira_em: formatForInput(client.acesso_expira_em),
+    max_socios: client.max_socios ?? 5,
   });
   
   const updateClientMutation = useUpdateClient();
@@ -38,34 +54,60 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
         supabase_url: client.supabase_url,
         supabase_publishable_key: client.supabase_publishable_key || "",
         supabase_secret_keys: client.supabase_secret_keys || "",
+        supabase_access_token: client.supabase_access_token || "",
         logo_url: client.logo_url || "",
         assinatura: client.assinatura,
+        acesso_expira_em: formatForInput(client.acesso_expira_em),
+        max_socios: client.max_socios ?? 5,
       });
     }
   }, [open, client]);
 
   const handleSave = async () => {
     try {
-      const result = await updateClientMutation.mutateAsync({
-        id: client.id,
-        input: {
+      const updatePayload: Record<string, unknown> = {
           nome_entidade: form.nome_entidade,
           email: form.email || null,
           telefone: form.telefone || null,
           supabase_url: form.supabase_url,
           supabase_publishable_key: form.supabase_publishable_key || null,
-          supabase_secret_keys: form.supabase_secret_keys || null,
           logo_url: form.logo_url || null,
           assinatura: form.assinatura,
+          acesso_expira_em: form.assinatura === "trial" && form.acesso_expira_em 
+            ? new Date(form.acesso_expira_em).toISOString() 
+            : null,
+          max_socios: form.assinatura === "trial" ? form.max_socios : null,
+        };
+
+        // Only overwrite sensitive keys if user explicitly typed a new value
+        if (form.supabase_secret_keys) {
+          updatePayload.supabase_secret_keys = form.supabase_secret_keys;
         }
+        if (form.supabase_access_token) {
+          updatePayload.supabase_access_token = form.supabase_access_token;
+        }
+
+      const result = await updateClientMutation.mutateAsync({
+        id: client.id,
+        input: updatePayload,
       });
       
-      toast.success("Cliente atualizado com sucesso");
-      if (onUpdated) onUpdated(result as Client);
+      if (form.assinatura === "trial") {
+        try {
+          // Automatic limits synchronization on Trial modifications.
+          await proxyAction(client.id, "sync-trial-limits");
+          toast.success("Cliente atualizado e limites sincronizados no projeto!");
+        } catch (syncError) {
+          toast.error(`Cliente atualizado, mas erro no proxy: ${syncError instanceof Error ? syncError.message : "Erro desconhecido"}`);
+        }
+      } else {
+        toast.success("Cliente atualizado com sucesso");
+      }
+
+      if (onUpdated) onUpdated(result);
       onOpenChange(false);
     } catch (error) {
-      const err = error as Error;
-      toast.error(`Erro ao salvar: ${err.message}`);
+      toast.error(`Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     }
   };
 
@@ -73,7 +115,7 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Cliente</DialogTitle>
         </DialogHeader>
@@ -105,24 +147,68 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
             <Input type="password" value={form.supabase_secret_keys} onChange={e => update("supabase_secret_keys", e.target.value)} />
           </div>
           <div>
+            <Label className="flex items-center gap-2">
+              Supabase Access Token (PAT) <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold uppercase">Acesso Conta Completa</span>
+            </Label>
+            <Input 
+              type="password" 
+              placeholder="sbp_..." 
+              value={form.supabase_access_token} 
+              onChange={e => update("supabase_access_token", e.target.value)} 
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Necessário para migrações de schema. Este token dá acesso administrativo a TODOS os projetos da conta Supabase do cliente.
+            </p>
+          </div>
+          <div>
             <Label>URL do Logo</Label>
             <Input value={form.logo_url} onChange={e => update("logo_url", e.target.value)} />
           </div>
           <div>
             <Label>Plano de Assinatura</Label>
-            <Select value={form.assinatura} onValueChange={v => update("assinatura", v as "mensal" | "anual")}>
+            <Select value={form.assinatura} onValueChange={v => update("assinatura", v as "mensal" | "anual" | "trial")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="mensal">Mensal</SelectItem>
                 <SelectItem value="anual">Anual</SelectItem>
+                <SelectItem value="trial">Trial</SelectItem>
               </SelectContent>
             </Select>
           </div>
+          {form.assinatura === "trial" && (
+            <div className="space-y-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50/50">
+              <p className="text-xs font-semibold text-yellow-800 uppercase">Configurações do Trial</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Data de Expiração</Label>
+                  <Input
+                    type="datetime-local"
+                    value={form.acesso_expira_em}
+                    onChange={e => update("acesso_expira_em", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Limite de Sócios</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.max_socios}
+                    onChange={e => setForm(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button 
               onClick={handleSave} 
-              disabled={updateClientMutation.isPending || !form.nome_entidade || !form.supabase_url}
+              disabled={
+                updateClientMutation.isPending || 
+                !form.nome_entidade || 
+                !form.supabase_url ||
+                (form.assinatura === "trial" && !form.acesso_expira_em)
+              }
             >
               {updateClientMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>

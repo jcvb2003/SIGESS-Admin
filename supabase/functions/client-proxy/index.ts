@@ -37,9 +37,9 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   // 2. Fetch from public.User (try/catch this portion separately)
   let publicUsers: unknown[] = [];
   try {
-    const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,max_socios`, {
-      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-    });
+  const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,max_socios,fingerprints,max_devices`, {
+    headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+  });
     
     if (publicRes.ok) {
       publicUsers = await publicRes.json();
@@ -62,6 +62,8 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
       ...au,
       acesso_expira_em: pu?.acesso_expira_em || null,
       max_socios: pu?.max_socios || null,
+      fingerprints: pu?.fingerprints || [],
+      max_devices: pu?.max_devices || 2,
     };
   });
 

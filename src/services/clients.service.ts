@@ -85,3 +85,21 @@ export async function deleteClient(id: string): Promise<void> {
   const { error } = await supabase.from("entidades").delete().eq("id", id);
   if (error) throw handleSupabaseError(error);
 }
+
+export async function verifyPassword(password: string): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) {
+    throw new Error("Sessão expirada ou usuário não autenticado.");
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: password,
+  });
+
+  if (error) {
+    throw new Error("Senha incorreta. Verificação falhou.");
+  }
+
+  return true;
+}

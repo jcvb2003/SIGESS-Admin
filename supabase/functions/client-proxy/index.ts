@@ -124,7 +124,27 @@ async function healthCheck(clientUrl: string) {
   }
 }
 
-async function executeMigration(projectUrl: string, accessToken: string) {
+async function executeMigration(projectUrl: string, clientKey: string, accessToken: string) {
+  // 1. First, check if the database is already configured by looking for the 'socios' table
+  try {
+    const checkRes = await fetch(`${projectUrl}/rest/v1/socios?select=id&limit=1`, {
+      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+    });
+    
+    if (checkRes.ok) {
+      throw new Error("O banco de dados já parece estar configurado (tabela 'socios' detectada).");
+    }
+    // Note: If 404, it means the table doesn't exist, which is what we want.
+    // If other error, we might want to proceed or fail depending on the error.
+  } catch (e) {
+    // If it's the error we just threw, rethrow it
+    if ((e as Error).message.includes("já parece estar configurado")) {
+      throw e;
+    }
+    // Otherwise, it likely means the table doesn't exist (404/400), which is fine.
+    console.log("Health check before migration: table not found or error, proceeding...");
+  }
+
   // @ts-expect-error: Deno global is available in Edge Functions runtime
   const sql = await Deno.readTextFile(new URL("./sigess_schema.sql", import.meta.url));
   
@@ -205,10 +225,10 @@ interface ClientConfig {
 
 async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig) {
   if (action === "execute-migration") {
-    if (!client.supabase_access_token) {
-      throw new Error("Supabase Access Token (PAT) not configured for this client");
+    if (!client.supabase_access_token || !client.supabase_secret_keys) {
+      throw new Error("Supabase Access Token (PAT) ou Service Role Key não configurados para este cliente");
     }
-    return await executeMigration(client.supabase_url, client.supabase_access_token);
+    return await executeMigration(client.supabase_url, client.supabase_secret_keys, client.supabase_access_token);
   }
 
   if (action === "sync-trial-limits") {

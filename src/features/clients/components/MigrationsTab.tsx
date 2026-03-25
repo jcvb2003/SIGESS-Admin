@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,24 @@ interface MigrationsTabProps {
 export function MigrationsTab({ clientId }: MigrationsTabProps) {
   const [isMigrating, setIsMigrating] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function checkStatus() {
+      try {
+        const tables = await proxyAction(clientId, "list-tables");
+        const hasSocios = Array.isArray(tables) && tables.some((t: { name: string }) => t.name === "socios");
+        if (hasSocios) {
+          setIsSuccess(true);
+        }
+      } catch (e) {
+        console.error("Erro ao verificar status da migração:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    checkStatus();
+  }, [clientId]);
 
   const handleExecute = async () => {
     if (!confirm("Confirmar aplicação do esquema SIGESS? Isso criará tabelas, funções e buckets no projeto do cliente.")) {
@@ -32,6 +50,19 @@ export function MigrationsTab({ clientId }: MigrationsTabProps) {
     }
   };
 
+  const renderButtonContent = () => {
+    if (isLoading) {
+      return <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...</>;
+    }
+    if (isMigrating) {
+      return <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Aplicando...</>;
+    }
+    if (isSuccess) {
+      return <><CheckCircle2 className="mr-2 h-4 w-4" /> Aplicado</>;
+    }
+    return "Executar Migração";
+  };
+
   return (
     <div className="space-y-4">
       <Card className="p-6 border-dashed border-2 border-primary/30 bg-primary/5">
@@ -47,18 +78,10 @@ export function MigrationsTab({ clientId }: MigrationsTabProps) {
           </div>
           <Button 
             onClick={handleExecute} 
-            disabled={isMigrating || isSuccess}
+            disabled={isMigrating || isSuccess || isLoading}
             className="shrink-0"
           >
-            {isMigrating ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Aplicando...</>
-            ) : (
-              isSuccess ? (
-                <><CheckCircle2 className="mr-2 h-4 w-4" /> Aplicado</>
-              ) : (
-                "Executar Migração"
-              )
-            )}
+            {renderButtonContent()}
           </Button>
         </div>
       </Card>

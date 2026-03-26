@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Users, Mail, Calendar, Shield, Pencil, Key, Users2, Monitor, Trash2 } from "lucide-react";
+import { Users, Mail, Calendar, Shield, Pencil, Key, Monitor, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +59,16 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
     queryKey: ["client-users", clientId],
     queryFn: async () => {
       const data = await proxyAction(clientId, "list-client-members");
-      return (data.users || []).map((u: any) => ({
+      return (data.users || []).map((u: { 
+        id: string; 
+        email?: string; 
+        created_at: string; 
+        last_sign_in_at?: string; 
+        acesso_expira_em?: string; 
+        max_socios?: number; 
+        fingerprints?: string[]; 
+        max_devices?: number; 
+      }) => ({
         id: u.id,
         email: u.email || "Sem email",
         created_at: u.created_at,
@@ -165,7 +174,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                     <div className="text-left md:text-right min-w-[80px]">
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Dispositivos</p>
                       <p className="text-sm font-medium">
-                        {user.fingerprints.length} / {user.max_devices}
+                        {(user.fingerprints?.length || 0)} / {user.max_devices}
                       </p>
                     </div>
                   </div>
@@ -243,17 +252,17 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                 </div>
               </div>
 
-              {editingUser && editingUser.fingerprints.length > 0 && (
+              {editingUser && (editingUser.fingerprints?.length || 0) > 0 && (
                 <div className="space-y-4 pt-2 border-t mt-2">
                   <div className="flex items-center gap-2">
                     <Monitor className="h-4 w-4 text-primary" />
                     <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Dispositivos Vinculados</h4>
-                    <Badge variant="outline" className="ml-auto">{editingUser.fingerprints.length}</Badge>
+                    <Badge variant="outline" className="ml-auto">{editingUser.fingerprints?.length || 0}</Badge>
                   </div>
                   
                   <div className="grid gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
-                    {editingUser.fingerprints.map((fp, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs bg-muted/50 p-2 rounded-md border border-border group">
+                    {editingUser.fingerprints?.map((fp, idx) => (
+                      <div key={fp} className="flex items-center justify-between text-xs bg-muted/50 p-2 rounded-md border border-border group">
                         <span className="font-mono text-[10px] truncate max-w-[200px]" title={fp}>
                           {fp}
                         </span>
@@ -263,8 +272,8 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                           size="icon" 
                           className="h-6 w-6 text-destructive hover:bg-destructive/10"
                           onClick={() => {
-                            const newFps = editingUser.fingerprints.filter((_, i) => i !== idx);
-                            setEditingUser({ ...editingUser, fingerprints: newFps });
+                            const newFps = (editingUser?.fingerprints || []).filter((_, i) => i !== idx);
+                            setEditingUser(prev => prev ? { ...prev, fingerprints: newFps } : null);
                           }}
                           title="Desvincular Dispositivo"
                         >

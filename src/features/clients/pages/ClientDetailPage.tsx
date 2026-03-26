@@ -35,6 +35,8 @@ interface ClientMember {
   last_sign_in_at: string | null;
   acesso_expira_em: string | null;
   max_socios: number | null;
+  fingerprints: string[];
+  max_devices: number;
 }
 
 interface TableInfo {
@@ -77,6 +79,8 @@ export default function ClientDetailPage() {
         last_sign_in_at: (u.last_sign_in_at as string) || null,
         acesso_expira_em: (u.acesso_expira_em as string) || null,
         max_socios: (u.max_socios as number) || null,
+        fingerprints: (u.fingerprints as string[]) || [],
+        max_devices: (u.max_devices as number) || 2,
       })) as ClientMember[];
     },
     enabled: !!client,

@@ -7,7 +7,8 @@ export interface License {
   status: LicenseStatus;
   usage_count: number;
   max_usage: number | null;
-  fingerprint: string | null;
+  fingerprints: string[];
+  max_devices: number;
   expires_at: string | null;
   created_at: string | null;
 }
@@ -17,5 +18,6 @@ export interface LicenseCreate {
   plan: LicensePlan;
   status: LicenseStatus;
   max_usage?: number;
+  max_devices?: number;
   expires_at?: string;
 }

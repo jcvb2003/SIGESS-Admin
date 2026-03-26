@@ -9,15 +9,24 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, KeyRound } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Copy, Check, KeyRound, Trash2, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from "@/components/ui/dialog";
 import { License } from "../types";
 import { useUpdateLicense, useDeleteLicense } from "../hooks";
 
 interface LicenseTableProps {
-  licenses: License[];
+  readonly licenses: License[];
 }
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -33,8 +42,37 @@ const planConfig: Record<string, { label: string; className: string }> = {
 
 export function LicenseTable({ licenses }: LicenseTableProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [unlinkingLicense, setUnlinkingLicense] = useState<License | null>(null);
+  const [editingLicense, setEditingLicense] = useState<License | null>(null);
+  const [editForm, setEditForm] = useState({ max_devices: 2, expires_at: "" });
   const updateMutation = useUpdateLicense();
   const deleteMutation = useDeleteLicense();
+
+  const openEdit = (lic: License) => {
+    setEditingLicense(lic);
+    setEditForm({
+      max_devices: lic.max_devices || 2,
+      expires_at: lic.expires_at ? new Date(lic.expires_at).toISOString().split('T')[0] : ""
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingLicense) return;
+    try {
+      await updateMutation.mutateAsync({
+        key: editingLicense.key,
+        updates: {
+          max_devices: Number(editForm.max_devices),
+          expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null
+        }
+      });
+      toast.success("Limites da licença atualizados");
+      setEditingLicense(null);
+    } catch (err) {
+      console.error("Error updating license:", err);
+      toast.error("Erro ao atualizar licença");
+    }
+  };
 
   const handleCopy = async (key: string) => {
     await navigator.clipboard.writeText(key);
@@ -43,7 +81,19 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleAction = async (action: string, key: string) => {
+  const handleUnlinkDevice = (fp: string) => {
+    if (!unlinkingLicense) return;
+    if (confirm("Desvincular este dispositivo?")) {
+      handleAction("unlink", unlinkingLicense.key, fp);
+      setUnlinkingLicense(prev => {
+        if (!prev) return null;
+        const newFps = (prev.fingerprints || []).filter(f => f !== fp);
+        return { ...prev, fingerprints: newFps };
+      });
+    }
+  };
+
+  const handleAction = async (action: string, key: string, extra?: string) => {
     switch (action) {
       case "block":
         await updateMutation.mutateAsync({ key, updates: { status: "blocked" } });
@@ -53,23 +103,29 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
         await updateMutation.mutateAsync({ key, updates: { status: "active" } });
         toast.success(`Licença ${key} desbloqueada`);
         break;
-      case "unlink":
-        await updateMutation.mutateAsync({ key, updates: { fingerprint: null } });
-        toast.success(`Dispositivo desvinculado da licença ${key}`);
+      case "unlink": {
+        const licToUpdate = licenses.find(l => l.key === key);
+        if (!licToUpdate) return;
+        const newFps = (licToUpdate.fingerprints || []).filter(fp => fp !== extra);
+        await updateMutation.mutateAsync({ key, updates: { fingerprints: newFps } });
+        toast.success(`Dispositivo desvinculado`);
         break;
-      case "renew":
+      }
+      case "renew": {
         const lic = licenses.find(l => l.key === key);
         const baseDate = lic?.expires_at ? new Date(lic.expires_at) : new Date();
         baseDate.setFullYear(baseDate.getFullYear() + 1);
         await updateMutation.mutateAsync({ key, updates: { expires_at: baseDate.toISOString(), status: "active" } });
         toast.success(`Licença ${key} renovada por +1 ano`);
         break;
-      case "convert":
+      }
+      case "convert": {
         const expiryDate = new Date();
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
         await updateMutation.mutateAsync({ key, updates: { plan: "paid", status: "active", expires_at: expiryDate.toISOString() } });
         toast.success(`Licença ${key} convertida para plano pago`);
         break;
+      }
       case "delete":
         if (confirm(`Excluir licença ${key}?`)) {
           await deleteMutation.mutateAsync(key);
@@ -88,83 +144,163 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Chave</TableHead>
-          <TableHead>Plano</TableHead>
-          <TableHead>Uso</TableHead>
-          <TableHead>Dispositivo</TableHead>
-          <TableHead>Validade</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Ações</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {licenses.map((lic) => {
-          const plan = planConfig[lic.plan] || planConfig.trial;
-          const status = statusConfig[lic.status] || statusConfig.active;
-          const usage = lic.plan === "trial" ? `${lic.usage_count} / ${lic.max_usage || 5}` : "—";
-          const device = lic.fingerprint ? lic.fingerprint.substring(0, 10) + "..." : "Não vinculado";
-          const expiry = lic.expires_at
-            ? format(new Date(lic.expires_at), "dd/MM/yyyy", { locale: ptBR })
-            : "—";
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Chave</TableHead>
+            <TableHead>Plano</TableHead>
+            <TableHead>Dispositivos</TableHead>
+            <TableHead>Validade</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {licenses.map((lic) => {
+            const plan = planConfig[lic.plan] || planConfig.trial;
+            const status = statusConfig[lic.status] || statusConfig.active;
+            const usage = `${(lic.fingerprints?.length || 0)} / ${lic.max_devices || 2}`;
+            const expiry = lic.expires_at
+              ? format(new Date(lic.expires_at), "dd/MM/yyyy", { locale: ptBR })
+              : "—";
 
-          return (
-            <TableRow key={lic.key}>
-              <TableCell>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-xs">{lic.key}</span>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(lic.key)}>
-                    {copiedKey === lic.key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            return (
+              <TableRow key={lic.key}>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-xs">{lic.key}</span>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(lic.key)}>
+                      {copiedKey === lic.key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={plan.className}>{plan.label}</Badge>
+                </TableCell>
+                <TableCell className="font-medium">{usage}</TableCell>
+                <TableCell className="text-muted-foreground">{expiry}</TableCell>
+                <TableCell>
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {(lic.fingerprints?.length || 0) > 0 && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setUnlinkingLicense(lic)}>
+                        Gerenciar Disp.
+                      </Button>
+                    )}
+                    {lic.plan === "paid" && lic.status === "active" && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("renew", lic.key)}>
+                        Renovar
+                      </Button>
+                    )}
+                    {lic.status === "expired" && lic.plan === "trial" && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("convert", lic.key)}>
+                        Converter
+                      </Button>
+                    )}
+                    {lic.status === "blocked" && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("unblock", lic.key)}>
+                        Desbloquear
+                      </Button>
+                    )}
+                    {lic.status !== "blocked" && lic.status !== "expired" && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("block", lic.key)}>
+                        Bloquear
+                      </Button>
+                    )}
+                    <Button variant="outline" size="icon" className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10" onClick={() => openEdit(lic)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="icon" className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("delete", lic.key)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      {/* Unlink Manager Dialog */}
+      <Dialog open={!!unlinkingLicense} onOpenChange={(open) => !open && setUnlinkingLicense(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Dispositivos</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">Licença: <span className="font-mono">{unlinkingLicense?.key}</span></p>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Cadastrados ({(unlinkingLicense?.fingerprints?.length || 0)})</span>
+              <span className="text-xs text-muted-foreground">Limite: {unlinkingLicense?.max_devices}</span>
+            </div>
+            <div className="grid gap-2 overflow-y-auto max-h-[300px] pr-1">
+              {unlinkingLicense?.fingerprints?.map((fp) => (
+                <div key={fp} className="flex items-center justify-between p-2 rounded-md bg-secondary/30 border border-border group">
+                  <span className="font-mono text-[10px] truncate max-w-[250px]" title={fp}>{fp}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleUnlinkDevice(fp)}
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className={plan.className}>{plan.label}</Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{usage}</TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground max-w-[120px] truncate">{device}</TableCell>
-              <TableCell className="text-muted-foreground">{expiry}</TableCell>
-              <TableCell>
-                <Badge variant={status.variant}>{status.label}</Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  {lic.plan === "paid" && lic.status === "active" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("renew", lic.key)}>
-                      Renovar
-                    </Button>
-                  )}
-                  {lic.status === "expired" && lic.plan === "trial" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("convert", lic.key)}>
-                      Converter
-                    </Button>
-                  )}
-                  {lic.fingerprint && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("unlink", lic.key)}>
-                      Desvincular
-                    </Button>
-                  )}
-                  {lic.status === "blocked" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("unblock", lic.key)}>
-                      Desbloquear
-                    </Button>
-                  )}
-                  {lic.status !== "blocked" && lic.status !== "expired" && (
-                    <Button variant="outline" size="sm" className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("block", lic.key)}>
-                      Bloquear
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("delete", lic.key)}>
-                    Excluir
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground italic">
+              Remova um print para liberar espaço para um novo dispositivo.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUnlinkingLicense(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit License Limits Dialog */}
+      <Dialog open={!!editingLicense} onOpenChange={(open) => !open && setEditingLicense(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Editar Licença</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">Chave: <span className="font-mono">{editingLicense?.key}</span></p>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="max_devices" className="text-right">
+                Dispositivos
+              </Label>
+              <Input
+                id="max_devices"
+                type="number"
+                min="1"
+                className="col-span-3"
+                value={editForm.max_devices}
+                onChange={(e) => setEditForm(prev => ({ ...prev, max_devices: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="expires_at" className="text-right">
+                Validade
+              </Label>
+              <Input
+                id="expires_at"
+                type="date"
+                className="col-span-3"
+                value={editForm.expires_at}
+                onChange={(e) => setEditForm(prev => ({ ...prev, expires_at: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingLicense(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -14,18 +14,20 @@ import { Loader2, Copy, Check } from "lucide-react";
 import { useCreateLicense } from "../hooks";
 import { toast } from "sonner";
 
+function generateRand() {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
 export function LicenseGenerator() {
   const [trialUses, setTrialUses] = useState("5");
   const [trialDays, setTrialDays] = useState("3");
+  const [trialMaxDevices, setTrialMaxDevices] = useState("2");
   const [paidDuration, setPaidDuration] = useState("1");
+  const [paidMaxDevices, setPaidMaxDevices] = useState("2");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
   const createMutation = useCreateLicense();
-
-  function generateRand() {
-    return Math.random().toString(36).substring(2, 6).toUpperCase();
-  }
 
   const handleCopy = async (key: string) => {
     await navigator.clipboard.writeText(key);
@@ -36,7 +38,7 @@ export function LicenseGenerator() {
 
   const handleGenerateTrial = async () => {
     const key = `TRIAL-${generateRand()}-${generateRand()}`;
-    const days = parseInt(trialDays) || 3;
+    const days = Number.parseInt(trialDays, 10) || 3;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
 
@@ -44,7 +46,8 @@ export function LicenseGenerator() {
       key,
       plan: "trial",
       status: "active",
-      max_usage: parseInt(trialUses) || 5,
+      max_usage: Number.parseInt(trialUses, 10) || 5,
+      max_devices: Number.parseInt(trialMaxDevices, 10) || 2,
       expires_at: expiresAt.toISOString(),
     });
 
@@ -53,7 +56,7 @@ export function LicenseGenerator() {
 
   const handleGeneratePaid = async () => {
     const key = `SINP-${generateRand()}-${generateRand()}`;
-    const months = parseFloat(paidDuration) * 12;
+    const months = Number.parseFloat(paidDuration) * 12;
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + months);
 
@@ -61,6 +64,7 @@ export function LicenseGenerator() {
       key,
       plan: "paid",
       status: "active",
+      max_devices: Number.parseInt(paidMaxDevices, 10) || 2,
       expires_at: expiresAt.toISOString(),
     });
 
@@ -89,6 +93,10 @@ export function LicenseGenerator() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Limite de Dispositivos</Label>
+          <Input type="number" value={trialMaxDevices} onChange={(e) => setTrialMaxDevices(e.target.value)} min={1} max={10} />
+        </div>
         <Button className="w-full" onClick={handleGenerateTrial} disabled={createMutation.isPending}>
           {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Gerar chave trial
@@ -110,6 +118,10 @@ export function LicenseGenerator() {
               <SelectItem value="2">2 anos</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Limite de Dispositivos</Label>
+          <Input type="number" value={paidMaxDevices} onChange={(e) => setPaidMaxDevices(e.target.value)} min={1} max={10} />
         </div>
         <Button className="w-full" onClick={handleGeneratePaid} disabled={createMutation.isPending}>
           {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

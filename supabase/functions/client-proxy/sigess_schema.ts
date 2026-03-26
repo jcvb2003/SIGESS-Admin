@@ -63,10 +63,7 @@ CREATE TABLE public."User" (
     "createdAt" timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     role text DEFAULT 'user'::text,
     acesso_expira_em timestamp with time zone,
-    max_socios integer DEFAULT 5,
-    fingerprints text[] DEFAULT '{}'::text[],
-    max_devices integer DEFAULT 2,
-    CONSTRAINT check_max_devices CHECK (COALESCE(array_length(fingerprints, 1), 0) <= max_devices)
+    max_socios integer DEFAULT 5
 );
 
 CREATE TABLE public.templates (

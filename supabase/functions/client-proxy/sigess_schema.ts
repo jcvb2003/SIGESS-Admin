@@ -100,7 +100,9 @@ CREATE TABLE public.entidade (
     fundacao text,
     email text,
     comarca text,
-    numero text
+    numero text,
+    nome_do_presidente text,
+    cpf_do_presidente text
 );
 
 CREATE TABLE public.localidades (

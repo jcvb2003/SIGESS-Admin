@@ -15,6 +15,7 @@ export interface License {
   max_usage_agro: number | null;
   fingerprints: string[];
   max_devices: number;
+  device_metadata: Record<string, string> | null;
   expires_at: string | null;
   created_at: string | null;
 }

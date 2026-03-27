@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check, KeyRound, Trash2, Pencil } from "lucide-react";
+import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -51,6 +51,9 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
     max_usage_turbo: 0,
     max_usage_agro: 0
   });
+  const [editingDeviceHash, setEditingDeviceHash] = useState<string | null>(null);
+  const [deviceNewName, setDeviceNewName] = useState("");
+  
   const updateMutation = useUpdateLicense();
   const deleteMutation = useDeleteLicense();
 
@@ -92,7 +95,29 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
     toast.success("Chave copiada!");
     setTimeout(() => setCopiedKey(null), 2000);
   };
-
+  
+  const handleUpdateDeviceName = async (key: string, fp: string, newName: string) => {
+    try {
+      const lic = licenses.find(l => l.key === key);
+      if (!lic) return;
+      
+      const newMetadata = { ...(lic.device_metadata || {}), [fp]: newName };
+      await updateMutation.mutateAsync({ key, updates: { device_metadata: newMetadata } });
+      
+      toast.success("Nome do dispositivo atualizado");
+      setEditingDeviceHash(null);
+      
+      // Update local state if needed (react-query should handle refresh but optimistic update in unlinkingLicense helps)
+      setUnlinkingLicense(prev => {
+        if (!prev) return null;
+        return { ...prev, device_metadata: newMetadata };
+      });
+    } catch (err) {
+      console.error("Error updating device name:", err);
+      toast.error("Erro ao atualizar nome");
+    }
+  };
+  
   const handleUnlinkDevice = (fp: string) => {
     if (!unlinkingLicense) return;
     if (confirm("Desvincular este dispositivo?")) {
@@ -259,19 +284,75 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
               <span className="text-xs text-muted-foreground">Limite: {unlinkingLicense?.max_devices}</span>
             </div>
             <div className="grid gap-2 overflow-y-auto max-h-[300px] pr-1">
-              {unlinkingLicense?.fingerprints?.map((fp) => (
-                <div key={fp} className="flex items-center justify-between p-2 rounded-md bg-secondary/30 border border-border group">
-                  <span className="font-mono text-[10px] truncate max-w-[250px]" title={fp}>{fp}</span>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => handleUnlinkDevice(fp)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {unlinkingLicense?.fingerprints?.map((fp) => {
+                const deviceName = unlinkingLicense?.device_metadata?.[fp] || "Sem nome";
+                const isEditing = editingDeviceHash === fp;
+                
+                return (
+                  <div key={fp} className="flex flex-col p-2 rounded-md bg-secondary/30 border border-border group gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 overflow-hidden flex-1">
+                        <Monitor className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        {isEditing ? (
+                          <Input 
+                            value={deviceNewName} 
+                            onChange={(e) => setDeviceNewName(e.target.value)}
+                            className="h-7 text-xs py-0"
+                            autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleUpdateDeviceName(unlinkingLicense.key, fp, deviceNewName)}
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold truncate" title={deviceName}>{deviceName}</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex gap-1">
+                        {isEditing ? (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-emerald-500 hover:bg-emerald-500/10"
+                              onClick={() => handleUpdateDeviceName(unlinkingLicense.key, fp, deviceNewName)}
+                            >
+                              <Save className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-muted-foreground hover:bg-muted/10"
+                              onClick={() => setEditingDeviceHash(null)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              setEditingDeviceHash(fp);
+                              setDeviceNewName(deviceName === "Sem nome" ? "" : deviceName);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleUnlinkDevice(fp)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <span className="font-mono text-[9px] text-muted-foreground/60 truncate" title={fp}>{fp}</span>
+                  </div>
+                );
+              })}
             </div>
             <p className="text-[10px] text-muted-foreground italic">
               Remova um print para liberar espaço para um novo dispositivo.

@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X } from "lucide-react";
-import { format } from "date-fns";
+import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X, Calendar, History, Cpu } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { 
@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { License } from "../types";
 import { useUpdateLicense, useDeleteLicense } from "../hooks";
+import { UsageIndicator } from "./UsageIndicator";
+import { cn } from "@/lib/utils";
 
 interface LicenseTableProps {
   readonly licenses: License[];
@@ -101,7 +103,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
       const lic = licenses.find(l => l.key === key);
       if (!lic) return;
       
-      const newMetadata = { ...(lic.device_metadata || {}), [fp]: newName };
+      const newMetadata = { ...lic.device_metadata, [fp]: newName };
       await updateMutation.mutateAsync({ key, updates: { device_metadata: newMetadata } });
       
       toast.success("Nome do dispositivo atualizado");
@@ -195,73 +197,116 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Chave</TableHead>
+            <TableHead className="w-[180px]">
+              <div className="flex items-center gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                <span>Chave</span>
+              </div>
+            </TableHead>
             <TableHead>Plano</TableHead>
-            <TableHead>Dispositivos</TableHead>
+            <TableHead>
+              <div className="flex items-center gap-1.5">
+                <Monitor className="h-3.5 w-3.5" />
+                <span>Disp.</span>
+              </div>
+            </TableHead>
+            <TableHead className="min-w-[150px]">
+              <div className="flex items-center gap-1.5">
+                <Cpu className="h-3.5 w-3.5" />
+                <span>Consumo</span>
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Criada em</span>
+              </div>
+            </TableHead>
             <TableHead>Validade</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Ações</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {licenses.map((lic) => {
             const plan = planConfig[lic.plan] || planConfig.trial;
             const status = statusConfig[lic.status] || statusConfig.active;
-            const usage = `${(lic.fingerprints?.length || 0)} / ${lic.max_devices || 2}`;
             const expiry = lic.expires_at
               ? format(new Date(lic.expires_at), "dd/MM/yyyy", { locale: ptBR })
               : "—";
 
             return (
-              <TableRow key={lic.key}>
+              <TableRow key={lic.key} className="group hover:bg-muted/50 transition-colors">
                 <TableCell>
                   <div className="flex items-center gap-1">
-                    <span className="font-mono text-xs">{lic.key}</span>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(lic.key)}>
-                      {copiedKey === lic.key ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    <span className="font-mono text-xs font-semibold">{lic.key}</span>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleCopy(lic.key)}>
+                      {copiedKey === lic.key ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                     </Button>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={plan.className}>{plan.label}</Badge>
-                </TableCell>
-                <TableCell className="font-medium">{usage}</TableCell>
-                <TableCell className="text-muted-foreground">{expiry}</TableCell>
-                <TableCell>
-                  <Badge variant={status.variant}>{status.label}</Badge>
+                  <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-tight px-1.5 h-5", plan.className)}>
+                    {plan.label}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-xs font-medium", (lic.fingerprints?.length || 0) >= lic.max_devices ? "text-amber-600" : "")}>
+                      {lic.fingerprints?.length || 0} / {lic.max_devices}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <UsageIndicator license={lic} />
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">
+                      {lic.created_at ? format(new Date(lic.created_at), "dd/MM/yy") : "—"}
+                    </span>
+                    {lic.created_at && (
+                      <span className="text-[10px] text-muted-foreground/60">
+                        há {formatDistanceToNow(new Date(lic.created_at), { locale: ptBR })}
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs font-medium text-muted-foreground">{expiry}</TableCell>
+                <TableCell>
+                  <Badge variant={status.variant} className="text-[10px] h-5">{status.label}</Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => openEdit(lic)} title="Editar Limites">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     {(lic.fingerprints?.length || 0) > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setUnlinkingLicense(lic)}>
-                        Gerenciar Disp.
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted" onClick={() => setUnlinkingLicense(lic)} title="Gerenciar Dispositivos">
+                        <Monitor className="h-4 w-4" />
                       </Button>
                     )}
                     {lic.plan === "paid" && lic.status === "active" && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("renew", lic.key)}>
-                        Renovar
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleAction("renew", lic.key)} title="Renovar +1 Ano">
+                        <Calendar className="h-4 w-4" />
                       </Button>
                     )}
                     {lic.status === "expired" && lic.plan === "trial" && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("convert", lic.key)}>
-                        Converter
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:bg-amber-500/10" onClick={() => handleAction("convert", lic.key)} title="Converter para Pago">
+                        <History className="h-4 w-4" />
                       </Button>
                     )}
-                    {lic.status === "blocked" && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction("unblock", lic.key)}>
-                        Desbloquear
+                    {lic.status === "blocked" ? (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleAction("unblock", lic.key)} title="Desbloquear">
+                        <Check className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleAction("block", lic.key)} title="Bloquear Licença">
+                        <X className="h-4 w-4" />
                       </Button>
                     )}
-                    {lic.status !== "blocked" && lic.status !== "expired" && (
-                      <Button variant="outline" size="sm" className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("block", lic.key)}>
-                        Bloquear
-                      </Button>
-                    )}
-                    <Button variant="outline" size="icon" className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10" onClick={() => openEdit(lic)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="outline" size="icon" className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleAction("delete", lic.key)}>
-                      <Trash2 className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={() => handleAction("delete", lic.key)} title="Excluir Permanentemente">
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </TableCell>

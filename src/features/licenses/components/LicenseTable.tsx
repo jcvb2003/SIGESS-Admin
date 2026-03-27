@@ -47,9 +47,9 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
   const [editForm, setEditForm] = useState({ 
     max_devices: 2, 
     expires_at: "",
-    max_usage_manual: 0,
-    max_usage_turbo: 0,
-    max_usage_agro: 0
+    max_manual: 0,
+    max_turbo: 0,
+    max_agro: 0
   });
   const [editingDeviceHash, setEditingDeviceHash] = useState<string | null>(null);
   const [deviceNewName, setDeviceNewName] = useState("");
@@ -62,9 +62,9 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
     setEditForm({
       max_devices: lic.max_devices || 2,
       expires_at: lic.expires_at ? new Date(lic.expires_at).toISOString().split('T')[0] : "",
-      max_usage_manual: lic.max_usage_manual || 0,
-      max_usage_turbo: lic.max_usage_turbo || 0,
-      max_usage_agro: lic.max_usage_agro || 0
+      max_manual: lic.max_manual || 0,
+      max_turbo: lic.max_turbo || 0,
+      max_agro: lic.max_agro || 0
     });
   };
 
@@ -76,9 +76,9 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
         updates: {
           max_devices: Number(editForm.max_devices),
           expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null,
-          max_usage_manual: editingLicense.plan === "trial" ? Number(editForm.max_usage_manual) : null,
-          max_usage_turbo: editingLicense.plan === "trial" ? Number(editForm.max_usage_turbo) : null,
-          max_usage_agro: editingLicense.plan === "trial" ? Number(editForm.max_usage_agro) : null
+          max_manual: editingLicense.plan === "trial" ? Number(editForm.max_manual) : null,
+          max_turbo: editingLicense.plan === "trial" ? Number(editForm.max_turbo) : null,
+          max_agro: editingLicense.plan === "trial" ? Number(editForm.max_agro) : null
         }
       });
       toast.success("Limites da licença atualizados");
@@ -165,9 +165,9 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
             plan: "paid", 
             status: "active", 
             expires_at: expiryDate.toISOString(),
-            max_usage_manual: null,
-            max_usage_turbo: null,
-            max_usage_agro: null
+            max_manual: null,
+            max_turbo: null,
+            max_agro: null
           } 
         });
         toast.success(`Licença ${key} convertida para plano pago`);
@@ -403,42 +403,42 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
                 <h4 className="text-sm font-semibold mb-3">Limites de Uso</h4>
                 <div className="space-y-3">
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="max_usage_manual" className="text-right text-xs">
+                    <Label htmlFor="max_manual" className="text-right text-xs">
                       Manual
                     </Label>
                     <Input
-                      id="max_usage_manual"
+                      id="max_manual"
                       type="number"
                       min="0"
                       className="col-span-3"
-                      value={editForm.max_usage_manual}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_manual: Number(e.target.value) }))}
+                      value={editForm.max_manual}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_manual: Number(e.target.value) }))}
                     />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="max_usage_turbo" className="text-right text-xs">
+                    <Label htmlFor="max_turbo" className="text-right text-xs">
                       Turbo
                     </Label>
                     <Input
-                      id="max_usage_turbo"
+                      id="max_turbo"
                       type="number"
                       min="0"
                       className="col-span-3"
-                      value={editForm.max_usage_turbo}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_turbo: Number(e.target.value) }))}
+                      value={editForm.max_turbo}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_turbo: Number(e.target.value) }))}
                     />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="max_usage_agro" className="text-right text-xs">
+                    <Label htmlFor="max_agro" className="text-right text-xs">
                       Agro
                     </Label>
                     <Input
-                      id="max_usage_agro"
+                      id="max_agro"
                       type="number"
                       min="0"
                       className="col-span-3"
-                      value={editForm.max_usage_agro}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_agro: Number(e.target.value) }))}
+                      value={editForm.max_agro}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_agro: Number(e.target.value) }))}
                     />
                   </div>
                 </div>

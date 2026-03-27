@@ -50,9 +50,9 @@ export function LicenseGenerator() {
       plan: "trial",
       status: "active",
       max_usage: Number.parseInt(trialMaxManual, 10) || 5, // Legacy support
-      max_usage_manual: Number.parseInt(trialMaxManual, 10) || 5,
-      max_usage_turbo: Number.parseInt(trialMaxTurbo, 10) || 3,
-      max_usage_agro: Number.parseInt(trialMaxAgro, 10) || 10,
+      max_manual: Number.parseInt(trialMaxManual, 10) || 5,
+      max_turbo: Number.parseInt(trialMaxTurbo, 10) || 3,
+      max_agro: Number.parseInt(trialMaxAgro, 10) || 10,
       max_devices: Number.parseInt(trialMaxDevices, 10) || 2,
       expires_at: expiresAt.toISOString(),
     });
@@ -71,9 +71,9 @@ export function LicenseGenerator() {
       plan: "paid",
       status: "active",
       max_devices: Number.parseInt(paidMaxDevices, 10) || 2,
-      max_usage_manual: null,
-      max_usage_turbo: null,
-      max_usage_agro: null,
+      max_manual: null,
+      max_turbo: null,
+      max_agro: null,
       expires_at: expiresAt.toISOString(),
     });
 

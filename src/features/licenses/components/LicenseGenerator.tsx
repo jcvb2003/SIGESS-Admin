@@ -19,9 +19,12 @@ function generateRand() {
 }
 
 export function LicenseGenerator() {
-  const [trialUses, setTrialUses] = useState("5");
   const [trialDays, setTrialDays] = useState("3");
   const [trialMaxDevices, setTrialMaxDevices] = useState("2");
+  const [trialMaxManual, setTrialMaxManual] = useState("5");
+  const [trialMaxTurbo, setTrialMaxTurbo] = useState("3");
+  const [trialMaxAgro, setTrialMaxAgro] = useState("10");
+  
   const [paidDuration, setPaidDuration] = useState("1");
   const [paidMaxDevices, setPaidMaxDevices] = useState("2");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
@@ -46,7 +49,10 @@ export function LicenseGenerator() {
       key,
       plan: "trial",
       status: "active",
-      max_usage: Number.parseInt(trialUses, 10) || 5,
+      max_usage: Number.parseInt(trialMaxManual, 10) || 5, // Legacy support
+      max_usage_manual: Number.parseInt(trialMaxManual, 10) || 5,
+      max_usage_turbo: Number.parseInt(trialMaxTurbo, 10) || 3,
+      max_usage_agro: Number.parseInt(trialMaxAgro, 10) || 10,
       max_devices: Number.parseInt(trialMaxDevices, 10) || 2,
       expires_at: expiresAt.toISOString(),
     });
@@ -65,6 +71,9 @@ export function LicenseGenerator() {
       plan: "paid",
       status: "active",
       max_devices: Number.parseInt(paidMaxDevices, 10) || 2,
+      max_usage_manual: null,
+      max_usage_turbo: null,
+      max_usage_agro: null,
       expires_at: expiresAt.toISOString(),
     });
 
@@ -76,9 +85,19 @@ export function LicenseGenerator() {
       {/* Trial */}
       <Card className="p-5 space-y-4">
         <h3 className="text-sm font-medium text-foreground">Gerar trial</h3>
-        <div className="space-y-2">
-          <Label className="text-xs">Usos máximos</Label>
-          <Input type="number" value={trialUses} onChange={(e) => setTrialUses(e.target.value)} min={1} max={20} />
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Manual</Label>
+            <Input type="number" value={trialMaxManual} onChange={(e) => setTrialMaxManual(e.target.value)} min={1} />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Turbo</Label>
+            <Input type="number" value={trialMaxTurbo} onChange={(e) => setTrialMaxTurbo(e.target.value)} min={1} />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Agro</Label>
+            <Input type="number" value={trialMaxAgro} onChange={(e) => setTrialMaxAgro(e.target.value)} min={1} />
+          </div>
         </div>
         <div className="space-y-2">
           <Label className="text-xs">Duração (dias)</Label>
@@ -123,6 +142,7 @@ export function LicenseGenerator() {
           <Label className="text-xs text-muted-foreground uppercase font-bold tracking-tighter">Limite de Dispositivos</Label>
           <Input type="number" value={paidMaxDevices} onChange={(e) => setPaidMaxDevices(e.target.value)} min={1} max={10} />
         </div>
+        <p className="text-[10px] text-muted-foreground italic">Licenças pagas possuem uso ilimitado de recursos.</p>
         <Button className="w-full" onClick={handleGeneratePaid} disabled={createMutation.isPending}>
           {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Gerar chave paga

@@ -44,7 +44,13 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [unlinkingLicense, setUnlinkingLicense] = useState<License | null>(null);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
-  const [editForm, setEditForm] = useState({ max_devices: 2, expires_at: "" });
+  const [editForm, setEditForm] = useState({ 
+    max_devices: 2, 
+    expires_at: "",
+    max_usage_manual: 0,
+    max_usage_turbo: 0,
+    max_usage_agro: 0
+  });
   const updateMutation = useUpdateLicense();
   const deleteMutation = useDeleteLicense();
 
@@ -52,7 +58,10 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
     setEditingLicense(lic);
     setEditForm({
       max_devices: lic.max_devices || 2,
-      expires_at: lic.expires_at ? new Date(lic.expires_at).toISOString().split('T')[0] : ""
+      expires_at: lic.expires_at ? new Date(lic.expires_at).toISOString().split('T')[0] : "",
+      max_usage_manual: lic.max_usage_manual || 0,
+      max_usage_turbo: lic.max_usage_turbo || 0,
+      max_usage_agro: lic.max_usage_agro || 0
     });
   };
 
@@ -63,7 +72,10 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
         key: editingLicense.key,
         updates: {
           max_devices: Number(editForm.max_devices),
-          expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null
+          expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null,
+          max_usage_manual: editingLicense.plan === "trial" ? Number(editForm.max_usage_manual) : null,
+          max_usage_turbo: editingLicense.plan === "trial" ? Number(editForm.max_usage_turbo) : null,
+          max_usage_agro: editingLicense.plan === "trial" ? Number(editForm.max_usage_agro) : null
         }
       });
       toast.success("Limites da licença atualizados");
@@ -122,7 +134,17 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
       case "convert": {
         const expiryDate = new Date();
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        await updateMutation.mutateAsync({ key, updates: { plan: "paid", status: "active", expires_at: expiryDate.toISOString() } });
+        await updateMutation.mutateAsync({ 
+          key, 
+          updates: { 
+            plan: "paid", 
+            status: "active", 
+            expires_at: expiryDate.toISOString(),
+            max_usage_manual: null,
+            max_usage_turbo: null,
+            max_usage_agro: null
+          } 
+        });
         toast.success(`Licença ${key} convertida para plano pago`);
         break;
       }
@@ -294,6 +316,53 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
                 onChange={(e) => setEditForm(prev => ({ ...prev, expires_at: e.target.value }))}
               />
             </div>
+
+            {editingLicense?.plan === "trial" && (
+              <div className="pt-2 border-t mt-4">
+                <h4 className="text-sm font-semibold mb-3">Limites de Uso</h4>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="max_usage_manual" className="text-right text-xs">
+                      Manual
+                    </Label>
+                    <Input
+                      id="max_usage_manual"
+                      type="number"
+                      min="0"
+                      className="col-span-3"
+                      value={editForm.max_usage_manual}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_manual: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="max_usage_turbo" className="text-right text-xs">
+                      Turbo
+                    </Label>
+                    <Input
+                      id="max_usage_turbo"
+                      type="number"
+                      min="0"
+                      className="col-span-3"
+                      value={editForm.max_usage_turbo}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_turbo: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="max_usage_agro" className="text-right text-xs">
+                      Agro
+                    </Label>
+                    <Input
+                      id="max_usage_agro"
+                      type="number"
+                      min="0"
+                      className="col-span-3"
+                      value={editForm.max_usage_agro}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_usage_agro: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditingLicense(null)}>Cancelar</Button>

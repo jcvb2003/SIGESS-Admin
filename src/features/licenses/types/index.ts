@@ -16,6 +16,7 @@ export interface License {
   fingerprints: string[];
   max_devices: number;
   device_metadata: Record<string, string> | null;
+  customer_name: string | null;
   expires_at: string | null;
   created_at: string | null;
 }
@@ -29,5 +30,6 @@ export interface LicenseCreate {
   max_turbo?: number | null;
   max_agro?: number | null;
   max_devices?: number;
+  customer_name?: string | null;
   expires_at?: string;
 }

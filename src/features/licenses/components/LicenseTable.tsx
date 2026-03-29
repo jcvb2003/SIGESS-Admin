@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X, Calendar, History, Cpu } from "lucide-react";
+import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X, Calendar, History, Cpu, User } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -47,6 +47,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
   const [unlinkingLicense, setUnlinkingLicense] = useState<License | null>(null);
   const [editingLicense, setEditingLicense] = useState<License | null>(null);
   const [editForm, setEditForm] = useState({ 
+    customer_name: "",
     max_devices: 2, 
     expires_at: "",
     max_manual: 0,
@@ -62,6 +63,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
   const openEdit = (lic: License) => {
     setEditingLicense(lic);
     setEditForm({
+      customer_name: lic.customer_name || "",
       max_devices: lic.max_devices || 2,
       expires_at: lic.expires_at ? new Date(lic.expires_at).toISOString().split('T')[0] : "",
       max_manual: lic.max_manual || 0,
@@ -76,6 +78,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
       await updateMutation.mutateAsync({
         key: editingLicense.key,
         updates: {
+          customer_name: editForm.customer_name.trim() || null,
           max_devices: Number(editForm.max_devices),
           expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null,
           max_manual: editingLicense.plan === "trial" ? Number(editForm.max_manual) : null,
@@ -203,6 +206,12 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
                 <span>Chave</span>
               </div>
             </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5" />
+                <span>Cliente</span>
+              </div>
+            </TableHead>
             <TableHead>Plano</TableHead>
             <TableHead>
               <div className="flex items-center gap-1.5">
@@ -244,6 +253,11 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
                       {copiedKey === lic.key ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                     </Button>
                   </div>
+                </TableCell>
+                <TableCell>
+                  <span className={cn("text-xs font-medium", !lic.customer_name && "text-muted-foreground/50 italic")}>
+                    {lic.customer_name || "Não informado"}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={cn("text-[10px] font-bold uppercase tracking-tight px-1.5 h-5", plan.className)}>
@@ -418,26 +432,38 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="max_devices" className="text-right">
+              <Label htmlFor="customer_name" className="text-right text-xs">
+                Cliente
+              </Label>
+              <Input
+                id="customer_name"
+                className="col-span-3 text-xs"
+                placeholder="Ex: João Silva"
+                value={editForm.customer_name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, customer_name: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="max_devices" className="text-right text-xs">
                 Dispositivos
               </Label>
               <Input
                 id="max_devices"
                 type="number"
                 min="1"
-                className="col-span-3"
+                className="col-span-3 text-xs"
                 value={editForm.max_devices}
                 onChange={(e) => setEditForm(prev => ({ ...prev, max_devices: Number(e.target.value) }))}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="expires_at" className="text-right">
+              <Label htmlFor="expires_at" className="text-right text-xs">
                 Validade
               </Label>
               <Input
                 id="expires_at"
                 type="date"
-                className="col-span-3"
+                className="col-span-3 text-xs"
                 value={editForm.expires_at}
                 onChange={(e) => setEditForm(prev => ({ ...prev, expires_at: e.target.value }))}
               />

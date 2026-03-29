@@ -19,6 +19,7 @@ function generateRand() {
 }
 
 export function LicenseGenerator() {
+  const [customerName, setCustomerName] = useState("");
   const [trialDays, setTrialDays] = useState("3");
   const [trialMaxDevices, setTrialMaxDevices] = useState("2");
   const [trialMaxManual, setTrialMaxManual] = useState("5");
@@ -54,10 +55,12 @@ export function LicenseGenerator() {
       max_turbo: Number.parseInt(trialMaxTurbo, 10) || 3,
       max_agro: Number.parseInt(trialMaxAgro, 10) || 10,
       max_devices: Number.parseInt(trialMaxDevices, 10) || 2,
+      customer_name: customerName.trim() || null,
       expires_at: expiresAt.toISOString(),
     });
 
     setGeneratedKey(key);
+    setCustomerName("");
   };
 
   const handleGeneratePaid = async () => {
@@ -74,10 +77,12 @@ export function LicenseGenerator() {
       max_manual: null,
       max_turbo: null,
       max_agro: null,
+      customer_name: customerName.trim() || null,
       expires_at: expiresAt.toISOString(),
     });
 
     setGeneratedKey(key);
+    setCustomerName("");
   };
 
   return (
@@ -85,6 +90,10 @@ export function LicenseGenerator() {
       {/* Trial */}
       <Card className="p-5 space-y-4">
         <h3 className="text-sm font-medium text-foreground">Gerar trial</h3>
+        <div className="space-y-2">
+          <Label className="text-xs">Nome / Cliente (Opcional)</Label>
+          <Input placeholder="Ex: João Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+        </div>
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-2">
             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Manual</Label>
@@ -125,6 +134,10 @@ export function LicenseGenerator() {
       {/* Paid */}
       <Card className="p-5 space-y-4">
         <h3 className="text-sm font-medium text-foreground">Gerar licença paga</h3>
+        <div className="space-y-2">
+          <Label className="text-xs">Nome / Cliente (Opcional)</Label>
+          <Input placeholder="Ex: João Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+        </div>
         <div className="space-y-2">
           <Label className="text-xs">Duração</Label>
           <Select value={paidDuration} onValueChange={setPaidDuration}>

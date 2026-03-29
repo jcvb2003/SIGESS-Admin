@@ -48,6 +48,7 @@ export default function ClientDetailPage() {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
   const deleteClientMutation = useDeleteClient();
@@ -104,13 +105,18 @@ export default function ClientDetailPage() {
   });
 
   const handleRefresh = async () => {
-    // Invalidate all queries related to this client
-    await Promise.all([
-      refetchClient(),
-      queryClient.invalidateQueries({ queryKey: ['client-buckets', id] }),
-      queryClient.invalidateQueries({ queryKey: ['client-users', id] }),
-      queryClient.invalidateQueries({ queryKey: ['client-tables', id] }),
-    ]);
+    setIsRefreshing(true);
+    try {
+      // Invalidate all queries related to this client
+      await Promise.all([
+        refetchClient(),
+        queryClient.invalidateQueries({ queryKey: ['client-buckets', id] }),
+        queryClient.invalidateQueries({ queryKey: ['client-users', id] }),
+        queryClient.invalidateQueries({ queryKey: ['client-tables', id] }),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -223,8 +229,8 @@ export default function ClientDetailPage() {
               <Trash2 className="mr-2 h-4 w-4" />
               Excluir
             </Button>
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Atualizar
             </Button>
           </div>

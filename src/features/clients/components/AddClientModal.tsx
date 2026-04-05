@@ -97,7 +97,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
 
     try {
       let acesso_expira_em: string | null = null;
-      if (formData.assinatura === "trial" && formData.acesso_expira_em) {
+      if ((formData.assinatura === "trial" || formData.assinatura === "anual") && formData.acesso_expira_em) {
         acesso_expira_em = new Date(formData.acesso_expira_em).toISOString();
       }
 
@@ -271,7 +271,17 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             <Label htmlFor="assinatura">Plano de Assinatura</Label>
             <Select
               value={formData.assinatura}
-              onValueChange={(value) => handleChange("assinatura", value as 'mensal' | 'anual' | 'trial')}
+              onValueChange={(value) => {
+                const planType = value as 'mensal' | 'anual' | 'trial';
+                let newExpiraEm = formData.acesso_expira_em;
+                if (planType === "anual") {
+                  const nextYear = new Date();
+                  nextYear.setFullYear(nextYear.getFullYear() + 1);
+                  const pad = (n: number) => n.toString().padStart(2, "0");
+                  newExpiraEm = `${nextYear.getFullYear()}-${pad(nextYear.getMonth() + 1)}-${pad(nextYear.getDate())}T${pad(nextYear.getHours())}:${pad(nextYear.getMinutes())}`;
+                }
+                setFormData((prev) => ({ ...prev, assinatura: planType, acesso_expira_em: newExpiraEm }));
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o plano" />
@@ -284,9 +294,11 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             </Select>
           </div>
 
-          {formData.assinatura === "trial" && (
-            <div className="space-y-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50/50">
-              <p className="text-xs font-semibold text-yellow-800 uppercase">Configurações do Trial</p>
+          {(formData.assinatura === "trial" || formData.assinatura === "anual") && (
+            <div className="space-y-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+              <p className="text-xs font-semibold text-primary uppercase">
+                {formData.assinatura === "trial" ? "Configurações do Trial" : "Configurações do Plano Anual"}
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="acesso_expira_em">Data de Expiração</Label>
@@ -297,16 +309,18 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
                     onChange={(e) => handleChange("acesso_expira_em", e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="max_socios">Limite de Sócios</Label>
-                  <Input
-                    id="max_socios"
-                    type="number"
-                    min={1}
-                    value={formData.max_socios ?? 5}
-                    onChange={(e) => setFormData(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
-                  />
-                </div>
+                {formData.assinatura === "trial" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="max_socios">Limite de Sócios</Label>
+                    <Input
+                      id="max_socios"
+                      type="number"
+                      min={1}
+                      value={formData.max_socios ?? 5}
+                      onChange={(e) => setFormData(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -325,7 +339,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               className="flex-1" 
               disabled={
                 createClientMutation.isPending ||
-                (formData.assinatura === "trial" && !formData.acesso_expira_em)
+                ((formData.assinatura === "trial" || formData.assinatura === "anual") && !formData.acesso_expira_em)
               }
             >
               {createClientMutation.isPending ? (

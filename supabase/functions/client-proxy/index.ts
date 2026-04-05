@@ -1,7 +1,9 @@
 // @ts-expect-error: Deno-specific URL imports
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-expect-error: Deno-specific URL imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sigessSchema } from "./sigess_schema.ts";
+import { seedSql } from "./seed.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,7 +147,7 @@ async function executeMigration(projectUrl: string, clientKey: string, accessTok
     console.log("Health check before migration: table not found or error, proceeding...");
   }
 
-  const sql = sigessSchema;
+  const sql = `${sigessSchema}\n${seedSql}`;
   
   // Extract project ref from URL (e.g., https://ref.supabase.co)
   const projectRef = projectUrl.split(".")[0].split("//")[1];

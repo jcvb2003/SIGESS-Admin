@@ -73,7 +73,7 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
           supabase_publishable_key: form.supabase_publishable_key || null,
           logo_url: form.logo_url || null,
           assinatura: form.assinatura,
-          acesso_expira_em: form.assinatura === "trial" && form.acesso_expira_em 
+          acesso_expira_em: (form.assinatura === "trial" || form.assinatura === "anual") && form.acesso_expira_em 
             ? new Date(form.acesso_expira_em).toISOString() 
             : null,
           max_socios: form.assinatura === "trial" ? form.max_socios : null,
@@ -166,7 +166,16 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
           </div>
           <div>
             <Label>Plano de Assinatura</Label>
-            <Select value={form.assinatura} onValueChange={v => update("assinatura", v as "mensal" | "anual" | "trial")}>
+            <Select value={form.assinatura} onValueChange={v => {
+              const value = v as "mensal" | "anual" | "trial";
+              let newExpiraEm = form.acesso_expira_em;
+              if (value === "anual") {
+                const nextYear = new Date();
+                nextYear.setFullYear(nextYear.getFullYear() + 1);
+                newExpiraEm = formatForInput(nextYear.toISOString());
+              }
+              setForm(prev => ({ ...prev, assinatura: value, acesso_expira_em: newExpiraEm }));
+            }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="mensal">Mensal</SelectItem>
@@ -175,9 +184,11 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
               </SelectContent>
             </Select>
           </div>
-          {form.assinatura === "trial" && (
-            <div className="space-y-3 p-3 rounded-lg border border-yellow-200 bg-yellow-50/50">
-              <p className="text-xs font-semibold text-yellow-800 uppercase">Configurações do Trial</p>
+          {(form.assinatura === "trial" || form.assinatura === "anual") && (
+            <div className="space-y-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+              <p className="text-xs font-semibold text-primary uppercase">
+                {form.assinatura === "trial" ? "Configurações do Trial" : "Configurações do Plano Anual"}
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Data de Expiração</Label>
@@ -187,15 +198,17 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
                     onChange={e => update("acesso_expira_em", e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label>Limite de Sócios</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.max_socios}
-                    onChange={e => setForm(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
-                  />
-                </div>
+                {form.assinatura === "trial" && (
+                  <div>
+                    <Label>Limite de Sócios</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.max_socios}
+                      onChange={e => setForm(prev => ({ ...prev, max_socios: Number.parseInt(e.target.value) || 5 }))}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -207,7 +220,7 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
                 updateClientMutation.isPending || 
                 !form.nome_entidade || 
                 !form.supabase_url ||
-                (form.assinatura === "trial" && !form.acesso_expira_em)
+                ((form.assinatura === "trial" || form.assinatura === "anual") && !form.acesso_expira_em)
               }
             >
               {updateClientMutation.isPending ? "Salvando..." : "Salvar"}

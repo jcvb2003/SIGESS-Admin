@@ -93,20 +93,20 @@ export function MigrationsTab({ clientId, tables }: MigrationsTabProps) {
         <Card className="p-4 bg-secondary/20 border-none">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
             <div className="space-y-1">
-              <p className="font-bold text-primary">Tabelas (8)</p>
-              <p className="text-muted-foreground">User, templates, entidade, localidades, parametros, socios, fotos, requerimentos</p>
+              <p className="font-bold text-primary">Tabelas (15)</p>
+              <p className="text-muted-foreground">Cadastros, Requerimentos e Módulo Financeiro completo</p>
             </div>
             <div className="space-y-1">
-              <p className="font-bold text-primary">Storage (2)</p>
-              <p className="text-muted-foreground">fotos, documentos</p>
+              <p className="font-bold text-primary">Financeiro</p>
+              <p className="text-muted-foreground">Lançamentos, Cobranças, DAE e Configurações por sócio</p>
             </div>
             <div className="space-y-1">
-              <p className="font-bold text-primary">Security</p>
-              <p className="text-muted-foreground">RLS em todas as tabelas + Políticas Storage</p>
+              <p className="font-bold text-primary">Security & Storage</p>
+              <p className="text-muted-foreground">RLS total, Buckets (fotos/docs) e Políticas de acesso</p>
             </div>
             <div className="space-y-1">
-              <p className="font-bold text-primary">Logica</p>
-              <p className="text-muted-foreground">Função auto_generate_cod_req_inss e triggers</p>
+              <p className="font-bold text-primary">Lógica de DB</p>
+              <p className="text-muted-foreground">Views financeiras, Triggers de limites e Codificação automática</p>
             </div>
           </div>
         </Card>

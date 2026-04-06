@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error: Deno-specific URL imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sigessSchema } from "./sigess_schema.ts";
+import { migrationsBundle } from "./migrations_bundle.ts";
 import { seedSql } from "./seed.ts";
 
 const corsHeaders = {
@@ -126,47 +126,90 @@ async function healthCheck(clientUrl: string) {
   }
 }
 
-async function executeMigration(projectUrl: string, clientKey: string, accessToken: string) {
-  // 1. First, check if the database is already configured by looking for the 'socios' table
-  try {
-    const checkRes = await fetch(`${projectUrl}/rest/v1/socios?select=id&limit=1`, {
-      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-    });
-    
-    if (checkRes.ok) {
-      throw new Error("O banco de dados já parece estar configurado (tabela 'socios' detectada).");
-    }
-    // Note: If 404, it means the table doesn't exist, which is what we want.
-    // If other error, we might want to proceed or fail depending on the error.
-  } catch (e) {
-    // If it's the error we just threw, rethrow it
-    if ((e as Error).message.includes("já parece estar configurado")) {
-      throw e;
-    }
-    // Otherwise, it likely means the table doesn't exist (404/400), which is fine.
-    console.log("Health check before migration: table not found or error, proceeding...");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function executeMigration(projectUrl: string, accessToken: string, tenantId: string, supabaseAdmin: any) {
+  // 1. Fetch which migrations have already been applied for this tenant in the Admin DB
+  const { data: appliedMigrations, error } = await supabaseAdmin
+    .from("schema_migrations")
+    .select("migration_name")
+    .eq("tenant_id", tenantId)
+    .eq("status", "success");
+
+  if (error) {
+    console.error("Warning: Could not fetch schema_migrations. Is the table created in Admin?", error);
+    // Continue for now if table doesn't exist? Ideally we should throw, but let's throw to be safe
+    throw new Error(`Failed to fetch applied migrations: ${error.message}`);
   }
 
-  const sql = `${sigessSchema}\n${seedSql}`;
+  const appliedSet = new Set(appliedMigrations?.map((m: any) => m.migration_name) || []);
   
-  // Extract project ref from URL (e.g., https://ref.supabase.co)
+  // Sort migrations
+  const migrationNames = Object.keys(migrationsBundle).sort();
+  const pendingMigrations = migrationNames.filter(name => !appliedSet.has(name));
+
+  if (pendingMigrations.length === 0) {
+    return { success: true, appliedCount: 0, pendingMigrations: [] };
+  }
+
   const projectRef = projectUrl.split(".")[0].split("//")[1];
-  
-  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: sql }),
-  });
+  let appliedCount = 0;
 
-  if (!res.ok) {
-    const result = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(result.message || `Management API error (${res.status})`);
+  for (const migrationName of pendingMigrations) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sql = (migrationsBundle as any)[migrationName];
+
+    console.log(`Applying migration ${migrationName} for tenant ${tenantId}...`);
+
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: sql }),
+    });
+
+    if (!res.ok) {
+      const result = await res.json().catch(() => ({ message: res.statusText }));
+      
+      // Log failure
+      await supabaseAdmin.from("schema_migrations").insert({
+        tenant_id: tenantId,
+        migration_name: migrationName,
+        status: "failed",
+        error_detail: result.message || `Management API error (${res.status})`
+      });
+
+      throw new Error(`Migration ${migrationName} failed: ${result.message || `Management API error (${res.status})`}`);
+    }
+
+    // Record success
+    await supabaseAdmin.from("schema_migrations").insert({
+      tenant_id: tenantId,
+      migration_name: migrationName,
+      status: "success"
+    });
+
+    appliedCount++;
   }
 
-  return await res.json();
+  // Apply seed data if 'initial_schema' was just applied
+  if (pendingMigrations.find(m => m.includes("initial_schema"))) {
+    console.log(`Applying seed data for tenant ${tenantId}...`);
+    const seedRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: seedSql }),
+    });
+    if (!seedRes.ok) {
+      console.error("Failed to apply seed data. Migration succeeded however.");
+    }
+  }
+
+  return { success: true, appliedCount, pendingMigrations };
 }
 
 async function syncTrialLimits(
@@ -224,12 +267,13 @@ interface ClientConfig {
   max_socios?: number | null;
 }
 
-async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig, supabaseAdmin: any) {
   if (action === "execute-migration") {
     if (!client.supabase_access_token || !client.supabase_secret_keys) {
       throw new Error("Supabase Access Token (PAT) ou Service Role Key não configurados para este cliente");
     }
-    return await executeMigration(client.supabase_url, client.supabase_secret_keys, client.supabase_access_token);
+    return await executeMigration(client.supabase_url, client.supabase_access_token, clientId, supabaseAdmin);
   }
 
   if (action === "sync-trial-limits") {
@@ -302,7 +346,7 @@ serve(async (req: Request) => {
 
     console.log(`Fetched Client: ${client.supabase_url} (Key prefix: ${client.supabase_secret_keys?.substring(0, 5)}...)`);
 
-    const result = await handleAction(clientId, action, params, client);
+    const result = await handleAction(clientId, action, params, client, supabaseAdmin);
     console.log(`Action ${action} result: Success`);
 
     return new Response(JSON.stringify(result), {

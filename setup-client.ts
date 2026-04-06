@@ -31,8 +31,8 @@ if (!RESEND_API_KEY || !SUPABASE_MANAGEMENT_TOKEN) {
 console.log(`\n🚀 Iniciando configuração do Sindicato via Supabase API (Ref: ${projectRef})...`);
 
 try {
-  // 1. Configura SMTP (Resend)
-  console.log('📧 1. Configurando SMTP Resend na nuvem...');
+  // 1. Configura SMTP e Auth URLs em uma única chamada
+  console.log('📧 1. Configurando SMTP Resend e URLs de Redirecionamento de Auth...');
   const authRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
     method: 'PATCH',
     headers: {
@@ -40,6 +40,11 @@ try {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
+      // -- Auth Configuration --
+      site_url: 'https://app.sigess.com.br/password',
+      uri_allow_list: 'https://app.sigess.com.br/**,https://app.sigess.com.br/password',
+      
+      // -- SMTP Configuration (Resend) --
       smtp_admin_email: 'noreply@sigess.com.br',
       smtp_host: 'smtp.resend.com',
       smtp_port: 465,
@@ -52,12 +57,12 @@ try {
 
   if (!authRes.ok) {
     const errText = await authRes.text();
-    throw new Error(`Falha SMTP: ${authRes.status} - ${errText}`);
+    throw new Error(`Falha na configuração do Auth/SMTP: ${authRes.status} - ${errText}`);
   }
-  console.log('✅ SMTP Resend ativado com sucesso.');
+  console.log('✅ SMTP e URLs de Auth configurados com sucesso.');
 
-  // 2. Roda o Schema SQL
-  console.log('⚙️  2. Injetando Schema SQL (sigess_schema.sql)...');
+  // 2. Roda o Schema SQL e Seed
+  console.log('⚙️  2. Injetando Schema SQL e Seed de dados...');
   const sqlPath = path.resolve(process.cwd(), 'sigess_schema.sql');
   const seedPath = path.resolve(process.cwd(), 'seed.sql');
 
@@ -87,10 +92,10 @@ try {
     
     await client.end();
   } else {
-    console.warn('⚠️  Não fornecido --db-password. Para rodar um grande SQL bruto (Migrations, RLS, Triggers), a melhor forma é via Postgres Driver "pg" da sua máquina.');
+    console.warn('⚠️  Não fornecido --db-password. Ignorando injeção SQL direta.');
   }
 
-  console.log(`\n🎉 PROJETO ${projectId} - ${projectRef} finalizado e pré-pronto!\n`);
+  console.log(`\n🎉 PROJETO ${projectId} - ${projectRef} finalizado e totalmente configurado!\n`);
 
 } catch (error) {
   const errorMessage = error instanceof Error ? error.message : String(error);

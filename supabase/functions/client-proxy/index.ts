@@ -127,6 +127,59 @@ async function healthCheck(clientUrl: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getMigrationsStatus(tenantId: string, supabaseAdmin: any) {
+  const { data: appliedMigrations, error } = await supabaseAdmin
+    .from("schema_migrations")
+    .select("migration_name, status, created_at, error_detail")
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    console.error("Warning: Could not fetch schema_migrations:", error);
+  }
+
+  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
+  
+  let appliedCount = 0;
+  let failedCount = 0;
+  let pendingCount = 0;
+
+  interface SchemaMigration {
+    migration_name: string;
+    status: string;
+    created_at: string;
+    error_detail: string | null;
+  }
+
+  const migrations = migrationNames.map(name => {
+    const logs = (appliedMigrations as SchemaMigration[] || []).filter(m => m.migration_name === name);
+    const successLog = logs.find(m => m.status === 'success');
+    // Get most recent failure if any
+    const failLog = logs.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).find(m => m.status === 'failed');
+
+    if (successLog) {
+      appliedCount++;
+      return { name, status: 'success', appliedAt: successLog.created_at, error: null };
+    } else if (failLog) {
+      failedCount++;
+      return { name, status: 'failed', appliedAt: failLog.created_at, error: failLog.error_detail };
+    } else {
+      pendingCount++;
+      return { name, status: 'pending', appliedAt: null, error: null };
+    }
+  });
+
+  return {
+    success: true,
+    total: migrations.length,
+    applied: appliedCount,
+    failed: failedCount,
+    pending: pendingCount,
+    hasPending: pendingCount > 0 || failedCount > 0,
+    migrations
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function executeMigration(projectUrl: string, accessToken: string, tenantId: string, supabaseAdmin: any) {
   // 1. Fetch which migrations have already been applied for this tenant in the Admin DB
   const { data: appliedMigrations, error } = await supabaseAdmin
@@ -141,10 +194,10 @@ async function executeMigration(projectUrl: string, accessToken: string, tenantI
     throw new Error(`Failed to fetch applied migrations: ${error.message}`);
   }
 
-  const appliedSet = new Set(appliedMigrations?.map((m: any) => m.migration_name) || []);
+  const appliedSet = new Set(appliedMigrations?.map((m: { migration_name: string }) => m.migration_name) || []);
   
   // Sort migrations
-  const migrationNames = Object.keys(migrationsBundle).sort();
+  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
   const pendingMigrations = migrationNames.filter(name => !appliedSet.has(name));
 
   if (pendingMigrations.length === 0) {
@@ -172,15 +225,16 @@ async function executeMigration(projectUrl: string, accessToken: string, tenantI
     if (!res.ok) {
       const result = await res.json().catch(() => ({ message: res.statusText }));
       
+      const errorMsg = result.message || "Management API error (" + res.status + ")";
       // Log failure
       await supabaseAdmin.from("schema_migrations").insert({
         tenant_id: tenantId,
         migration_name: migrationName,
         status: "failed",
-        error_detail: result.message || `Management API error (${res.status})`
+        error_detail: errorMsg
       });
 
-      throw new Error(`Migration ${migrationName} failed: ${result.message || `Management API error (${res.status})`}`);
+      throw new Error(`Migration ${migrationName} failed: ${errorMsg}`);
     }
 
     // Record success
@@ -194,7 +248,7 @@ async function executeMigration(projectUrl: string, accessToken: string, tenantI
   }
 
   // Apply seed data if 'initial_schema' was just applied
-  if (pendingMigrations.find(m => m.includes("initial_schema"))) {
+  if (pendingMigrations.some(m => m.includes("initial_schema"))) {
     console.log(`Applying seed data for tenant ${tenantId}...`);
     const seedRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
       method: "POST",
@@ -269,6 +323,10 @@ interface ClientConfig {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig, supabaseAdmin: any) {
+  if (action === "get-migrations-status") {
+    return await getMigrationsStatus(clientId, supabaseAdmin);
+  }
+
   if (action === "execute-migration") {
     if (!client.supabase_access_token || !client.supabase_secret_keys) {
       throw new Error("Supabase Access Token (PAT) ou Service Role Key não configurados para este cliente");

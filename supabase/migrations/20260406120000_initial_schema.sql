@@ -515,7 +515,9 @@ CREATE TABLE IF NOT EXISTS public.foto_upload_tokens (
     token uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
     socio_cpf text REFERENCES public.socios(cpf) ON DELETE CASCADE,
     foto_base64 text,
+    foto_url text,
     expires_at timestamp with time zone DEFAULT (now() + '00:10:00'::interval),
+    used boolean DEFAULT false,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );

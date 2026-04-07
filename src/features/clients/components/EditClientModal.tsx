@@ -92,11 +92,16 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
         input: updatePayload,
       });
       
-      if (form.assinatura === "trial") {
+      const hasSubscriptionChanges = 
+        form.assinatura !== client.assinatura ||
+        form.acesso_expira_em !== formatForInput(client.acesso_expira_em) ||
+        form.max_socios !== (client.max_socios ?? 5);
+
+      if (hasSubscriptionChanges) {
         try {
-          // Automatic limits synchronization on Trial modifications.
+          // Gatilho de sincronização automática se houver mudanças na assinatura
           await proxyAction(client.id, "sync-trial-limits");
-          toast.success("Cliente atualizado e limites sincronizados no projeto!");
+          toast.success("Cliente atualizado e limites sincronizados!");
         } catch (syncError) {
           toast.error(`Cliente atualizado, mas erro no proxy: ${syncError instanceof Error ? syncError.message : "Erro desconhecido"}`);
         }

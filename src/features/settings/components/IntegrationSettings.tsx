@@ -24,8 +24,16 @@ export function IntegrationSettings() {
 
   const handleSave = async (e: React.FormEvent, key: string) => {
     e.preventDefault();
+    const newValue = localSettings[key] || "";
+    
+    // Se for o placeholder de segredo, não faz nada (não houve alteração)
+    if (newValue === "••••••••") {
+      toast.info("Configuração mantida (valor não alterado).");
+      return;
+    }
+
     try {
-      await updateSetting.mutateAsync({ key, value: localSettings[key] || "" });
+      await updateSetting.mutateAsync({ key, value: newValue });
       toast.success(`${key} atualizado!`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : `Falha ao salvar ${key}`;
@@ -67,10 +75,16 @@ export function IntegrationSettings() {
                   type="password"
                   autoComplete="current-password"
                   value={localSettings["vercel_token"] || ""}
+                  placeholder={settings?.find(s => s.key === "vercel_token")?.value === "••••••••" ? "Token configurado" : "Digite o Vercel Token"}
                   onChange={(e) => setLocalSettings(prev => ({ ...prev, vercel_token: e.target.value }))}
                 />
-                <Button type="submit" size="icon" variant="ghost" disabled={updateSetting.isPending}>
-                  <Save className="h-4 w-4" />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  variant="ghost" 
+                  disabled={updateSetting.isPending || localSettings["vercel_token"] === "••••••••"}
+                >
+                  <Save className={`h-4 w-4 ${localSettings["vercel_token"] === "••••••••" ? "opacity-20" : ""}`} />
                 </Button>
               </div>
             </form>
@@ -104,10 +118,16 @@ export function IntegrationSettings() {
                   type="password"
                   autoComplete="current-password"
                   value={localSettings["resend_api_key"] || ""}
+                  placeholder={settings?.find(s => s.key === "resend_api_key")?.value === "••••••••" ? "Chave configurada" : "Digite a API Key"}
                   onChange={(e) => setLocalSettings(prev => ({ ...prev, resend_api_key: e.target.value }))}
                 />
-                <Button type="submit" size="icon" variant="ghost" disabled={updateSetting.isPending}>
-                  <Save className="h-4 w-4" />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  variant="ghost" 
+                  disabled={updateSetting.isPending || localSettings["resend_api_key"] === "••••••••"}
+                >
+                  <Save className={`h-4 w-4 ${localSettings["resend_api_key"] === "••••••••" ? "opacity-20" : ""}`} />
                 </Button>
               </div>
             </form>

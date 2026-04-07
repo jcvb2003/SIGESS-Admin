@@ -59,11 +59,11 @@ export async function deleteSupabaseAccount(id: string) {
 
 export async function listSystemSettings(): Promise<SystemSetting[]> {
   const { data, error } = await supabase
-    .from("system_settings")
+    .from("system_settings_safe")
     .select("*");
 
   if (error) throw handleSupabaseError(error);
-  return data || [];
+  return (data || []) as unknown as SystemSetting[];
 }
 
 export async function updateSystemSetting(key: string, value: string) {

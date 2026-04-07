@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Users, Mail, Calendar, Shield } from "lucide-react";
+import { Users, Mail, Calendar, Shield, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -47,6 +48,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
 
   const { 
     data: users = [], 
@@ -104,6 +106,29 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
       setUpdatingId(null);
     }
   };
+  
+  const handleRepairSync = async () => {
+    setIsRepairing(true);
+    try {
+      const result = await proxyAction(clientId, "repair-user-sync");
+      
+      toast({
+        title: "Sincronização reparada!",
+        description: `Processados ${result.totalProcessed} usuários. ${result.repairedAuthMetadata} metadados de admin corrigidos.`,
+      });
+      
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
+    } catch (error) {
+      toast({
+        title: "Erro no reparo",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRepairing(false);
+    }
+  };
 
   useEffect(() => {
     if (users) {
@@ -122,7 +147,19 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
               <Users className="h-5 w-5 text-primary" />
               <span className="font-semibold text-primary">{users.length} Usuários Ativos</span>
             </div>
-            <AddClientUserDialog clientId={clientId} onUserAdded={refetch} />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRepairSync}
+                disabled={isRepairing}
+                className="h-8 gap-2 border-primary/20 hover:bg-primary/10 text-primary"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRepairing ? "animate-spin" : ""}`} />
+                {isRepairing ? "Reparando..." : "Reparar Sincronia"}
+              </Button>
+              <AddClientUserDialog clientId={clientId} onUserAdded={refetch} />
+            </div>
           </div>
 
           <div className="grid gap-4">

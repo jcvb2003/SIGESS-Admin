@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket, Trash2, Info } from "lucide-react";
+import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket, Trash2, Info, Settings2, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,6 +49,7 @@ export default function ClientDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
   const deleteClientMutation = useDeleteClient();
@@ -201,85 +202,108 @@ export default function ClientDetailPage() {
     if (!client) return null;
 
     return (
-      <div className="grid gap-6 md:grid-cols-2 animate-fade-in-up">
-        <Card className="p-6 space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" />
-            Informações Gerais
-          </h3>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">ID</span>
-              <span className="text-sm col-span-2">{client.id}</span>
-            </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Nome</span>
-              <span className="text-sm col-span-2 font-medium">{client.nome_entidade}</span>
-            </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Email</span>
-              <span className="text-sm col-span-2">{client.email || 'Não informado'}</span>
-            </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Telefone</span>
-              <span className="text-sm col-span-2">{client.telefone || 'Não informado'}</span>
-            </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Cadastro</span>
-              <span className="text-sm col-span-2">{format(new Date(client.data_cadastro), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
-            </div>
-          </div>
-        </Card>
+      <div className="space-y-6 animate-fade-in-up">
+        {/* Health Status Dashboard */}
+        <div className="max-w-md">
+          <HealthCheckCard clientId={client.id} />
+        </div>
 
-        <Card className="p-6 space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <HardDrive className="h-5 w-5 text-primary" />
-            Detalhes da Conta
-          </h3>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Assinatura</span>
-              <span className="text-sm col-span-2 capitalize">
-                <Badge variant={client.assinatura === 'trial' ? 'secondary' : 'default'}>{client.assinatura}</Badge>
-              </span>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card className="p-6 space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" />
+              Informações Gerais
+            </h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">ID</span>
+                <span className="text-sm col-span-2">{client.id}</span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Nome</span>
+                <span className="text-sm col-span-2 font-medium">{client.nome_entidade}</span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Email</span>
+                <span className="text-sm col-span-2">{client.email || 'Não informado'}</span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Telefone</span>
+                <span className="text-sm col-span-2">{client.telefone || 'Não informado'}</span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Cadastro</span>
+                <span className="text-sm col-span-2">{format(new Date(client.data_cadastro), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
+              </div>
             </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Expira em</span>
-              <span className="text-sm col-span-2">{client.acesso_expira_em ? format(new Date(client.acesso_expira_em), "dd/MM/yyyy") : 'Ilimitado'}</span>
+          </Card>
+
+          <Card className="p-6 space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <HardDrive className="h-5 w-5 text-primary" />
+              Detalhes da Conta
+            </h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Assinatura</span>
+                <span className="text-sm col-span-2 capitalize">
+                  <Badge variant={client.assinatura === 'trial' ? 'secondary' : 'default'}>{client.assinatura}</Badge>
+                </span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Expira em</span>
+                <span className="text-sm col-span-2">{client.acesso_expira_em ? format(new Date(client.acesso_expira_em), "dd/MM/yyyy") : 'Ilimitado'}</span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <span className="text-sm font-medium text-muted-foreground">Máx. Sócios</span>
+                <span className="text-sm col-span-2">{client.max_socios ? client.max_socios : 'Ilimitado'}</span>
+              </div>
             </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <span className="text-sm font-medium text-muted-foreground">Máx. Sócios</span>
-              <span className="text-sm col-span-2">{client.max_socios ? client.max_socios : 'Ilimitado'}</span>
+          </Card>
+          
+          <Card className="p-6 space-y-4 md:col-span-2 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Rocket className="h-5 w-5 text-primary" />
+                Supabase Configuração
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={() => setShowKeys(!showKeys)}
+              >
+                {showKeys ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showKeys ? "Ocultar Chaves" : "Revelar Chaves"}
+              </Button>
             </div>
-          </div>
-        </Card>
-        
-        <Card className="p-6 space-y-4 md:col-span-2">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Rocket className="h-5 w-5 text-primary" />
-            Supabase Configuração
-          </h3>
-          <div className="space-y-3">
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
-              <span className="text-sm font-medium text-muted-foreground col-span-1 pt-2">URL API</span>
-              <span className="text-sm col-span-3 md:col-span-5 break-all font-mono bg-secondary/30 p-2 rounded">{client.supabase_url}</span>
+            
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-4 border-b border-border/40 pb-3">
+                <span className="text-sm font-medium text-muted-foreground col-span-1 pt-1">URL API</span>
+                <span className="text-sm col-span-3 md:col-span-5 break-all font-mono bg-secondary/30 p-2 rounded selectable">{client.supabase_url}</span>
+              </div>
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-4 border-b border-border/40 pb-3">
+                <span className="text-sm font-medium text-muted-foreground col-span-1 pt-1">Anon Key</span>
+                <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">{client.supabase_publishable_key || 'Não definida'}</span>
+              </div>
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-4 border-b border-border/40 pb-3">
+                <span className="text-sm font-medium text-muted-foreground col-span-1 pt-1">Service Key</span>
+                <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">
+                  {showKeys ? client.supabase_secret_keys : '••••••••••••' + client.supabase_secret_keys?.slice(-4)}
+                </span>
+              </div>
+              {client.supabase_access_token && (
+                <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
+                <span className="text-sm font-medium text-muted-foreground col-span-1 pt-1">Access Token</span>
+                <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">
+                  {showKeys ? client.supabase_access_token : '••••••••••••' + client.supabase_access_token?.slice(-4)}
+                </span>
+              </div>
+              )}
             </div>
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
-              <span className="text-sm font-medium text-muted-foreground col-span-1 pt-2">Anon Key</span>
-              <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">{client.supabase_publishable_key || 'Não definida'}</span>
-            </div>
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
-              <span className="text-sm font-medium text-muted-foreground col-span-1 pt-2">Service Key</span>
-              <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">{client.supabase_secret_keys || 'Não definida'}</span>
-            </div>
-            {client.supabase_access_token && (
-              <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
-              <span className="text-sm font-medium text-muted-foreground col-span-1 pt-2">Access Token</span>
-              <span className="text-sm col-span-3 md:col-span-5 break-all font-mono text-xs bg-secondary/30 p-2 rounded">{client.supabase_access_token}</span>
-            </div>
-            )}
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
     );
   };
@@ -324,9 +348,8 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Info Cards */}
-        <div className="grid gap-4 md:grid-cols-5">
-          <HealthCheckCard clientId={client.id} />
-          <Card className="p-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+          <Card className="p-4 bg-primary/5 border-primary/10">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2"><HardDrive className="h-5 w-5 text-primary" /></div>
               <div>
@@ -335,7 +358,7 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="p-4 bg-primary/5 border-primary/10">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2"><Users className="h-5 w-5 text-primary" /></div>
               <div>
@@ -344,7 +367,7 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="p-4 bg-primary/5 border-primary/10">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2"><Table className="h-5 w-5 text-primary" /></div>
               <div>
@@ -353,9 +376,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </Card>
-          <Card className="p-4 flex flex-col justify-center">
+          <Card className="p-4 flex flex-col justify-center bg-primary/5 border-primary/10">
             <p className="text-sm text-muted-foreground text-center">Cadastrado em</p>
-            <p className="text-lg font-semibold text-foreground text-center">
+            <p className="text-lg font-semibold text-center mt-auto">
               {format(new Date(client.data_cadastro), "dd/MM/yyyy", { locale: ptBR })}
             </p>
           </Card>
@@ -371,11 +394,11 @@ export default function ClientDetailPage() {
         )}
 
         {/* Tabs */}
-        <Tabs defaultValue="detalhes" className="space-y-4">
+        <Tabs defaultValue="configuracoes" className="space-y-4">
           <TabsList className="bg-secondary/50">
-            <TabsTrigger value="detalhes" className="gap-2">
-              <Info className="h-4 w-4" />
-              Detalhes
+            <TabsTrigger value="configuracoes" className="gap-2">
+              <Settings2 className="h-4 w-4" />
+              Configurações
             </TabsTrigger>
             <TabsTrigger value="storage" className="gap-2">
               <HardDrive className="h-4 w-4" />
@@ -395,7 +418,7 @@ export default function ClientDetailPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="detalhes">
+          <TabsContent value="configuracoes">
             {renderDetailsContent()}
           </TabsContent>
 

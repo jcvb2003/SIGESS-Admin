@@ -37,7 +37,7 @@ export async function getClient(id: string): Promise<Client> {
 
 export async function proxyAction(
   clientId: string, 
-  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status", 
+  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status", 
   params?: Record<string, unknown>
 ) {
   const { data, error } = await supabase.functions.invoke("client-proxy", {
@@ -63,6 +63,34 @@ export async function createClient(input: ClientCreate): Promise<Client> {
     ...data,
     assinatura: data.assinatura as Client["assinatura"]
   } as Client;
+}
+
+export async function startTenantOnboarding(payload: {
+  tenantCode: string;
+  tenantLabel: string;
+  projectRef: string;
+  supabaseAccountId: string;
+  adminEmail?: string;
+}) {
+  const { data, error } = await supabase.functions.invoke("tenant-onboarding", {
+    body: payload
+  });
+
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+
+  return data as { jobId: string };
+}
+
+export async function getOnboardingJobStatus(jobId: string) {
+  const { data, error } = await supabase
+    .from("onboarding_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function updateClient(id: string, input: ClientUpdate): Promise<Client> {

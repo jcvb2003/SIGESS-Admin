@@ -2,14 +2,16 @@ const fs = require('fs');
 const path = require('path');
 
 const migrationsDir = path.resolve('supabase/migrations');
-const outputFile = path.resolve('supabase/functions/client-proxy/migrations_bundle.ts');
+const outputFile = path.resolve('supabase/functions/_shared/migrations_bundle.ts');
 
 if (!fs.existsSync(migrationsDir)) {
   console.log('No migrations directory found.');
   process.exit(0);
 }
 
-const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+const files = fs.readdirSync(migrationsDir)
+  .filter(f => f.endsWith('.sql') && !f.startsWith('admin_'))
+  .sort();
 const migrations = {};
 
 for (const file of files) {

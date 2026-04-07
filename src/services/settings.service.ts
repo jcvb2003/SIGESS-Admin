@@ -1,36 +1,91 @@
 import { supabase } from "@/lib/supabase";
+import { handleSupabaseError } from "@/services/error.handler";
+import { Tables, TablesInsert, TablesUpdate } from "./supabase.types";
 
-// Settings service - interacts with Supabase Auth for profile and localStorage for local UI preferences
-export const settingsService = {
-  async getSettings() {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    // UI preferences stored locally
-    const savedNotifications = localStorage.getItem("ui_notifications");
-    const notifications = savedNotifications ? JSON.parse(savedNotifications) : {
-      newClients: true,
-      subscriptionExpiry: true,
-      storageLimit: true
-    };
+export type SupabaseAccount = Tables<"supabase_accounts">;
+export type SupabaseAccountSafe = Tables<"supabase_accounts_safe">;
+export type SystemSetting = Tables<"system_settings">;
 
-    return {
-      profile: { 
-        name: user?.user_metadata?.full_name || "Administrador", 
-        email: user?.email || "admin@empresa.com" 
-      },
-      notifications
-    };
-  },
-  async updateProfile(profile: { name: string }) {
-    const { data, error } = await supabase.auth.updateUser({
-      data: { full_name: profile.name }
-    });
+export async function listSupabaseAccounts(): Promise<SupabaseAccountSafe[]> {
+  const { data, error } = await supabase
+    .from("supabase_accounts_safe")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    if (error) throw new Error(error.message);
-    return data.user;
-  },
-  async updateNotifications(notifications: Record<string, boolean>) {
-    localStorage.setItem("ui_notifications", JSON.stringify(notifications));
-    return notifications;
+  if (error) throw handleSupabaseError(error);
+  return data as SupabaseAccountSafe[];
+}
+
+export async function createSupabaseAccount(account: TablesInsert<"supabase_accounts">) {
+  // 1. Validate Token first
+  if (account.management_token) {
+    await validateSupabaseToken(account.management_token);
   }
-};
+
+  const { data, error } = await supabase
+    .from("supabase_accounts")
+    .insert(account)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data;
+}
+
+export async function updateSupabaseAccount(id: string, account: TablesUpdate<"supabase_accounts">) {
+  if (account.management_token) {
+    await validateSupabaseToken(account.management_token);
+  }
+
+  const { data, error } = await supabase
+    .from("supabase_accounts")
+    .update(account)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data;
+}
+
+export async function deleteSupabaseAccount(id: string) {
+  const { error } = await supabase
+    .from("supabase_accounts")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw handleSupabaseError(error);
+}
+
+export async function listSystemSettings(): Promise<SystemSetting[]> {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("*");
+
+  if (error) throw handleSupabaseError(error);
+  return data || [];
+}
+
+export async function updateSystemSetting(key: string, value: string) {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .update({ value, updated_at: new Date().toISOString() })
+    .eq("key", key)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data;
+}
+
+export async function validateSupabaseToken(token: string) {
+  const { data, error } = await supabase.functions.invoke("validate-token", {
+    body: { token }
+  });
+  
+  if (error || !data?.valid) {
+    throw new Error(data?.message || error?.message || "Token do Supabase inválido.");
+  }
+  
+  return data;
+}

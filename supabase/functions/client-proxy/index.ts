@@ -2,8 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error: Deno-specific URL imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { migrationsBundle } from "./migrations_bundle.ts";
-import { seedSql } from "./seed.ts";
+import { migrationsBundle } from "../_shared/migrations_bundle.ts";
+import { seedSql } from "../_shared/seed.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,32 +36,35 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   const authData = await authRes.json();
   const authUsers = authData.users || [];
 
-  // 2. Fetch from public.User (try/catch this portion separately)
+  // 2. Fetch from public.User
   let publicUsers: unknown[] = [];
   try {
-  const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,max_socios`, {
-    headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-  });
+    const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,max_socios,role`, {
+      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+    });
     
     if (publicRes.ok) {
       publicUsers = await publicRes.json();
-    } else {
-      const errText = await publicRes.text();
-      console.error(`PostgREST error (${publicRes.status}):`, errText);
     }
   } catch (e) {
     console.error("Failed to fetch from public.User:", e);
   }
 
-  // 3. Merge (ensure publicUsers is an array)
   const safePublicUsers = Array.isArray(publicUsers) ? publicUsers : [];
 
+  // 3. Merge including app_metadata and role
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const merged = authUsers.map((au: any) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pu: any = safePublicUsers.find((p: any) => p.id === au.id);
+    
+    // Check if admin in metadata (Primary source for client app)
+    const isAdmin = au.app_metadata?.is_admin === true || au.user_metadata?.is_admin === true;
+    
     return {
       ...au,
+      isAdmin,
+      role: pu?.role || (isAdmin ? 'admin' : 'user'),
       acesso_expira_em: pu?.acesso_expira_em || null,
       max_socios: pu?.max_socios || null,
     };
@@ -74,7 +77,31 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
   const { userId, updates } = params as { userId: string, updates: Record<string, unknown> };
   if (!userId || !updates) throw new Error("Missing userId or updates");
 
-  const res = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
+  const results: Record<string, unknown> = {};
+
+  // 1. If updating role, we must sync in BOTH places
+  if (updates.role) {
+    const isAdmin = updates.role === 'admin';
+    
+    // Update Auth Metadata (Highest Priority for the Client App logic)
+    const authRes = await fetch(`${clientUrl}/auth/v1/admin/users/${userId}`, {
+      method: "PUT",
+      headers: { 
+        apikey: clientKey, 
+        Authorization: `Bearer ${clientKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        app_metadata: { is_admin: isAdmin },
+        user_metadata: { is_admin: isAdmin } // redundant for compatibility
+      })
+    });
+    if (!authRes.ok) throw new Error(`Auth Sync failed: ${await authRes.text()}`);
+    results.authSync = "success";
+  }
+
+  // 2. Update Public Schema (PostgREST)
+  const publicRes = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
     method: "PATCH",
     headers: { 
       apikey: clientKey, 
@@ -85,12 +112,60 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
     body: JSON.stringify(updates)
   });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to update user: ${errorText}`);
+  if (!publicRes.ok) {
+    const errorText = await publicRes.text();
+    throw new Error(`Data Update failed: ${errorText}`);
   }
 
-  return await res.json();
+  results.data = await publicRes.json();
+  return results;
+}
+
+async function createClientUser(clientUrl: string, clientKey: string, params?: Record<string, unknown>) {
+  const { email, role, password, autoConfirm } = params as { 
+    email: string, 
+    role: string, 
+    password?: string, 
+    autoConfirm?: boolean 
+  };
+  
+  if (!email) throw new Error("Missing email for new user");
+
+  const supabase = createClient(clientUrl, clientKey);
+  const isAdmin = role === 'admin';
+
+  // 1. If password provided, use createUser (Supabase Style)
+  if (password) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: autoConfirm ?? true,
+      app_metadata: { is_admin: isAdmin },
+      user_metadata: { is_admin: isAdmin }
+    });
+
+    if (error) throw error;
+    return { user: data.user, mode: 'direct' };
+  }
+
+  // 2. Otherwise use Invite (Magic Link)
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
+    data: { is_admin: isAdmin },
+  });
+
+  if (error) throw error;
+
+  const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    type: 'invite',
+    email,
+    options: { data: { is_admin: isAdmin } }
+  });
+
+  return { 
+    user: data.user, 
+    mode: 'invite',
+    inviteLink: linkError ? null : linkData.properties.action_link 
+  };
 }
 
 async function listTables(clientUrl: string, clientKey: string) {
@@ -305,6 +380,7 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
   switch (action) {
     case "list-users": return await listUsers(clientUrl, clientKey);
     case "list-client-members": return await listClientMembers(clientUrl, clientKey);
+    case "create-client-member": return await createClientUser(clientUrl, clientKey, params);
     case "update-client-member": return await updateClientMember(clientUrl, clientKey, params);
     case "list-tables": return await listTables(clientUrl, clientKey);
     case "list-buckets": return await listBuckets(clientUrl, clientKey);

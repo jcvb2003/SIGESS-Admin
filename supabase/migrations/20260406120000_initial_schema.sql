@@ -280,7 +280,7 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.confirmar_upload_foto(p_token uuid, p_base64 text)
+CREATE OR REPLACE FUNCTION public.confirmar_upload_foto(p_token uuid, p_foto_url text)
  RETURNS boolean
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -288,11 +288,12 @@ CREATE OR REPLACE FUNCTION public.confirmar_upload_foto(p_token uuid, p_base64 t
 BEGIN
   UPDATE public.foto_upload_tokens
   SET 
-    foto_base64 = p_base64,
+    foto_url = p_foto_url,
+    used = true,
     updated_at = now()
   WHERE token = p_token
     AND expires_at > now()
-    AND foto_base64 IS NULL;
+    AND used = false;
 
   RETURN FOUND;
 END;
@@ -683,12 +684,15 @@ CREATE TRIGGER trigger_generate_codigo_localidade BEFORE INSERT ON public.locali
 DROP TRIGGER IF EXISTS tr_check_member_limit ON public.socios;
 CREATE TRIGGER tr_check_member_limit BEFORE INSERT ON public.socios FOR EACH ROW EXECUTE FUNCTION public.check_member_limit();
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON public.parametros_financeiros;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
+DROP TRIGGER IF EXISTS on_auth_user_updated ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 CREATE TRIGGER on_auth_user_deleted AFTER DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_delete_user();
 CREATE TRIGGER on_auth_user_updated AFTER UPDATE OF email ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_update_user();
 
 -- Trigger de updated_at para tabelas financeiras
+DROP TRIGGER IF EXISTS trg_parametros_financeiros_upd ON public.parametros_financeiros;
 CREATE TRIGGER trg_parametros_financeiros_upd
   BEFORE UPDATE ON public.parametros_financeiros
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

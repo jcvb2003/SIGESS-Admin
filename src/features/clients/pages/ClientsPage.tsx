@@ -4,7 +4,7 @@ import { Plus, Users, Loader2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/features/dashboard";
-import { useClients, useDeleteClient, ClientCard, AddClientModal, DeleteClientDialog } from "@/features/clients";
+import { useClients, useDeleteClient, ClientCard, AddTenantDialog, DeleteClientDialog } from "@/features/clients";
 import { type Client } from "@/features/clients/types";
 
 export default function ClientsPage() {
@@ -102,7 +102,7 @@ export default function ClientsPage() {
           </div>
         )}
 
-        <AddClientModal
+        <AddTenantDialog
           open={isModalOpen}
           onOpenChange={setIsModalOpen}
         />

@@ -4,6 +4,7 @@ export { useCreateClient, useUpdateClient, useDeleteClient } from "./hooks/useCl
 export * from "./types";
 export * from "./components/ClientCard";
 export * from "./components/AddClientModal";
+export * from "./components/AddTenantDialog";
 export * from "./components/EditClientModal";
 export * from "./components/HealthCheckCard";
 export * from "./components/MigrationsTab";

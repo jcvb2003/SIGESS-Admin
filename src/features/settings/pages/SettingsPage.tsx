@@ -3,6 +3,8 @@ import { ProfileSettings } from "../components/ProfileSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { SecuritySettings } from "../components/SecuritySettings";
 import { DatabaseSettings } from "../components/DatabaseSettings";
+import { SupabaseAccountsSettings } from "../components/SupabaseAccountsSettings";
+import { IntegrationSettings } from "../components/IntegrationSettings";
 
 export default function SettingsPage() {
   return (
@@ -21,6 +23,8 @@ export default function SettingsPage() {
           <NotificationSettings />
           <SecuritySettings />
           <DatabaseSettings />
+          <SupabaseAccountsSettings />
+          <IntegrationSettings />
         </div>
       </div>
     </MainLayout>

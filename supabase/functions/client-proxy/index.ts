@@ -58,15 +58,21 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pu: any = safePublicUsers.find((p: any) => p.id === au.id);
 
-    // Check if admin in metadata (Primary source for client app)
-    const isAdmin = au.app_metadata?.is_admin === true || au.user_metadata?.is_admin === true;
+    // Prioritize 'role' in app_metadata (Canon for SIGESS)
+    const roleFromMetadata = au.app_metadata?.role;
+    const isAdmin = roleFromMetadata === 'admin' || au.app_metadata?.is_admin === true;
+    
+    // Final role determination
+    const finalRole = pu?.role || roleFromMetadata || (isAdmin ? 'admin' : 'user');
 
     return {
       ...au,
-      isAdmin,
-      role: pu?.role || (isAdmin ? 'admin' : 'user'),
+      isAdmin: finalRole === 'admin',
+      role: finalRole,
       acesso_expira_em: pu?.acesso_expira_em || null,
       max_socios: pu?.max_socios || null,
+      // Metadata check for UI warning if legacy
+      hasLegacyMetadata: !!au.app_metadata?.is_admin
     };
   });
 
@@ -81,7 +87,7 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
 
   // 1. If updating role, we must sync in BOTH places
   if (updates.role) {
-    const isAdmin = updates.role === 'admin';
+    const role = updates.role;
 
     // Update Auth Metadata (Highest Priority for the Client App logic)
     const authRes = await fetch(`${clientUrl}/auth/v1/admin/users/${userId}`, {
@@ -92,8 +98,8 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        app_metadata: { is_admin: isAdmin },
-        user_metadata: { is_admin: isAdmin } // redundant for compatibility
+        app_metadata: { role }, // Removed is_admin (Deprecated)
+        user_metadata: { role } 
       })
     });
     if (!authRes.ok) throw new Error(`Auth Sync failed: ${await authRes.text()}`);
@@ -132,7 +138,6 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
   if (!email) throw new Error("Missing email for new user");
 
   const supabase = createClient(clientUrl, clientKey);
-  const isAdmin = role === 'admin';
 
   // 1. If password provided, use createUser (Supabase Style)
   if (password) {
@@ -140,16 +145,16 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
       email,
       password,
       email_confirm: autoConfirm ?? true,
-      app_metadata: { is_admin: isAdmin },
-      user_metadata: { is_admin: isAdmin, role }
+      app_metadata: { role }, // Standardized key
+      user_metadata: { role }
     });
 
     if (error) throw error;
 
     if (data.user) {
-      // redundant update to guarantee app_metadata
+      // Ensure app_metadata is clean (Supabase sometimes merges defaults)
       await supabase.auth.admin.updateUserById(data.user.id, {
-        app_metadata: { is_admin: isAdmin },
+        app_metadata: { role },
       });
 
       // Wait for client DB trigger to potentially fire
@@ -179,7 +184,7 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
 
   // 2. Otherwise use Invite (Magic Link)
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
-    data: { is_admin: isAdmin, role },
+    data: { role },
   });
 
   if (error) throw error;
@@ -187,14 +192,71 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
     type: 'invite',
     email,
-    options: { data: { is_admin: isAdmin, role } }
+    options: { data: { role } }
   });
+
+  if (data.user) {
+    await supabase.auth.admin.updateUserById(data.user.id, {
+      app_metadata: { role }
+    });
+  }
 
   return {
     user: data.user,
     mode: 'invite',
     inviteLink: linkError ? null : linkData.properties.action_link
   };
+}
+
+async function deleteClientUser(clientUrl: string, clientKey: string, userId: string) {
+  const supabase = createClient(clientUrl, clientKey);
+  
+  // 1. Delete from Auth (Triggers should handle cleanup if configured, but we'll be explicit)
+  const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+  if (authError) throw authError;
+
+  // 2. Delete from public.User (Explicit cleanup)
+  const res = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
+    method: "DELETE",
+    headers: {
+      apikey: clientKey,
+      Authorization: `Bearer ${clientKey}`,
+    }
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    console.warn(`Public user record cleanup failed (might already be gone): ${txt}`);
+  }
+
+  return { success: true };
+}
+
+async function banClientUser(clientUrl: string, clientKey: string, userId: string, active: boolean) {
+  const supabase = createClient(clientUrl, clientKey);
+  
+  // Follow client app logic: ban_duration '876600h' for inactive
+  const banDuration = active ? 'none' : '876600h';
+  
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+    ban_duration: banDuration
+  });
+  if (authError) throw authError;
+
+  // Sync active status in public table
+  const res = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
+    method: "PATCH",
+    headers: {
+      apikey: clientKey,
+      Authorization: `Bearer ${clientKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ ativo: active })
+  });
+
+  if (!res.ok) throw new Error(`Status sync failed: ${await res.text()}`);
+
+  return { success: true, active };
 }
 
 async function listTables(clientUrl: string, clientKey: string) {
@@ -415,7 +477,7 @@ async function repairUserSync(
     id: u.id,
     email: u.email,
     // Role is admin if it was already admin in public OR if metadata says so
-    role: adminIds.has(u.id) ? 'admin' : (u.app_metadata?.is_admin ? 'admin' : 'user'),
+    role: (adminIds.has(u.id) || u.app_metadata?.is_admin) ? 'admin' : 'user',
     acesso_expira_em: limits.acesso_expira_em,
     max_socios: limits.max_socios,
   }));
@@ -435,18 +497,22 @@ async function repairUserSync(
     throw new Error(`Bulk UPSERT failed: ${await upsertRes.text()}`);
   }
 
-  // 4. Repair Auth Metadata ONLY for Public Admins missing metadata
+  // 4. Repair Auth Metadata: CLEANUP is_admin AND set role
   const supabase = createClient(clientUrl, clientKey);
   let repairedCount = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const u of authUsers) {
-    const shouldBeAdmin = adminIds.has(u.id) || u.app_metadata?.is_admin === true;
-    const isActuallyAdmin = u.app_metadata?.is_admin === true;
+    const isActuallyAdmin = adminIds.has(u.id) || u.app_metadata?.is_admin === true;
+    const finalRole = isActuallyAdmin ? 'admin' : (u.app_metadata?.role || 'user');
+    
+    // Condition to repair: missing 'role' key OR has legacy 'is_admin' key
+    const hasRole = u.app_metadata?.role === finalRole;
+    const hasLegacy = 'is_admin' in (u.app_metadata || {});
 
-    if (shouldBeAdmin && !isActuallyAdmin) {
+    if (!hasRole || hasLegacy) {
       await supabase.auth.admin.updateUserById(u.id, {
-        app_metadata: { is_admin: true },
-        user_metadata: { is_admin: true }
+        app_metadata: { role: finalRole }, // This overwrites/cleans app_metadata usually, but let's be sure
+        user_metadata: { role: finalRole }
       });
       repairedCount++;
     }
@@ -473,6 +539,10 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
     case "list-tables": return await listTables(clientUrl, clientKey);
     case "list-buckets": return await listBuckets(clientUrl, clientKey);
     case "health-check": return await healthCheck(clientUrl);
+    case "delete-client-member": 
+      return await deleteClientUser(clientUrl, clientKey, params?.userId as string);
+    case "ban-client-member":
+      return await banClientUser(clientUrl, clientKey, params?.userId as string, params?.active as boolean);
     case "repair-user-sync": return await repairUserSync(clientUrl, clientKey, {
       acesso_expira_em: params?.acesso_expira_em as string | null,
       max_socios: params?.max_socios as number | null

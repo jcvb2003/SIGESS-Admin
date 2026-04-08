@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Users, Mail, Calendar, Shield, RefreshCw } from "lucide-react";
+import { Users, Mail, Calendar, Shield, RefreshCw, Trash2, UserMinus, UserCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,16 +18,20 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface ClientUser {
   id: string;
   email: string;
+  name: string | null;
   created_at: string;
   last_sign_in_at: string | null;
   acesso_expira_em: string | null;
   max_socios: number | null;
   role: string;
   isAdmin: boolean;
+  isActive: boolean;
+  hasLegacyMetadata?: boolean;
 }
 
 interface UsersTabProps {
@@ -61,21 +65,27 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
       return (data.users || []).map((u: { 
         id: string; 
         email?: string; 
+        user_metadata?: { nome?: string };
         created_at: string; 
         last_sign_in_at?: string; 
         acesso_expira_em?: string; 
         max_socios?: number; 
         role?: string;
         isAdmin?: boolean; 
+        ban_duration?: string;
+        hasLegacyMetadata?: boolean;
       }) => ({
         id: u.id,
         email: u.email || "Sem email",
+        name: u.user_metadata?.nome || null,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at || null,
         acesso_expira_em: u.acesso_expira_em || null,
         max_socios: u.max_socios || null,
         role: u.role || (u.isAdmin ? 'admin' : 'user'),
         isAdmin: u.isAdmin || false,
+        isActive: !u.ban_duration || u.ban_duration === 'none',
+        hasLegacyMetadata: u.hasLegacyMetadata
       }));
     },
     enabled: !connectionError && !!clientId,
@@ -114,7 +124,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
       
       toast({
         title: "Sincronização reparada!",
-        description: `Processados ${result.totalProcessed} usuários. ${result.repairedAuthMetadata} metadados de admin corrigidos.`,
+        description: `Processados ${result.totalProcessed} usuários. ${result.repairedAuthMetadata} metadados corrigidos para o padrão 'role'.`,
       });
       
       refetch();
@@ -127,6 +137,57 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
       });
     } finally {
       setIsRepairing(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!confirm(`TEM CERTEZA? Isso excluirá o acesso de ${email} PERMANENTEMENTE.\n\nRegistros financeiros e sócios criados por este usuário serão preservados como históricos.`)) {
+      return;
+    }
+
+    setUpdatingId(userId);
+    try {
+      await proxyAction(clientId, "delete-client-member", { userId });
+      
+      toast({
+        title: "Usuário excluído",
+        description: "O acesso foi removido com sucesso.",
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
+    } catch (error) {
+      toast({
+        title: "Erro ao excluir",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleToggleStatus = async (userId: string, currentActive: boolean) => {
+    setUpdatingId(userId);
+    try {
+      await proxyAction(clientId, "ban-client-member", { 
+        userId, 
+        active: !currentActive 
+      });
+      
+      toast({
+        title: currentActive ? "Usuário desativado" : "Usuário ativado",
+        description: currentActive ? "O acesso foi bloqueado." : "O acesso foi restaurado.",
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
+    } catch (error) {
+      toast({
+        title: "Erro ao alterar status",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -171,16 +232,33 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                       <Mail className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-foreground truncate">{user.email}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground truncate">{user.name || user.email}</p>
                         <Badge 
                           variant={user.isAdmin ? "default" : "outline"}
                           className={`text-[10px] uppercase font-bold tracking-wider shrink-0 ${user.isAdmin ? "bg-primary" : ""}`}
                         >
                           {user.isAdmin ? "Administrador" : "Auxiliar"}
                         </Badge>
+                        {!user.isActive && (
+                          <Badge variant="destructive" className="text-[10px] uppercase font-bold tracking-wider shrink-0">
+                            Inativo
+                          </Badge>
+                        )}
+                        {user.hasLegacyMetadata && (
+                          <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider shrink-0 bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200 gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Legacy
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
+                        {user.name && (
+                          <span className="flex items-center gap-1 font-medium text-primary/70">
+                            <Mail className="h-3 w-3" />
+                            {user.email}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
                           Criado em {format(new Date(user.created_at), "dd/MM/yyyy", { locale: ptBR })}
@@ -227,6 +305,33 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                             ? format(new Date(user.last_sign_in_at), "dd/MM 'às' HH:mm", { locale: ptBR })
                             : "Nunca"}
                         </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 border-l pl-4 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            "h-9 w-9 rounded-full",
+                            user.isActive ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50" : "text-amber-600 bg-amber-50 hover:bg-amber-100"
+                          )}
+                          title={user.isActive ? "Desativar usuário" : "Ativar usuário"}
+                          disabled={updatingId === user.id}
+                          onClick={() => handleToggleStatus(user.id, user.isActive)}
+                        >
+                          {user.isActive ? <UserMinus className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                        </Button>
+                        
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Excluir acesso permanentemente"
+                          disabled={updatingId === user.id}
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   </div>

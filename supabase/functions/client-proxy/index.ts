@@ -1,9 +1,15 @@
 // @ts-expect-error: Deno-specific URL imports
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error: Deno-specific URL imports
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { migrationsBundle } from "../_shared/migrations_bundle.ts";
-import { seedSql } from "../_shared/seed.ts";
+import { createClient, SupabaseClient, User as AuthUser } from "https://esm.sh/@supabase/supabase-js@2";
+
+interface PublicUser {
+  id: string;
+  email: string;
+  role?: string;
+  ativo?: boolean;
+  acesso_expira_em?: string | null;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,27 +42,39 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   const authData = await authRes.json();
   const authUsers = authData.users || [];
 
-  // 2. Fetch from public.User
+  // 2. Fetch from public.User and public.configuracao_entidade
   let publicUsers: unknown[] = [];
+  let configData: { max_socios: number | null } | null = null;
   try {
-    const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,max_socios,role`, {
-      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-    });
+    const [userRes, configRes] = await Promise.all([
+      fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,role,ativo`, {
+        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+      }),
+      fetch(`${clientUrl}/rest/v1/configuracao_entidade?select=max_socios&limit=1`, {
+        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+      })
+    ]);
 
-    if (publicRes.ok) {
-      publicUsers = await publicRes.json();
+    if (userRes.ok) publicUsers = await userRes.json();
+    if (configRes.ok) {
+      const configArr = await configRes.json();
+      configData = configArr[0] || null;
     }
   } catch (e) {
-    console.error("Failed to fetch from public.User:", e);
+    console.error("Failed to fetch client data:", e);
   }
 
   const safePublicUsers = Array.isArray(publicUsers) ? publicUsers : [];
 
+  if (authUsers.length > 0) {
+    console.log("DEBUG: First user auth data:", JSON.stringify(authUsers[0]));
+    const foundPublic = safePublicUsers.find((p: PublicUser) => p.id === authUsers[0].id);
+    console.log("DEBUG: First user public data:", JSON.stringify(foundPublic));
+  }
+
   // 3. Merge including app_metadata and role
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const merged = authUsers.map((au: any) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pu: any = safePublicUsers.find((p: any) => p.id === au.id);
+  const merged = authUsers.map((au: AuthUser) => {
+    const pu = safePublicUsers.find((p: PublicUser) => p.id === au.id);
 
     // Prioritize 'role' in app_metadata (Canon for SIGESS)
     const roleFromMetadata = au.app_metadata?.role;
@@ -69,12 +87,31 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
       ...au,
       isAdmin: finalRole === 'admin',
       role: finalRole,
+      ativo: pu?.ativo ?? true,
       acesso_expira_em: pu?.acesso_expira_em || null,
-      max_socios: pu?.max_socios || null,
+      max_socios: configData?.max_socios || null,
       // Metadata check for UI warning if legacy
       hasLegacyMetadata: !!au.app_metadata?.is_admin
     };
   });
+
+  // 4. SELF-HEALING: If we detect users that are 'Inativo' but NOT banned, fix them in background
+  const inconsistents = merged.filter((u: any) => u.ativo === false && (!u.ban_duration || u.ban_duration === 'none'));
+  if (inconsistents.length > 0) {
+    console.log(`Self-healing: fixing ${inconsistents.length} users with inconsistent status...`);
+    fetch(`${clientUrl}/rest/v1/User?ativo=not.is.true`, {
+      method: "PATCH",
+      headers: {
+        apikey: clientKey,
+        Authorization: `Bearer ${clientKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ ativo: true })
+    }).catch(e => console.error("Self-healing failed:", e));
+
+    // Update the returned objects immediately for the UI
+    inconsistents.forEach((u: { ativo: boolean }) => u.ativo = true);
+  }
 
   return { users: merged };
 }
@@ -160,7 +197,7 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
       // Wait for client DB trigger to potentially fire
       await new Promise(r => setTimeout(r, 800));
 
-      // UPSERT to public.User via PostgREST
+      // UPSERT to public.User via PostgREST (Clean identity only)
       await fetch(`${clientUrl}/rest/v1/User`, {
         method: "POST",
         headers: {
@@ -172,9 +209,7 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
         body: JSON.stringify({
           id: data.user.id,
           email: email,
-          role: role,
-          acesso_expira_em: limits?.acesso_expira_em ?? null,
-          max_socios: limits?.max_socios ?? null
+          role: role
         })
       });
     }
@@ -277,23 +312,89 @@ async function listBuckets(clientUrl: string, clientKey: string) {
   return data || [];
 }
 
-async function healthCheck(clientUrl: string) {
+async function testClientConnection(clientUrl: string, clientKey: string) {
   const start = Date.now();
   try {
-    const res = await fetch(clientUrl, { method: "OPTIONS" });
+    // Ping PostgREST with service_role_key as requested
+    // Route: /rest/v1/configuracao_entidade?limit=0
+    const res = await fetch(`${clientUrl}/rest/v1/configuracao_entidade?limit=0`, {
+      method: "GET",
+      headers: {
+        apikey: clientKey,
+        Authorization: `Bearer ${clientKey}`
+      }
+    });
+
+    const latency = Date.now() - start;
+
+    if (res.ok) {
+      return { status: "valid" as const, latency };
+    }
+
+    const errText = await res.text();
     return {
-      status: res.status < 500 ? "online" : "offline",
-      latency: Date.now() - start,
-      code: res.status
+      status: "broken" as const,
+      latency,
+      error: `Erro de Autenticação/Acesso (${res.status}): ${errText.substring(0, 100)}`
     };
   } catch (e) {
-    const err = e as Error;
-    return { status: "offline", error: err.message };
+    return {
+      status: "broken" as const,
+      error: `Erro de Rede/Conectividade: ${e instanceof Error ? e.message : String(e)}`
+    };
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getMigrationsStatus(tenantId: string, supabaseAdmin: any) {
+async function updateClientHealth(supabaseAdmin: SupabaseClient, clientId: string, health: { status: 'valid' | 'broken', error?: string }) {
+  const { error } = await supabaseAdmin
+    .from("entidades")
+    .update({
+      key_status: health.status,
+      last_health_check_at: new Date().toISOString(),
+      health_error_detail: health.error || null
+    })
+    .eq("id", clientId);
+    
+  if (error) console.error("Erro ao salvar status de saúde no banco Master:", error);
+}
+
+async function validateKeyLazy(supabaseAdmin: SupabaseClient, clientId: string, clientUrl: string, clientKey: string, currentStatus?: string, lastCheck?: string | null) {
+  const ONE_HOUR = 60 * 60 * 1000;
+  const now = Date.now();
+  const lastCheckTime = lastCheck ? new Date(lastCheck).getTime() : 0;
+
+  // Disparar se status desconhecido ou última verificação há mais de 1 hora
+  if (currentStatus === 'unknown' || (now - lastCheckTime) > ONE_HOUR) {
+    console.log(`Lazy Validation: Checking tenant ${clientId}...`);
+    const health = await testClientConnection(clientUrl, clientKey);
+    await updateClientHealth(supabaseAdmin, clientId, health);
+    return health;
+  }
+  
+  return { status: currentStatus };
+}
+
+async function healthCheck(clientUrl: string, clientKey?: string) {
+  if (!clientKey) {
+    // Legacy/Basic check if key not provided
+    try {
+      const res = await fetch(clientUrl, { method: "OPTIONS" });
+      return { status: res.status < 500 ? "online" : "offline", code: res.status };
+    } catch (e) {
+      return { status: "offline", error: (e as Error).message };
+    }
+  }
+
+  // Full validation check
+  const health = await testClientConnection(clientUrl, clientKey);
+  return {
+    status: health.status === 'valid' ? 'online' : 'offline',
+    latency: health.latency,
+    error: health.error
+  };
+}
+
+async function getMigrationsStatus(tenantId: string, supabaseAdmin: SupabaseClient, migrationNames: string[] = []) {
   const { data: appliedMigrations, error } = await supabaseAdmin
     .from("schema_migrations")
     .select("migration_name, status, applied_at, error_detail")
@@ -303,7 +404,8 @@ async function getMigrationsStatus(tenantId: string, supabaseAdmin: any) {
     console.error("Warning: Could not fetch schema_migrations:", error);
   }
 
-  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
+  // migrationNames comes from Admin Panel (Frontend Injection)
+  const sortedNames = [...migrationNames].sort((a, b) => a.localeCompare(b));
 
   let appliedCount = 0;
   let failedCount = 0;
@@ -316,7 +418,7 @@ async function getMigrationsStatus(tenantId: string, supabaseAdmin: any) {
     error_detail: string | null;
   }
 
-  const migrations = migrationNames.map(name => {
+  const migrations = sortedNames.map(name => {
     const logs = (appliedMigrations as SchemaMigration[] || []).filter(m => m.migration_name === name);
     const successLog = logs.find(m => m.status === 'success');
     // Get most recent failure if any
@@ -345,91 +447,70 @@ async function getMigrationsStatus(tenantId: string, supabaseAdmin: any) {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeMigration(projectUrl: string, accessToken: string, tenantId: string, supabaseAdmin: any) {
-  // 1. Fetch which migrations have already been applied for this tenant in the Admin DB
-  const { data: appliedMigrations, error } = await supabaseAdmin
-    .from("schema_migrations")
-    .select("migration_name")
-    .eq("tenant_id", tenantId)
-    .eq("status", "success");
-
-  if (error) {
-    console.error("Warning: Could not fetch schema_migrations. Is the table created in Admin?", error);
-    // Continue for now if table doesn't exist? Ideally we should throw, but let's throw to be safe
-    throw new Error(`Failed to fetch applied migrations: ${error.message}`);
+async function executeMigration(
+  projectUrl: string, 
+  accessToken: string, 
+  tenantId: string, 
+  supabaseAdmin: SupabaseClient,
+  sql?: string,
+  migrationName?: string
+) {
+  if (!sql || !migrationName) {
+    throw new Error("Missing SQL or migrationName for execution");
   }
 
-  const appliedSet = new Set(appliedMigrations?.map((m: { migration_name: string }) => m.migration_name) || []);
-
-  // Sort migrations
-  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
-  const pendingMigrations = migrationNames.filter(name => !appliedSet.has(name));
-
-  if (pendingMigrations.length === 0) {
-    return { success: true, appliedCount: 0, pendingMigrations: [] };
-  }
-
+  // Record attempting
   const projectRef = projectUrl.split(".")[0].split("//")[1];
-  let appliedCount = 0;
 
-  for (const migrationName of pendingMigrations) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sql = (migrationsBundle as any)[migrationName];
+  console.log(`Applying injected migration ${migrationName} for tenant ${tenantId}...`);
 
-    console.log(`Applying migration ${migrationName} for tenant ${tenantId}...`);
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: sql }),
+  });
 
-    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query: sql }),
-    });
-
-    if (!res.ok) {
-      const result = await res.json().catch(() => ({ message: res.statusText }));
-
-      const errorMsg = result.message || "Management API error (" + res.status + ")";
-      // Log failure
-      await supabaseAdmin.from("schema_migrations").insert({
-        tenant_id: tenantId,
-        migration_name: migrationName,
-        status: "failed",
-        error_detail: errorMsg
-      });
-
-      throw new Error(`Migration ${migrationName} failed: ${errorMsg}`);
-    }
-
-    // Record success
+  if (!res.ok) {
+    const result = await res.json().catch(() => ({ message: res.statusText }));
+    const errorMsg = result.message || "Management API error (" + res.status + ")";
+    
     await supabaseAdmin.from("schema_migrations").insert({
       tenant_id: tenantId,
       migration_name: migrationName,
-      status: "success"
+      status: "failed",
+      error_detail: errorMsg
     });
 
-    appliedCount++;
+    throw new Error(`Migration ${migrationName} failed: ${errorMsg}`);
   }
 
-  // Apply seed data if 'initial_schema' was just applied
-  if (pendingMigrations.some(m => m.includes("initial_schema"))) {
-    console.log(`Applying seed data for tenant ${tenantId}...`);
-    const seedRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query: seedSql }),
-    });
-    if (!seedRes.ok) {
-      console.error("Failed to apply seed data. Migration succeeded however.");
-    }
-  }
+  // Record success
+  await supabaseAdmin.from("schema_migrations").insert({
+    tenant_id: tenantId,
+    migration_name: migrationName,
+    status: "success"
+  });
 
-  return { success: true, appliedCount, pendingMigrations };
+  return { success: true, migrationName };
+}
+
+/**
+ * Handle direct SQL execute (e.g. Seed)
+ */
+async function executeRawSql(projectUrl: string, accessToken: string, sql: string) {
+  const projectRef = projectUrl.split(".")[0].split("//")[1];
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: sql }),
+  });
+  return res.ok;
 }
 
 async function syncTrialLimits(
@@ -443,6 +524,27 @@ async function syncTrialLimits(
     acesso_expira_em: acessoExpiraEm,
     max_socios: maxSocios
   });
+}
+
+async function repairAuthMetadata(clientUrl: string, clientKey: string, authUsers: AuthUser[], adminIds: Set<string>) {
+  const supabase = createClient(clientUrl, clientKey);
+  let repairedCount = 0;
+  for (const u of authUsers) {
+    const isActuallyAdmin = adminIds.has(u.id) || u.app_metadata?.role === 'admin';
+    const finalRole = isActuallyAdmin ? 'admin' : (u.app_metadata?.role || 'user');
+    
+    const hasRole = u.app_metadata?.role === finalRole;
+    const hasLegacy = 'is_admin' in (u.app_metadata || {});
+
+    if (!hasRole || hasLegacy) {
+      await supabase.auth.admin.updateUserById(u.id, {
+        app_metadata: { role: finalRole },
+        user_metadata: { role: finalRole }
+      });
+      repairedCount++;
+    }
+  }
+  return repairedCount;
 }
 
 async function repairUserSync(
@@ -459,28 +561,31 @@ async function repairUserSync(
   const authUsers = authData.users || [];
 
   // 2. Fetch public.User to identify existing roles/admins (Specced 2nd fetch)
-  const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,role`, {
+  const publicRes = await fetch(`${clientUrl}/rest/v1/User?select=id,role,ativo`, {
     headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
   });
   
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let adminIds = new Set<string>();
+  let publicUsers: PublicUser[] = [];
   if (publicRes.ok) {
-    const publicUsers = await publicRes.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    adminIds = new Set(publicUsers.filter((u: any) => u.role === 'admin').map((u: any) => u.id));
+    publicUsers = await publicRes.json();
+    adminIds = new Set(publicUsers.filter((u: PublicUser) => u.role === 'admin').map((u: PublicUser) => u.id));
   }
 
-  // 3. Bulk UPSERT into public.User
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const upsertPayload = authUsers.map((u: any) => ({
-    id: u.id,
-    email: u.email,
-    // Role is admin if it was already admin in public OR if metadata says so
-    role: (adminIds.has(u.id) || u.app_metadata?.is_admin) ? 'admin' : 'user',
-    acesso_expira_em: limits.acesso_expira_em,
-    max_socios: limits.max_socios,
-  }));
+  // 3. Bulk UPSERT into public.User (Sanitized: Identity & Role & Active)
+  const upsertPayload = authUsers.map((u: AuthUser) => {
+    const isBanned = u.ban_duration && u.ban_duration !== 'none';
+    const existing = publicUsers.find((p: PublicUser) => p.id === u.id);
+    
+    return {
+      id: u.id,
+      email: u.email,
+      // Role is admin if it was already admin in public OR if metadata says so
+      role: (adminIds.has(u.id) || u.app_metadata?.role === 'admin') ? 'admin' : 'user',
+      // Active if NOT banned in Auth AND (if exists in public, use public.ativo, otherwise true)
+      ativo: !isBanned && (existing?.ativo ?? true)
+    };
+  });
 
   const upsertRes = await fetch(`${clientUrl}/rest/v1/User`, {
     method: "POST",
@@ -497,26 +602,25 @@ async function repairUserSync(
     throw new Error(`Bulk UPSERT failed: ${await upsertRes.text()}`);
   }
 
-  // 4. Repair Auth Metadata: CLEANUP is_admin AND set role
-  const supabase = createClient(clientUrl, clientKey);
-  let repairedCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const u of authUsers) {
-    const isActuallyAdmin = adminIds.has(u.id) || u.app_metadata?.is_admin === true;
-    const finalRole = isActuallyAdmin ? 'admin' : (u.app_metadata?.role || 'user');
-    
-    // Condition to repair: missing 'role' key OR has legacy 'is_admin' key
-    const hasRole = u.app_metadata?.role === finalRole;
-    const hasLegacy = 'is_admin' in (u.app_metadata || {});
+  // 4. Sync Global Config (max_socios AND acesso_expira_em)
+  const configUpdates: Record<string, unknown> = {};
+  if (limits.max_socios !== null) configUpdates.max_socios = limits.max_socios;
+  if (limits.acesso_expira_em !== null) configUpdates.acesso_expira_em = limits.acesso_expira_em;
 
-    if (!hasRole || hasLegacy) {
-      await supabase.auth.admin.updateUserById(u.id, {
-        app_metadata: { role: finalRole }, // This overwrites/cleans app_metadata usually, but let's be sure
-        user_metadata: { role: finalRole }
-      });
-      repairedCount++;
-    }
+  if (Object.keys(configUpdates).length > 0) {
+    await fetch(`${clientUrl}/rest/v1/configuracao_entidade?id=eq.1`, {
+      method: "PATCH",
+      headers: {
+        apikey: clientKey,
+        Authorization: `Bearer ${clientKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(configUpdates)
+    });
   }
+
+  // 5. Repair Auth Metadata: CLEANUP is_admin AND set role
+  const repairedCount = await repairAuthMetadata(clientUrl, clientKey, authUsers, adminIds);
 
   return { 
     success: true, 
@@ -538,7 +642,7 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
     case "update-client-member": return await updateClientMember(clientUrl, clientKey, params);
     case "list-tables": return await listTables(clientUrl, clientKey);
     case "list-buckets": return await listBuckets(clientUrl, clientKey);
-    case "health-check": return await healthCheck(clientUrl);
+    case "health-check": return await healthCheck(clientUrl, clientKey);
     case "delete-client-member": 
       return await deleteClientUser(clientUrl, clientKey, params?.userId as string);
     case "ban-client-member":
@@ -547,6 +651,9 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
       acesso_expira_em: params?.acesso_expira_em as string | null,
       max_socios: params?.max_socios as number | null
     });
+    case "execute-raw-sql": // New: For seeds or maintenance
+      if (!params?.sql) throw new Error("Missing SQL");
+      return await executeRawSql(clientUrl, params.supabase_access_token as string, params.sql as string);
     default: throw new Error(`Invalid action: ${action}`);
   }
 }
@@ -557,26 +664,38 @@ interface ClientConfig {
   supabase_access_token?: string;
   acesso_expira_em?: string | null;
   max_socios?: number | null;
+  key_status?: string;
+  last_health_check_at?: string | null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig, supabaseAdmin: any) {
+async function handleMigrationActions(action: string, clientId: string, client: ClientConfig, supabaseAdmin: SupabaseClient, params: Record<string, unknown>) {
   if (action === "get-migrations-status") {
-    return await getMigrationsStatus(clientId, supabaseAdmin);
+    const migrationNames = (params.migrationNames as string[]) || [];
+    return await getMigrationsStatus(clientId, supabaseAdmin, migrationNames);
   }
 
   if (action === "execute-migration") {
     if (!client.supabase_access_token || !client.supabase_secret_keys) {
       throw new Error("Supabase Access Token (PAT) ou Service Role Key não configurados para este cliente");
     }
-    return await executeMigration(client.supabase_url, client.supabase_access_token, clientId, supabaseAdmin);
+    return await executeMigration(
+      client.supabase_url, 
+      client.supabase_access_token, 
+      clientId, 
+      supabaseAdmin,
+      params.sql as string,
+      params.migrationName as string
+    );
+  }
+  return null;
+}
+
+async function handleLimitActions(action: string, clientId: string, client: ClientConfig) {
+  if (!client.supabase_secret_keys) {
+    throw new Error(`Service role key not configured for client ${clientId}`);
   }
 
   if (action === "sync-trial-limits") {
-    if (!client.supabase_secret_keys) {
-      throw new Error(`Service role key not configured for client ${clientId}`);
-    }
-
     console.log(`Syncing trial limits: Expira=${client.acesso_expira_em}, Max=${client.max_socios}`);
     return await syncTrialLimits(
       client.supabase_url,
@@ -587,10 +706,6 @@ async function handleAction(clientId: string, action: string, params: Record<str
   }
 
   if (action === "repair-user-sync") {
-    if (!client.supabase_secret_keys) {
-      throw new Error(`Service role key not configured for client ${clientId}`);
-    }
-
     return await repairUserSync(
       client.supabase_url,
       client.supabase_secret_keys,
@@ -600,6 +715,32 @@ async function handleAction(clientId: string, action: string, params: Record<str
       }
     );
   }
+  return null;
+}
+
+async function handleAction(clientId: string, action: string, params: Record<string, unknown>, client: ClientConfig, supabaseAdmin: SupabaseClient) {
+  // Pre-check: Lazy validation for all actions that use the secret key
+  if (client.supabase_secret_keys) {
+    const health = await validateKeyLazy(
+      supabaseAdmin, 
+      clientId, 
+      client.supabase_url, 
+      client.supabase_secret_keys, 
+      client.key_status, 
+      client.last_health_check_at
+    );
+
+    // If key is known to be broken, block critical management actions
+    if (health.status === 'broken' && action !== 'health-check') {
+      throw new Error("Conexão com o inquilino interrompida (Service Role Key Inválida). Verifique as configurações.");
+    }
+  }
+
+  const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);
+  if (migrationResult) return migrationResult;
+
+  const limitResult = await handleLimitActions(action, clientId, client);
+  if (limitResult) return limitResult;
 
   if (!client.supabase_secret_keys) {
     throw new Error(`Service role key missing for action ${action}`);
@@ -640,7 +781,17 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      throw new Error("Unauthorized access to proxy");
+      console.error("Auth validation failed:", authError?.message || "User not found");
+      const err = new Error("Unauthorized access to proxy: Invalid or expired token") as any;
+      err.status = 401;
+      throw err;
+    }
+
+    if (user.app_metadata?.role !== 'admin') {
+      console.error(`Forbidden: User ${user.email} attempted admin action without proper role. Role found: ${user.app_metadata?.role}`);
+      const err = new Error("Forbidden: Admin access required") as any;
+      err.status = 403;
+      throw err;
     }
 
     const body = await req.json().catch(() => ({}));
@@ -654,7 +805,7 @@ serve(async (req: Request) => {
 
     const { data: client, error: clientError } = await supabaseAdmin
       .from("entidades")
-      .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios")
+      .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at")
       .eq("id", clientId)
       .single();
 
@@ -673,17 +824,22 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (err: unknown) {
+  } catch (err: any) {
     let errorMessage = "Erro desconhecido";
-    if (err instanceof Error) {
+    let status = 500;
+
+    if (err.status) {
+      status = err.status;
+      errorMessage = err.message;
+    } else if (err instanceof Error) {
       errorMessage = err.message;
     } else if (typeof err === 'string') {
       errorMessage = err;
     }
 
-    console.error("Critical Proxy Error:", errorMessage);
+    console.error(`Critical Proxy Error [${status}]:`, errorMessage);
     return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 200, // Return 200 so supabase-js doesn't mask the error body
+      status: status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

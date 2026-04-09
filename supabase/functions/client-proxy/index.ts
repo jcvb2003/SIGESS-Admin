@@ -11,6 +11,16 @@ interface PublicUser {
   acesso_expira_em?: string | null;
 }
 
+interface MergedMember extends AuthUser {
+  isAdmin: boolean;
+  role: string;
+  ativo: boolean;
+  acesso_expira_em: string | null;
+  max_socios: number | null;
+  hasLegacyMetadata: boolean;
+  ban_duration?: string | null;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -43,7 +53,7 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   const authUsers = authData.users || [];
 
   // 2. Fetch from public.User and public.configuracao_entidade
-  let publicUsers: unknown[] = [];
+  let publicUsers: PublicUser[] = [];
   let configData: { max_socios: number | null } | null = null;
   try {
     const [userRes, configRes] = await Promise.all([
@@ -73,7 +83,7 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   }
 
   // 3. Merge including app_metadata and role
-  const merged = authUsers.map((au: AuthUser) => {
+  const merged: MergedMember[] = authUsers.map((au: AuthUser) => {
     const pu = safePublicUsers.find((p: PublicUser) => p.id === au.id);
 
     // Prioritize 'role' in app_metadata (Canon for SIGESS)
@@ -92,11 +102,11 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
       max_socios: configData?.max_socios || null,
       // Metadata check for UI warning if legacy
       hasLegacyMetadata: !!au.app_metadata?.is_admin
-    };
+    } as MergedMember;
   });
 
   // 4. SELF-HEALING: If we detect users that are 'Inativo' but NOT banned, fix them in background
-  const inconsistents = merged.filter((u: any) => u.ativo === false && (!u.ban_duration || u.ban_duration === 'none'));
+  const inconsistents = merged.filter((u: MergedMember) => u.ativo === false && (!u.ban_duration || u.ban_duration === 'none'));
   if (inconsistents.length > 0) {
     console.log(`Self-healing: fixing ${inconsistents.length} users with inconsistent status...`);
     fetch(`${clientUrl}/rest/v1/User?ativo=not.is.true`, {
@@ -110,7 +120,9 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
     }).catch(e => console.error("Self-healing failed:", e));
 
     // Update the returned objects immediately for the UI
-    inconsistents.forEach((u: { ativo: boolean }) => u.ativo = true);
+    inconsistents.forEach((u: MergedMember) => {
+      u.ativo = true;
+    });
   }
 
   return { users: merged };
@@ -526,7 +538,7 @@ async function syncTrialLimits(
   });
 }
 
-async function repairAuthMetadata(clientUrl: string, clientKey: string, authUsers: AuthUser[], adminIds: Set<string>) {
+async function repairAuthMetadata(clientUrl: string, clientKey: string, authUsers: AuthUser[], publicUsers: PublicUser[], adminIds: Set<string>) {
   const supabase = createClient(clientUrl, clientKey);
   let repairedCount = 0;
   for (const u of authUsers) {
@@ -535,11 +547,16 @@ async function repairAuthMetadata(clientUrl: string, clientKey: string, authUser
     
     const hasRole = u.app_metadata?.role === finalRole;
     const hasLegacy = 'is_admin' in (u.app_metadata || {});
+    
+    // Healing logic: If public table says active but Auth has ban_duration, clear it
+    const publicUser = publicUsers.find(p => p.id === u.id);
+    const shouldUnban = publicUser?.ativo === true && (u.ban_duration && u.ban_duration !== 'none');
 
-    if (!hasRole || hasLegacy) {
+    if (!hasRole || hasLegacy || shouldUnban) {
       await supabase.auth.admin.updateUserById(u.id, {
         app_metadata: { role: finalRole },
-        user_metadata: { role: finalRole }
+        user_metadata: { role: finalRole },
+        ...(shouldUnban ? { ban_duration: 'none' } : {})
       });
       repairedCount++;
     }
@@ -582,8 +599,9 @@ async function repairUserSync(
       email: u.email,
       // Role is admin if it was already admin in public OR if metadata says so
       role: (adminIds.has(u.id) || u.app_metadata?.role === 'admin') ? 'admin' : 'user',
-      // Active if NOT banned in Auth AND (if exists in public, use public.ativo, otherwise true)
-      ativo: !isBanned && (existing?.ativo ?? true)
+      // Healing: If it exists in public, trust public.ativo (so manual "Unban" button works)
+      // If it's new, use Auth !isBanned
+      ativo: existing ? existing.ativo : !isBanned
     };
   });
 
@@ -619,8 +637,8 @@ async function repairUserSync(
     });
   }
 
-  // 5. Repair Auth Metadata: CLEANUP is_admin AND set role
-  const repairedCount = await repairAuthMetadata(clientUrl, clientKey, authUsers, adminIds);
+  // 5. Repair Auth Metadata: CLEANUP is_admin AND set role AND heal ban_duration
+  const repairedCount = await repairAuthMetadata(clientUrl, clientKey, authUsers, publicUsers, adminIds);
 
   return { 
     success: true, 
@@ -763,6 +781,7 @@ serve(async (req: Request) => {
   }
 
   try {
+    // 1. Initialize Supabase Admin
     // @ts-expect-error: Deno global is available in Edge Functions runtime
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     // @ts-expect-error: Deno global is available in Edge Functions runtime
@@ -772,49 +791,20 @@ serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Missing Authorization header");
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-    if (authError || !user) {
-      console.error("Auth validation failed:", authError?.message || "User not found");
-      const err = new Error("Unauthorized access to proxy: Invalid or expired token") as any;
-      err.status = 401;
-      throw err;
-    }
-
-    if (user.app_metadata?.role !== 'admin') {
-      console.error(`Forbidden: User ${user.email} attempted admin action without proper role. Role found: ${user.app_metadata?.role}`);
-      const err = new Error("Forbidden: Admin access required") as any;
-      err.status = 403;
-      throw err;
-    }
-
+    // 2. Validate Admin Session (Reduced Cognitive Complexity)
+    const activeUser = await validateAdminSession(req, supabaseAdmin);
+    
     const body = await req.json().catch(() => ({}));
     const { clientId, action, params } = body;
 
-    console.log(`Proxy Action: ${action} for Client: ${clientId}`);
-
     if (!clientId || !action) {
-      throw new Error("Missing clientId or action in request body");
+      throw createHttpError("Missing clientId or action in request body", 400);
     }
 
-    const { data: client, error: clientError } = await supabaseAdmin
-      .from("entidades")
-      .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at")
-      .eq("id", clientId)
-      .single();
+    // 3. Fetch Client Config
+    const client = await getClientConfig(supabaseAdmin, clientId);
 
-    if (clientError || !client) {
-      console.error(`Client fetch error: ${clientError?.message}`);
-      throw new Error(`Client with ID ${clientId} not found`);
-    }
-
-    console.log(`Fetched Client: ${client.supabase_url} (Key prefix: ${client.supabase_secret_keys?.substring(0, 5)}...)`);
+    console.log(`Proxy (${activeUser.email}): ${action} -> Client: ${clientId}`);
 
     const result = await handleAction(clientId, action, params, client, supabaseAdmin);
     console.log(`Action ${action} result: Success`);
@@ -824,23 +814,66 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (err: any) {
-    let errorMessage = "Erro desconhecido";
-    let status = 500;
-
-    if (err.status) {
-      status = err.status;
-      errorMessage = err.message;
-    } else if (err instanceof Error) {
-      errorMessage = err.message;
-    } else if (typeof err === 'string') {
-      errorMessage = err;
-    }
-
-    console.error(`Critical Proxy Error [${status}]:`, errorMessage);
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (err: unknown) {
+    return handleError(err);
   }
 });
+
+async function validateAdminSession(req: Request, supabase: SupabaseClient) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) throw createHttpError("Missing Authorization header", 401);
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+  if (authError || !user) {
+    throw createHttpError("Unauthorized access to proxy: Invalid or expired token", 401);
+  }
+
+  if (user.app_metadata?.role !== 'admin') {
+    console.error(`Forbidden: User ${user.email} attempted admin action without proper role.`);
+    throw createHttpError("Forbidden: Admin access required", 403);
+  }
+
+  return user;
+}
+
+async function getClientConfig(supabase: SupabaseClient, clientId: string) {
+  const { data: client, error } = await supabase
+    .from("entidades")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at")
+    .eq("id", clientId)
+    .single();
+
+  if (error || !client) {
+    throw createHttpError(`Client reach error: ${error?.message || "Not found"}`, 404);
+  }
+  return client;
+}
+
+function handleError(err: unknown) {
+  let errorMessage = "Erro desconhecido";
+  let status = 500;
+
+  if (err && typeof err === 'object') {
+    const errorObj = err as Record<string, unknown>;
+    if (typeof errorObj.status === 'number') status = errorObj.status;
+    if (typeof errorObj.message === 'string') errorMessage = errorObj.message;
+  } else if (err instanceof Error) {
+    errorMessage = err.message;
+  } else if (typeof err === 'string') {
+    errorMessage = err;
+  }
+
+  console.error(`Critical Proxy Error [${status}]:`, errorMessage);
+  return new Response(JSON.stringify({ error: errorMessage }), {
+    status: status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function createHttpError(message: string, status: number) {
+  const err = new Error(message);
+  Object.assign(err, { status });
+  return err;
+}

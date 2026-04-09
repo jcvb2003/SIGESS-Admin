@@ -12,6 +12,9 @@ export interface Client {
   acesso_expira_em: string | null;
   max_socios: number | null;
   data_cadastro: string;
+  key_status: "valid" | "broken" | "unknown";
+  last_health_check_at: string | null;
+  health_error_detail: string | null;
 }
 
 export type ClientCreate = Omit<Client, "id" | "data_cadastro">;

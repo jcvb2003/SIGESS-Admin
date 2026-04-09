@@ -43,8 +43,20 @@ export function ClientCard({ client, onDelete, onClick }: ClientCardProps) {
           )}
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
                 {client.nome_entidade}
+                <span 
+                  className={`h-2 w-2 rounded-full shrink-0 ${
+                    client.key_status === 'valid' ? 'bg-emerald-500' : 
+                    client.key_status === 'broken' ? 'bg-destructive' : 
+                    'bg-slate-300'
+                  }`} 
+                  title={
+                    client.key_status === 'valid' ? 'Chave Válida' : 
+                    client.key_status === 'broken' ? `Chave Inválida: ${client.health_error_detail || 'Erro desconhecido'}` : 
+                    'Status Desconhecido'
+                  }
+                />
               </h3>
               <Badge 
                 variant="default"

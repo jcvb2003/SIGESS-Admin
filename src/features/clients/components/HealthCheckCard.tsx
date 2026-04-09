@@ -61,12 +61,13 @@ export function HealthCheckCard({ clientId }: HealthCheckCardProps) {
           sub: health.latency ? `${health.latency}ms` : "Conectado"
         };
       case "offline":
+        const isAuthError = health.message?.toLowerCase().includes("autenticação") || health.message?.toLowerCase().includes("acesso");
         return {
-          icon: <ShieldAlert className="h-5 w-5 text-destructive" />,
-          bgColor: "bg-destructive/10",
-          textColor: "text-destructive",
-          label: "Offline",
-          sub: "Verifique as chaves"
+          icon: isAuthError ? <ShieldAlert className="h-5 w-5 text-destructive" /> : <WifiOff className="h-5 w-5 text-amber-500" />,
+          bgColor: isAuthError ? "bg-destructive/10" : "bg-amber-500/10",
+          textColor: isAuthError ? "text-destructive" : "text-amber-500",
+          label: isAuthError ? "Chave Inválida" : "Offline",
+          sub: isAuthError ? "Falha na credencial" : "Verifique a rede"
         };
       case "error":
         return {

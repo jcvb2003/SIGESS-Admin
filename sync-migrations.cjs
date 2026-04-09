@@ -1,16 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const migrationsDir = path.resolve('supabase/migrations');
-const outputFile = path.resolve('supabase/functions/_shared/migrations_bundle.ts');
+const migrationsDir = path.resolve(__dirname, '../Web/supabase/migrations');
+const outputFile = path.resolve(__dirname, 'supabase/functions/_shared/migrations_bundle.ts');
 
 if (!fs.existsSync(migrationsDir)) {
-  console.log('No migrations directory found.');
-  process.exit(0);
+  console.error(`Migrations directory not found at: ${migrationsDir}`);
+  process.exit(1);
 }
 
 const files = fs.readdirSync(migrationsDir)
-  .filter(f => f.endsWith('.sql') && !f.startsWith('admin_'))
+  .filter(f => f.endsWith('.sql'))
   .sort();
 const migrations = {};
 

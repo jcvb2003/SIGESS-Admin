@@ -5,6 +5,10 @@ const migrationsDir = path.resolve(__dirname, '../Web/supabase/migrations');
 const outputFile = path.resolve(__dirname, 'supabase/functions/_shared/migrations_bundle.ts');
 
 if (!fs.existsSync(migrationsDir)) {
+  if (fs.existsSync(outputFile)) {
+    console.log('⚠️  Migrations dir não encontrado (Ambiente CI?), mas o bundle já existe. Pulando...');
+    process.exit(0);
+  }
   console.error(`Migrations directory not found at: ${migrationsDir}`);
   process.exit(1);
 }

@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { migrationsBundle } from "../_shared/migrations_bundle.ts";
+import { initialSchemaSql } from "../_shared/initial_schema.ts";
 import { seedSql } from "../_shared/seed.ts";
 
 const corsHeaders = {
@@ -176,9 +177,16 @@ async function fetchProjectKeys(projectRef: string, token: string) {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/api-keys`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Fetch Keys error: ${await res.text()}`);
   const keys: SupabaseApiKey[] = await res.json();
-  const anonKey = keys.find((k) => k.name === "anon")?.api_key;
+  
+  // Prioritize modern publishable keys (sb_publishable_...) over legacy anon keys
+  const pubKey = keys.find((k) => k.api_key.startsWith("sb_publishable_"))?.api_key;
+  const anonKey = pubKey || keys.find((k) => k.name === "anon")?.api_key;
+  
   const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
-  if (!anonKey || !serviceRoleKey) throw new Error("Chaves anon ou service_role ausentes.");
+  
+  if (!anonKey || !serviceRoleKey) throw new Error("Chaves de API (anon/publishable ou service_role) ausentes.");
+  
+  console.log(`[${projectRef}] Chaves recuperadas (Modern: ${!!pubKey})`);
   return { anonKey, serviceRoleKey };
 }
 
@@ -199,55 +207,79 @@ async function setupProjectAuth(projectRef: string, token: string, resendKey: st
 
 async function runProjectMigrations(projectRef: string, token: string) {
   const api = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
+  console.log(`[${projectRef}] Analisando estado do banco de dados...`);
 
-  // 1. Get applied migrations from the target database
-  let appliedSet = new Set<string>();
-  try {
-    const checkRes = await fetch(api, {
+  const runSql = async (sql: string) => {
+    const r = await fetch(api, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT migration_name FROM supabase_migrations.schema_migrations" })
+      body: JSON.stringify({ query: sql })
     });
-    if (checkRes.ok) {
-      const { result } = await checkRes.json();
-      if (Array.isArray(result)) {
-        appliedSet = new Set(result.map(m => m.migration_name));
-      }
-    } else {
-      // If table doesn't exist, we'll try to create it
-      await fetch(api, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "CREATE SCHEMA IF NOT EXISTS supabase_migrations; CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text primary key, statements text[], name text, migration_name text unique, status text, error_detail text, created_at timestamptz default now());" })
-      });
-    }
+    if (!r.ok) throw new Error(`SQL Error: ${await r.text()}`);
+    return r.json();
+  };
+
+  // 1. Check if the database is fresh (doesn't have public.entidade)
+  let isFresh = false;
+  try {
+    const checkEntidade = await fetch(api, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "SELECT 1 FROM public.entidade LIMIT 1" })
+    });
+    if (!checkEntidade.ok) isFresh = true;
   } catch (e) {
-    console.log("Migration check failed, assuming clean state:", e);
+    isFresh = true;
   }
 
   const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
-  for (const name of migrationNames) {
-    if (appliedSet.has(name)) {
-      console.log(`Skipping applied migration: ${name}`);
-      continue;
+
+  if (isFresh) {
+    console.log(`[${projectRef}] Banco virgem detectado. Aplicando Mega Dump inicial...`);
+    await runSql(initialSchemaSql);
+    
+    console.log(`[${projectRef}] Registrando ${migrationNames.length} migrations como aplicadas...`);
+    // Create tracking tables if they don't exist
+    await runSql(`
+      CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+      CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text primary key, statements text[], name text, migration_name text unique, status text, error_detail text, created_at timestamptz default now());
+      CREATE TABLE IF NOT EXISTS public._migrations (filename text primary key, applied_at timestamptz default now());
+    `);
+
+    // Bulk insert into both tracking tables
+    const valuesPublic = migrationNames.map(n => `('${n}.sql')`).join(",");
+    const valuesSupabase = migrationNames.map(n => `('${n.split('_')[0]}', '${n}', 'success')`).join(",");
+    
+    if (valuesPublic) {
+      await runSql(`INSERT INTO public._migrations (filename) VALUES ${valuesPublic} ON CONFLICT DO NOTHING;`);
+      await runSql(`INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ${valuesSupabase} ON CONFLICT DO NOTHING;`);
+    }
+  } else {
+    console.log(`[${projectRef}] Banco existente detectado. Aplicando deltas incrementais...`);
+    
+    // Get applied migrations
+    let appliedSet = new Set<string>();
+    try {
+      const { result } = await runSql("SELECT migration_name FROM supabase_migrations.schema_migrations");
+      if (Array.isArray(result)) appliedSet = new Set(result.map(m => m.migration_name));
+    } catch (e) {
+      console.log(`[${projectRef}] Falha ao ler migrations aplicadas. Criando tabela...`);
+      await runSql("CREATE SCHEMA IF NOT EXISTS supabase_migrations; CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text primary key, statements text[], name text, migration_name text unique, status text, error_detail text, created_at timestamptz default now());");
     }
 
-    const res = await fetch(api, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: (migrationsBundle as Record<string, string>)[name] })
-    });
+    let count = 0;
+    for (const name of migrationNames) {
+      if (appliedSet.has(name)) continue;
 
-    if (!res.ok) throw new Error(`Migration ${name} Error: ${await res.text()}`);
-
-    // Record success in target DB
-    await fetch(api, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ('${name.split('_')[0]}', '${name}', 'success') ON CONFLICT (migration_name) DO UPDATE SET status = 'success';`
-      })
-    });
+      console.log(`[${projectRef}] Aplicando delta: ${name}`);
+      await runSql((migrationsBundle as Record<string, string>)[name]);
+      
+      // Record success in both tables
+      await runSql(`INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ('${name.split('_')[0]}', '${name}', 'success') ON CONFLICT (migration_name) DO UPDATE SET status = 'success';`);
+      await runSql(`CREATE TABLE IF NOT EXISTS public._migrations (filename text primary key, applied_at timestamptz default now()); INSERT INTO public._migrations (filename) VALUES ('${name}.sql') ON CONFLICT DO NOTHING;`);
+      count++;
+    }
+    console.log(`[${projectRef}] Sincronização concluída. ${count} migrations aplicadas.`);
   }
 }
 

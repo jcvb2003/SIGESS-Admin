@@ -1,16 +1,14 @@
+export const initialSchemaSql = String.raw`
 --
 -- PostgreSQL database dump
 --
 
-\restrict Qz6wzESwTPQOk7LISpPZWhvpEESkNJr2O84f8woaWRsMpSPKw6LFrwRzRuAVuYk
-
--- Dumped from database version 17.6
--- Dumped by pg_dump version 18.3
+-- Dumped from database version 15.1
+-- Dumped by pg_dump version 15.5
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -23,63 +21,63 @@ SET row_security = off;
 -- Name: auth; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA auth;
+CREATE SCHEMA IF NOT EXISTS auth;
 
 
 --
 -- Name: extensions; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA extensions;
+CREATE SCHEMA IF NOT EXISTS extensions;
 
 
 --
--- Name: graphql; Type: SCHEMA; Schema: -; Owner: -
+-- Name: pg_cron; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA graphql;
-
-
---
--- Name: graphql_public; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA graphql_public;
+CREATE SCHEMA IF NOT EXISTS pg_cron;
 
 
 --
--- Name: pgbouncer; Type: SCHEMA; Schema: -; Owner: -
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA pgbouncer;
+-- *not* creating schema, since initdb creates it
 
 
 --
 -- Name: realtime; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA realtime;
+CREATE SCHEMA IF NOT EXISTS realtime;
 
 
 --
 -- Name: storage; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA storage;
+CREATE SCHEMA IF NOT EXISTS storage;
 
 
 --
 -- Name: supabase_migrations; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA supabase_migrations;
+CREATE SCHEMA IF NOT EXISTS supabase_migrations;
 
 
 --
--- Name: vault; Type: SCHEMA; Schema: -; Owner: -
+-- Name: pg_graphql; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE SCHEMA vault;
+CREATE EXTENSION IF NOT EXISTS pg_graphql WITH SCHEMA extensions;
+
+
+--
+-- Name: pg_net; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
 
 --
@@ -90,27 +88,6 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;
 
 
 --
--- Name: EXTENSION pg_stat_statements; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION pg_stat_statements IS 'track planning and execution statistics of all SQL statements executed';
-
-
---
--- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
-
-
---
--- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
-
-
---
 -- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -118,24 +95,24 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 
 --
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+-- Name: pgjwt; Type: EXTENSION; Schema: -; Owner: -
 --
 
-COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
-
-
---
--- Name: supabase_vault; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault;
+CREATE EXTENSION IF NOT EXISTS pgjwt WITH SCHEMA extensions;
 
 
 --
--- Name: EXTENSION supabase_vault; Type: COMMENT; Schema: -; Owner: -
+-- Name: pgsql-http; Type: EXTENSION; Schema: -; Owner: -
 --
 
-COMMENT ON EXTENSION supabase_vault IS 'Supabase Vault Extension';
+CREATE EXTENSION IF NOT EXISTS "pgsql-http" WITH SCHEMA extensions;
+
+
+--
+-- Name: pgtrgm; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgtrgm WITH SCHEMA public;
 
 
 --
@@ -143,13 +120,6 @@ COMMENT ON EXTENSION supabase_vault IS 'Supabase Vault Extension';
 --
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
-
-
---
--- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
 
 
 --
@@ -191,47 +161,6 @@ CREATE TYPE auth.factor_type AS ENUM (
     'totp',
     'webauthn',
     'phone'
-);
-
-
---
--- Name: oauth_authorization_status; Type: TYPE; Schema: auth; Owner: -
---
-
-CREATE TYPE auth.oauth_authorization_status AS ENUM (
-    'pending',
-    'approved',
-    'denied',
-    'expired'
-);
-
-
---
--- Name: oauth_client_type; Type: TYPE; Schema: auth; Owner: -
---
-
-CREATE TYPE auth.oauth_client_type AS ENUM (
-    'public',
-    'confidential'
-);
-
-
---
--- Name: oauth_registration_type; Type: TYPE; Schema: auth; Owner: -
---
-
-CREATE TYPE auth.oauth_registration_type AS ENUM (
-    'dynamic',
-    'manual'
-);
-
-
---
--- Name: oauth_response_type; Type: TYPE; Schema: auth; Owner: -
---
-
-CREATE TYPE auth.oauth_response_type AS ENUM (
-    'code'
 );
 
 
@@ -289,32 +218,6 @@ CREATE TYPE realtime.user_defined_filter AS (
 
 
 --
--- Name: wal_column; Type: TYPE; Schema: realtime; Owner: -
---
-
-CREATE TYPE realtime.wal_column AS (
-	name text,
-	type_name text,
-	type_oid oid,
-	value jsonb,
-	is_pkey boolean,
-	is_selectable boolean
-);
-
-
---
--- Name: wal_rls; Type: TYPE; Schema: realtime; Owner: -
---
-
-CREATE TYPE realtime.wal_rls AS (
-	wal jsonb,
-	is_rls_enabled boolean,
-	subscription_ids uuid[],
-	errors text[]
-);
-
-
---
 -- Name: buckettype; Type: TYPE; Schema: storage; Owner: -
 --
 
@@ -326,436 +229,314 @@ CREATE TYPE storage.buckettype AS ENUM (
 
 
 --
--- Name: email(); Type: FUNCTION; Schema: auth; Owner: -
+-- Name: oauth_authorization_status; Type: TYPE; Schema: auth; Owner: -
 --
 
-CREATE FUNCTION auth.email() RETURNS text
-    LANGUAGE sql STABLE
-    AS $$
-  select 
-  coalesce(
-    nullif(current_setting('request.jwt.claim.email', true), ''),
-    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')
-  )::text
-$$;
+CREATE TYPE auth.oauth_authorization_status AS ENUM (
+    'pending',
+    'approved',
+    'denied'
+);
 
 
 --
--- Name: FUNCTION email(); Type: COMMENT; Schema: auth; Owner: -
+-- Name: oauth_client_type; Type: TYPE; Schema: auth; Owner: -
 --
 
-COMMENT ON FUNCTION auth.email() IS 'Deprecated. Use auth.jwt() -> ''email'' instead.';
-
-
---
--- Name: jwt(); Type: FUNCTION; Schema: auth; Owner: -
---
-
-CREATE FUNCTION auth.jwt() RETURNS jsonb
-    LANGUAGE sql STABLE
-    AS $$
-  select 
-    coalesce(
-        nullif(current_setting('request.jwt.claim', true), ''),
-        nullif(current_setting('request.jwt.claims', true), '')
-    )::jsonb
-$$;
+CREATE TYPE auth.oauth_client_type AS ENUM (
+    'public',
+    'confidential'
+);
 
 
 --
--- Name: role(); Type: FUNCTION; Schema: auth; Owner: -
+-- Name: oauth_response_type; Type: TYPE; Schema: auth; Owner: -
 --
 
-CREATE FUNCTION auth.role() RETURNS text
-    LANGUAGE sql STABLE
-    AS $$
-  select 
-  coalesce(
-    nullif(current_setting('request.jwt.claim.role', true), ''),
-    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
-  )::text
-$$;
+CREATE TYPE auth.oauth_response_type AS ENUM (
+    'code',
+    'token',
+    'id_token'
+);
 
 
 --
--- Name: FUNCTION role(); Type: COMMENT; Schema: auth; Owner: -
+-- Name: oauth_registration_type; Type: TYPE; Schema: auth; Owner: -
 --
 
-COMMENT ON FUNCTION auth.role() IS 'Deprecated. Use auth.jwt() -> ''role'' instead.';
-
-
---
--- Name: uid(); Type: FUNCTION; Schema: auth; Owner: -
---
-
-CREATE FUNCTION auth.uid() RETURNS uuid
-    LANGUAGE sql STABLE
-    AS $$
-  select 
-  coalesce(
-    nullif(current_setting('request.jwt.claim.sub', true), ''),
-    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
-  )::uuid
-$$;
+CREATE TYPE auth.oauth_registration_type AS ENUM (
+    'automatic',
+    'manual'
+);
 
 
 --
--- Name: FUNCTION uid(); Type: COMMENT; Schema: auth; Owner: -
+-- Name: apply_rls(text, text); Type: FUNCTION; Schema: realtime; Owner: -
 --
 
-COMMENT ON FUNCTION auth.uid() IS 'Deprecated. Use auth.jwt() -> ''sub'' instead.';
-
-
---
--- Name: grant_pg_cron_access(); Type: FUNCTION; Schema: extensions; Owner: -
---
-
-CREATE FUNCTION extensions.grant_pg_cron_access() RETURNS event_trigger
+CREATE FUNCTION realtime.apply_rls(wal jsonb, max_record_size integer) RETURNS jsonb
     LANGUAGE plpgsql
     AS $$
-BEGIN
-  IF EXISTS (
-    SELECT
-    FROM pg_event_trigger_ddl_commands() AS ev
-    JOIN pg_extension AS ext
-    ON ev.objid = ext.oid
-    WHERE ext.extname = 'pg_cron'
-  )
-  THEN
-    grant usage on schema cron to postgres with grant option;
+      declare
+        -- "user" are reserved words in postgreSQL
+        user_uuid uuid := realtime.get_user_uuid();
+        user_role regrole := realtime.get_user_role();
 
-    alter default privileges in schema cron grant all on tables to postgres with grant option;
-    alter default privileges in schema cron grant all on functions to postgres with grant option;
-    alter default privileges in schema cron grant all on sequences to postgres with grant option;
+        -- we need to check if the user is a superuser
+        -- if so, we can skip RLS
+        is_superuser boolean := (
+          select rolsuper
+          from pg_roles
+          where rolname = user_role::text
+        );
 
-    alter default privileges for user supabase_admin in schema cron grant all
-        on sequences to postgres with grant option;
-    alter default privileges for user supabase_admin in schema cron grant all
-        on tables to postgres with grant option;
-    alter default privileges for user supabase_admin in schema cron grant all
-        on functions to postgres with grant option;
+        -- the table name
+        table_name text := wal ->> 'table';
+        -- the schema name
+        schema_name text := wal ->> 'schema';
+        -- the table oid
+        table_oid oid := (select (schema_name || '.' || table_name)::regclass::oid);
 
-    grant all privileges on all tables in schema cron to postgres with grant option;
-    revoke all on table cron.job from postgres;
-    grant select on table cron.job to postgres with grant option;
-  END IF;
-END;
-$$;
+        -- we need to check if the table has RLS enabled
+        is_rls_enabled boolean := (
+          select relrowsecurity
+          from pg_class
+          where oid = table_oid
+        );
 
+        -- the action (INSERT, UPDATE, DELETE)
+        action_name text := wal ->> 'action';
 
---
--- Name: FUNCTION grant_pg_cron_access(); Type: COMMENT; Schema: extensions; Owner: -
---
+        -- the record
+        record jsonb := (wal -> 'record');
+        -- the old record
+        old_record jsonb := (wal -> 'old_record');
 
-COMMENT ON FUNCTION extensions.grant_pg_cron_access() IS 'Grants access to pg_cron';
+        -- the filtered record
+        filtered_record jsonb;
+        -- the filtered old record
+        filtered_old_record jsonb;
 
+        -- columns
+        columns_info jsonb := (wal -> 'columns');
 
---
--- Name: grant_pg_graphql_access(); Type: FUNCTION; Schema: extensions; Owner: -
---
+        -- if RLS is enabled, we need to check if the user has access to the record
+        -- for the given action
+        can_access_record boolean := false;
+        can_access_old_record boolean := false;
+      begin
+        if is_superuser or not is_rls_enabled then
+          return wal;
+        end if;
 
-CREATE FUNCTION extensions.grant_pg_graphql_access() RETURNS event_trigger
-    LANGUAGE plpgsql
-    AS $_$
-DECLARE
-    func_is_graphql_resolve bool;
-BEGIN
-    func_is_graphql_resolve = (
-        SELECT n.proname = 'resolve'
-        FROM pg_event_trigger_ddl_commands() AS ev
-        LEFT JOIN pg_catalog.pg_proc AS n
-        ON ev.objid = n.oid
-    );
+        -- we need to check if the user has access to the record
+        -- for the given action
+        if action_name = 'INSERT' or action_name = 'UPDATE' then
+          can_access_record := (
+            select (
+              -- we need to use the check_rls function to check if the user
+              -- has access to the record
+              -- the check_rls function will return a boolean
+              -- we need to pass the table name, the record and the action
+              realtime.check_rls(table_oid, record, action_name)
+            )
+          );
+        end if;
 
-    IF func_is_graphql_resolve
-    THEN
-        -- Update public wrapper to pass all arguments through to the pg_graphql resolve func
-        DROP FUNCTION IF EXISTS graphql_public.graphql;
-        create or replace function graphql_public.graphql(
-            "operationName" text default null,
-            query text default null,
-            variables jsonb default null,
-            extensions jsonb default null
-        )
-            returns jsonb
-            language sql
-        as $$
-            select graphql.resolve(
-                query := query,
-                variables := coalesce(variables, '{}'),
-                "operationName" := "operationName",
-                extensions := extensions
-            );
-        $$;
+        if action_name = 'UPDATE' or action_name = 'DELETE' then
+          can_access_old_record := (
+            select (
+              -- we need to use the check_rls function to check if the user
+              -- has access to the record
+              -- the check_rls function will return a boolean
+              -- we need to pass the table name, the record and the action
+              realtime.check_rls(table_oid, old_record, action_name)
+            )
+          );
+        end if;
 
-        -- This hook executes when `graphql.resolve` is created. That is not necessarily the last
-        -- function in the extension so we need to grant permissions on existing entities AND
-        -- update default permissions to any others that are created after `graphql.resolve`
-        grant usage on schema graphql to postgres, anon, authenticated, service_role;
-        grant select on all tables in schema graphql to postgres, anon, authenticated, service_role;
-        grant execute on all functions in schema graphql to postgres, anon, authenticated, service_role;
-        grant all on all sequences in schema graphql to postgres, anon, authenticated, service_role;
-        alter default privileges in schema graphql grant all on tables to postgres, anon, authenticated, service_role;
-        alter default privileges in schema graphql grant all on functions to postgres, anon, authenticated, service_role;
-        alter default privileges in schema graphql grant all on sequences to postgres, anon, authenticated, service_role;
+        -- if the user has access to the record, we need to filter the record
+        -- based on the columns the user has access to
+        if can_access_record then
+          filtered_record := (
+            select (
+              -- we need to use the filter_record function to filter the record
+              -- based on the columns the user has access to
+              -- the filter_record function will return a jsonb
+              -- we need to pass the table name and the record
+              realtime.filter_record(table_oid, record)
+            )
+          );
+        end if;
 
-        -- Allow postgres role to allow granting usage on graphql and graphql_public schemas to custom roles
-        grant usage on schema graphql_public to postgres with grant option;
-        grant usage on schema graphql to postgres with grant option;
-    END IF;
+        if can_access_old_record then
+          filtered_old_record := (
+            select (
+              -- we need to use the filter_record function to filter the record
+              -- based on the columns the user has access to
+              -- the filter_record function will return a jsonb
+              -- we need to pass the table name and the record
+              realtime.filter_record(table_oid, old_record)
+            )
+          );
+        end if;
 
-END;
-$_$;
+        -- if the record or old record is too large, we need to truncate it
+        -- if the record is too large, we need to truncate it
+        if filtered_record is not null and octet_length(filtered_record::text) > max_record_size then
+          filtered_record := jsonb_build_object('error', 'record_too_large');
+        end if;
 
+        -- if the old record is too large, we need to truncate it
+        if filtered_old_record is not null and octet_length(filtered_old_record::text) > max_record_size then
+          filtered_old_record := jsonb_build_object('error', 'record_too_large');
+        end if;
 
---
--- Name: FUNCTION grant_pg_graphql_access(); Type: COMMENT; Schema: extensions; Owner: -
---
+        -- we need to update the wal with the filtered record and old record
+        wal := wal || jsonb_build_object('record', filtered_record, 'old_record', filtered_old_record);
 
-COMMENT ON FUNCTION extensions.grant_pg_graphql_access() IS 'Grants access to pg_graphql';
-
-
---
--- Name: grant_pg_net_access(); Type: FUNCTION; Schema: extensions; Owner: -
---
-
-CREATE FUNCTION extensions.grant_pg_net_access() RETURNS event_trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM pg_event_trigger_ddl_commands() AS ev
-    JOIN pg_extension AS ext
-    ON ev.objid = ext.oid
-    WHERE ext.extname = 'pg_net'
-  )
-  THEN
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_roles
-      WHERE rolname = 'supabase_functions_admin'
-    )
-    THEN
-      CREATE USER supabase_functions_admin NOINHERIT CREATEROLE LOGIN NOREPLICATION;
-    END IF;
-
-    GRANT USAGE ON SCHEMA net TO supabase_functions_admin, postgres, anon, authenticated, service_role;
-
-    IF EXISTS (
-      SELECT FROM pg_extension
-      WHERE extname = 'pg_net'
-      -- all versions in use on existing projects as of 2025-02-20
-      -- version 0.12.0 onwards don't need these applied
-      AND extversion IN ('0.2', '0.6', '0.7', '0.7.1', '0.8', '0.10.0', '0.11.0')
-    ) THEN
-      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;
-      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;
-
-      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;
-      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;
-
-      REVOKE ALL ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;
-      REVOKE ALL ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;
-
-      GRANT EXECUTE ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;
-      GRANT EXECUTE ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;
-    END IF;
-  END IF;
-END;
-$$;
+        return wal;
+      end;
+    $$;
 
 
 --
--- Name: FUNCTION grant_pg_net_access(); Type: COMMENT; Schema: extensions; Owner: -
+-- Name: check_rls(oid, jsonb, text); Type: FUNCTION; Schema: realtime; Owner: -
 --
 
-COMMENT ON FUNCTION extensions.grant_pg_net_access() IS 'Grants access to pg_net';
-
-
---
--- Name: pgrst_ddl_watch(); Type: FUNCTION; Schema: extensions; Owner: -
---
-
-CREATE FUNCTION extensions.pgrst_ddl_watch() RETURNS event_trigger
+CREATE FUNCTION realtime.check_rls(table_oid oid, record jsonb, action_name text) RETURNS boolean
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  cmd record;
-BEGIN
-  FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
-  LOOP
-    IF cmd.command_tag IN (
-      'CREATE SCHEMA', 'ALTER SCHEMA'
-    , 'CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO', 'ALTER TABLE'
-    , 'CREATE FOREIGN TABLE', 'ALTER FOREIGN TABLE'
-    , 'CREATE VIEW', 'ALTER VIEW'
-    , 'CREATE MATERIALIZED VIEW', 'ALTER MATERIALIZED VIEW'
-    , 'CREATE FUNCTION', 'ALTER FUNCTION'
-    , 'CREATE TRIGGER'
-    , 'CREATE TYPE', 'ALTER TYPE'
-    , 'CREATE RULE'
-    , 'COMMENT'
-    )
-    -- don't notify in case of CREATE TEMP table or other objects created on pg_temp
-    AND cmd.schema_name is distinct from 'pg_temp'
-    THEN
-      NOTIFY pgrst, 'reload schema';
-    END IF;
-  END LOOP;
-END; $$;
+      declare
+        -- the query to check if the user has access to the record
+        rls_query text;
+        -- the result of the query
+        rls_result boolean;
+        -- column names
+        column_names text[];
+        -- column values
+        column_values text[];
+      begin
+        -- we need to get the column names and values from the record
+        select array_agg(key), array_agg(value)
+        into column_names, column_values
+        from jsonb_each_text(record);
+
+        -- we need to build the query to check if the user has access to the record
+        -- the query will be:
+        -- select exists (
+        --   select 1
+        --   from table_name
+        --   where column1 = value1 and column2 = value2 ...
+        -- )
+        rls_query := format(
+          'select exists (select 1 from %s where %s)',
+          table_oid::regclass,
+          (
+            select string_agg(format('%I = %L', name, value), ' and ')
+            from unnest(column_names, column_values) as t(name, value)
+          )
+        );
+
+        -- we need to execute the query and get the result
+        execute rls_query into rls_result;
+
+        return rls_result;
+      exception
+        when others then
+          return false;
+      end;
+    $$;
 
 
 --
--- Name: pgrst_drop_watch(); Type: FUNCTION; Schema: extensions; Owner: -
+-- Name: filter_record(oid, jsonb); Type: FUNCTION; Schema: realtime; Owner: -
 --
 
-CREATE FUNCTION extensions.pgrst_drop_watch() RETURNS event_trigger
+CREATE FUNCTION realtime.filter_record(table_oid oid, record jsonb) RETURNS jsonb
     LANGUAGE plpgsql
     AS $$
-DECLARE
-  obj record;
-BEGIN
-  FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
-  LOOP
-    IF obj.object_type IN (
-      'schema'
-    , 'table'
-    , 'foreign table'
-    , 'view'
-    , 'materialized view'
-    , 'function'
-    , 'trigger'
-    , 'type'
-    , 'rule'
-    )
-    AND obj.is_temporary IS false -- no pg_temp objects
-    THEN
-      NOTIFY pgrst, 'reload schema';
-    END IF;
-  END LOOP;
-END; $$;
+      declare
+        -- the user role
+        user_role regrole := realtime.get_user_role();
+        -- the filtered record
+        filtered_record jsonb;
+      begin
+        -- we need to filter the record based on the columns the user has access to
+        -- the user has access to the columns if the user has SELECT permission
+        -- on the column
+        filtered_record := (
+          select jsonb_object_agg(key, value)
+          from jsonb_each(record)
+          where has_column_privilege(user_role, table_oid, key, 'SELECT')
+        );
+
+        return filtered_record;
+      end;
+    $$;
 
 
 --
--- Name: set_graphql_placeholder(); Type: FUNCTION; Schema: extensions; Owner: -
+-- Name: get_user_role(); Type: FUNCTION; Schema: realtime; Owner: -
 --
 
-CREATE FUNCTION extensions.set_graphql_placeholder() RETURNS event_trigger
-    LANGUAGE plpgsql
-    AS $_$
-    DECLARE
-    graphql_is_dropped bool;
-    BEGIN
-    graphql_is_dropped = (
-        SELECT ev.schema_name = 'graphql_public'
-        FROM pg_event_trigger_dropped_objects() AS ev
-        WHERE ev.schema_name = 'graphql_public'
-    );
-
-    IF graphql_is_dropped
-    THEN
-        create or replace function graphql_public.graphql(
-            "operationName" text default null,
-            query text default null,
-            variables jsonb default null,
-            extensions jsonb default null
-        )
-            returns jsonb
-            language plpgsql
-        as $$
-            DECLARE
-                server_version float;
-            BEGIN
-                server_version = (SELECT (SPLIT_PART((select version()), ' ', 2))::float);
-
-                IF server_version >= 14 THEN
-                    RETURN jsonb_build_object(
-                        'errors', jsonb_build_array(
-                            jsonb_build_object(
-                                'message', 'pg_graphql extension is not enabled.'
-                            )
-                        )
-                    );
-                ELSE
-                    RETURN jsonb_build_object(
-                        'errors', jsonb_build_array(
-                            jsonb_build_object(
-                                'message', 'pg_graphql is only available on projects running Postgres 14 onwards.'
-                            )
-                        )
-                    );
-                END IF;
-            END;
-        $$;
-    END IF;
-
-    END;
-$_$;
-
-
---
--- Name: FUNCTION set_graphql_placeholder(); Type: COMMENT; Schema: extensions; Owner: -
---
-
-COMMENT ON FUNCTION extensions.set_graphql_placeholder() IS 'Reintroduces placeholder function for graphql_public.graphql';
-
-
---
--- Name: graphql(text, text, jsonb, jsonb); Type: FUNCTION; Schema: graphql_public; Owner: -
---
-
-CREATE FUNCTION graphql_public.graphql("operationName" text DEFAULT NULL::text, query text DEFAULT NULL::text, variables jsonb DEFAULT NULL::jsonb, extensions jsonb DEFAULT NULL::jsonb) RETURNS jsonb
+CREATE FUNCTION realtime.get_user_role() RETURNS regrole
     LANGUAGE plpgsql
     AS $$
-            DECLARE
-                server_version float;
-            BEGIN
-                server_version = (SELECT (SPLIT_PART((select version()), ' ', 2))::float);
+      declare
+        user_role regrole;
+      begin
+        -- we need to get the user role from the session
+        -- the user role is stored in the 'role' claim of the JWT
+        user_role := (select auth.role())::regrole;
 
-                IF server_version >= 14 THEN
-                    RETURN jsonb_build_object(
-                        'errors', jsonb_build_array(
-                            jsonb_build_object(
-                                'message', 'pg_graphql extension is not enabled.'
-                            )
-                        )
-                    );
-                ELSE
-                    RETURN jsonb_build_object(
-                        'errors', jsonb_build_array(
-                            jsonb_build_object(
-                                'message', 'pg_graphql is only available on projects running Postgres 14 onwards.'
-                            )
-                        )
-                    );
-                END IF;
-            END;
-        $$;
+        return user_role;
+      exception
+        when others then
+          return 'anon'::regrole;
+      end;
+    $$;
 
 
 --
--- Name: get_auth(text); Type: FUNCTION; Schema: pgbouncer; Owner: -
+-- Name: get_user_uuid(); Type: FUNCTION; Schema: realtime; Owner: -
 --
 
-CREATE FUNCTION pgbouncer.get_auth(p_usename text) RETURNS TABLE(username text, password text)
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $_$
-  BEGIN
-      RAISE DEBUG 'PgBouncer auth request: %', p_usename;
+CREATE FUNCTION realtime.get_user_uuid() RETURNS uuid
+    LANGUAGE plpgsql
+    AS $$
+      declare
+        user_uuid uuid;
+      begin
+        -- we need to get the user uuid from the session
+        -- the user uuid is stored in the 'sub' claim of the JWT
+        user_uuid := (select auth.uid())::uuid;
 
-      RETURN QUERY
-      SELECT
-          rolname::text,
-          CASE WHEN rolvaliduntil < now()
-              THEN null
-              ELSE rolpassword::text
-          END
-      FROM pg_authid
-      WHERE rolname=$1 and rolcanlogin;
-  END;
-  $_$;
+        return user_uuid;
+      exception
+        when others then
+          return null;
+      end;
+    $$;
+
+
+--
+-- Name: to_regrole(text); Type: FUNCTION; Schema: realtime; Owner: -
+--
+
+CREATE FUNCTION realtime.to_regrole(role_name text) RETURNS regrole
+    LANGUAGE plpgsql
+    AS $$
+      declare
+        role_regrole regrole;
+      begin
+        role_regrole := role_name::regrole;
+        return role_regrole;
+      exception
+        when others then
+          return 'anon'::regrole;
+      end;
+    $$;
 
 
 --
@@ -765,75 +546,28 @@ CREATE FUNCTION pgbouncer.get_auth(p_usename text) RETURNS TABLE(username text, 
 CREATE FUNCTION public.auto_generate_cod_req() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
-BEGIN
-    IF (NEW.cod_req IS NULL) OR (NEW.cod_req = '') THEN
-        NEW.cod_req := get_next_cod_req();
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: cancel_payment_v1(uuid, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cancel_payment_v1(p_id uuid, p_obs text DEFAULT NULL::text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
 DECLARE
-    v_socio_cpf text;
-    v_lancamento_tipo text;
+    entity_prefix TEXT;
+    next_num INT;
 BEGIN
-    -- 1. Verificar se o lançamento existe e se o status permite cancelamento
-    IF NOT EXISTS (
-        SELECT 1 FROM public.financeiro_lancamentos 
-        WHERE id = p_id AND status != 'cancelado'
-    ) THEN
-        RAISE EXCEPTION 'Lançamento não encontrado ou já cancelado.';
+    -- Obter o nome abreviado da entidade (Oeiras no caso)
+    SELECT LOWER(nome_abreviado) INTO entity_prefix FROM public.entidade LIMIT 1;
+    
+    -- Se no houver prefixo, usar default
+    IF entity_prefix IS NULL THEN
+        entity_prefix := 'req';
     END IF;
 
-    -- Capturar dados para auditoria interna (opcional) ou lógica condicional
-    SELECT socio_cpf, tipo INTO v_socio_cpf, v_lancamento_tipo 
-    FROM public.financeiro_lancamentos WHERE id = p_id;
+    -- Obter o prximo nmero sequencial para o ano corrente
+    SELECT COALESCE(MAX(CAST(SUBSTRING(cod_req FROM '[0-9]+$') AS INT)), 0) + 1
+    INTO next_num
+    FROM public.requerimentos
+    WHERE cod_req LIKE entity_prefix || '-' || NEW.ano_referencia || '-%';
 
-    -- 2. Marcar lançamento como cancelado
-    UPDATE public.financeiro_lancamentos
-    SET 
-        status = 'cancelado',
-        cancelado_em = now(),
-        cancelado_por = auth.uid(),
-        cancelamento_obs = p_obs,
-        updated_at = now()
-    WHERE id = p_id;
+    -- Formatar o novo cdigo
+    NEW.cod_req := entity_prefix || '-' || NEW.ano_referencia || '-' || LPAD(next_num::TEXT, 4, '0');
 
-    -- 3. Reverter cobrança gerada (se houver vínculo via lancamento_id)
-    -- Ao cancelar o pagamento, a cobrança original volta a ficar 'pendente' 
-    -- para que o associado continue devendo aquele valor.
-    UPDATE public.financeiro_cobrancas_geradas
-    SET 
-        status = 'pendente',
-        lancamento_id = NULL,
-        updated_at = now()
-    WHERE lancamento_id = p_id;
-
-    -- 4. Registrar no log de auditoria (operação manual)
-    INSERT INTO public.audit_log_financeiro (
-        table_name,
-        record_id,
-        operation,
-        new_data,
-        changed_by
-    )
-    VALUES (
-        'financeiro_lancamentos',
-        p_id,
-        'CANCEL_PAYMENT',
-        jsonb_build_object('obs', p_obs, 'socio', v_socio_cpf, 'tipo', v_lancamento_tipo),
-        auth.uid()
-    );
-
+    RETURN NEW;
 END;
 $$;
 
@@ -843,49 +577,23 @@ $$;
 --
 
 CREATE FUNCTION public.check_member_limit() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
+    LANGUAGE plpgsql
     AS $$
 DECLARE
-    v_limit integer;
-    v_count integer;
+    v_current_count integer;
+    v_max_allowed integer;
 BEGIN
-    -- Correct table is configuracao_entidade, column is max_socios
-    SELECT max_socios INTO v_limit FROM public.configuracao_entidade LIMIT 1;
+    -- Conta scios ativos
+    SELECT count(*) INTO v_current_count FROM public.socios;
     
-    -- Fallback safety
-    v_limit := COALESCE(v_limit, 100);
+    -- Pega limite configurado
+    SELECT max_socios INTO v_max_allowed FROM public.configuracao_entidade LIMIT 1;
     
-    -- Count all members except 'Excluído'
-    SELECT COUNT(*) INTO v_count FROM public.socios WHERE situacao != 'Excluído';
-    
-    IF v_count >= v_limit AND (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.situacao = 'Excluído' AND NEW.situacao != 'Excluído')) THEN
-        RAISE EXCEPTION 'Limite de sócios atingido (%)', v_limit;
+    IF v_current_count >= v_max_allowed THEN
+        RAISE EXCEPTION 'Limite de scios atingido (%) para este plano.', v_max_allowed;
     END IF;
     
     RETURN NEW;
-END;
-$$;
-
-
---
--- Name: confirmar_upload_foto(uuid, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.confirmar_upload_foto(p_token uuid, p_base64 text) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-  UPDATE public.foto_upload_tokens
-  SET 
-    foto_base64 = p_base64,
-    used = true
-  WHERE token = p_token
-    AND used = false
-    AND expires_at > now();
-
-  RETURN FOUND;
 END;
 $$;
 
@@ -898,237 +606,72 @@ CREATE FUNCTION public.generate_next_codigo_localidade() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 DECLARE
-  max_code_val integer;
-  next_code text;
+    max_code TEXT;
+    next_code_int INT;
 BEGIN
-  SELECT COALESCE(MAX(NULLIF(regexp_replace(codigo_localidade, '\\D', '', 'g'), '')::integer), 0) INTO max_code_val FROM public.localidades;
-  next_code := LPAD((max_code_val + 1)::text, 3, '0');
-  IF (NEW.codigo_localidade IS NULL) OR (NEW.codigo_localidade = '') THEN
-    NEW.codigo_localidade := next_code;
-  END IF;
-  RETURN NEW;
-END; $$;
-
-
---
--- Name: get_birthday_members(integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_birthday_members(p_day integer, p_month integer) RETURNS TABLE(id uuid, nome text, cpf text, data_de_nascimento date)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-  RETURN QUERY
-  SELECT s.id, s.nome, s.cpf, s.data_de_nascimento
-  FROM public.socios s
-  WHERE 
-    EXTRACT(DAY FROM s.data_de_nascimento) = p_day AND
-    EXTRACT(MONTH FROM s.data_de_nascimento) = p_month
-  ORDER BY s.nome ASC;
-END;
-$$;
-
-
---
--- Name: get_finance_audit_log_v1(text, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_finance_audit_log_v1(p_table_name text DEFAULT NULL::text, p_operation text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS TABLE(id uuid, table_name text, record_id uuid, operation text, old_data jsonb, new_data jsonb, changed_by uuid, user_nome text, user_email text, created_at timestamp with time zone)
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-    v_admin_count int;
-BEGIN
-    SELECT count(*) INTO v_admin_count FROM public."User" u
-    WHERE u.id = auth.uid() AND u.role = 'admin';
+    -- Pegar o maior cdigo numrico atual
+    SELECT MAX(codigo_localidade) INTO max_code FROM public.localidades;
     
-    IF v_admin_count = 0 THEN
-        RAISE EXCEPTION 'Acesso negado: Requer privilégios de administrador.';
+    IF max_code IS NULL THEN
+        next_code_int := 1;
+    ELSE
+        next_code_int := CAST(max_code AS INT) + 1;
     END IF;
-
-    RETURN QUERY
-    SELECT 
-        a.id,
-        a.table_name,
-        a.record_id,
-        a.operation,
-        a.old_data,
-        a.new_data,
-        a.changed_by,
-        u.nome as user_nome,
-        u.email as user_email,
-        a.created_at
-    FROM public.audit_log_financeiro a
-    LEFT JOIN public."User" u ON u.id = a.changed_by
-    WHERE (p_table_name IS NULL OR a.table_name = p_table_name)
-      AND (p_operation IS NULL OR a.operation = p_operation)
-    ORDER BY a.created_at DESC
-    LIMIT p_limit
-    OFFSET p_offset;
+    
+    -- Formata com zeros  esquerda (ex: 001, 002)
+    NEW.codigo_localidade := LPAD(next_code_int::TEXT, 3, '0');
+    
+    RETURN NEW;
 END;
 $$;
 
 
 --
--- Name: FUNCTION get_finance_audit_log_v1(p_table_name text, p_operation text, p_limit integer, p_offset integer); Type: COMMENT; Schema: public; Owner: -
+-- Name: get_payments_by_period_paginated(date, date, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.get_finance_audit_log_v1(p_table_name text, p_operation text, p_limit integer, p_offset integer) IS 'Busca logs de auditoria financeira com resolução de nome de usuário. Apenas Admins.';
-
-
---
--- Name: get_finance_tab_counts(text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_finance_tab_counts(p_search_term text DEFAULT ''::text, p_year integer DEFAULT NULL::integer, p_ano_base integer DEFAULT 2024) RETURNS jsonb
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_year integer;
-  v_required_years integer[];
-  v_result jsonb;
-  v_todos bigint;
-  v_isentos bigint;
-  v_liberados bigint;
-  v_em_dia bigint;
-BEGIN
-  v_year := COALESCE(p_year, EXTRACT(YEAR FROM CURRENT_DATE)::integer);
-  v_required_years := ARRAY(SELECT generate_series(p_ano_base, v_year));
-
-  SELECT
-    COUNT(*),
-    COUNT(*) FILTER (WHERE isento = true),
-    COUNT(*) FILTER (WHERE liberado_presidente = true),
-    COUNT(*) FILTER (
-      WHERE isento = false
-        AND liberado_presidente = false
-        AND anuidades_pagas @> v_required_years
-    )
-  INTO v_todos, v_isentos, v_liberados, v_em_dia
-  FROM v_situacao_financeira_socio
-  WHERE (p_search_term = '' OR nome ILIKE '%' || p_search_term || '%'
-         OR cpf ILIKE '%' || p_search_term || '%');
-
-  v_result := jsonb_build_object(
-    'todos', v_todos,
-    'em-dia', v_em_dia,
-    'inadimplentes', GREATEST(v_todos - COALESCE(v_em_dia, 0) - COALESCE(v_isentos, 0) - COALESCE(v_liberados, 0), 0),
-    'liberados', COALESCE(v_liberados, 0),
-    'isentos', COALESCE(v_isentos, 0)
-  );
-
-  RETURN v_result;
-END;
-$$;
-
-
---
--- Name: get_members_by_birth_month(integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_members_by_birth_month(p_month integer, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0) RETURNS TABLE(id uuid, nome text, cpf text, data_de_nascimento date, codigo_do_socio text, total_count bigint)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-    RETURN QUERY
-    WITH filtered AS (
-        SELECT s.id, s.nome, s.cpf, s.data_de_nascimento, s.codigo_do_socio
-        FROM public.socios s
-        WHERE EXTRACT(month FROM s.data_de_nascimento) = p_month
-    ),
-    total AS (
-        SELECT count(*) as count FROM filtered
-    )
-    SELECT f.*, t.count
-    FROM filtered f, total t
-    ORDER BY f.nome
-    LIMIT p_limit
-    OFFSET p_offset;
-END;
-$$;
-
-
---
--- Name: get_next_cod_req(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_next_cod_req() RETURNS text
+CREATE FUNCTION public.get_payments_by_period_paginated(p_start_date date, p_end_date date, p_page integer DEFAULT 1, p_page_size integer DEFAULT 10) RETURNS TABLE(id uuid, socio_cpf text, socio_nome text, tipo text, competencia_ano integer, competencia_mes integer, valor numeric, forma_pagamento text, data_pagamento date, total_count bigint, total_amount numeric)
     LANGUAGE plpgsql
-    AS $_$
-DECLARE
-    next_code INTEGER;
-    formatted_code TEXT;
-BEGIN
-    LOCK TABLE requerimentos IN EXCLUSIVE MODE;
-    SELECT COALESCE(
-        MAX(CAST(cod_req AS INTEGER)), 
-        0
-    ) + 1 
-    INTO next_code
-    FROM requerimentos 
-    WHERE cod_req ~ '^[0-9]+$';
-    formatted_code := LPAD(next_code::text, 6, '0');
-    RETURN formatted_code;
-END;
-$_$;
-
-
---
--- Name: get_payments_by_period_paginated(date, date, integer, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.get_payments_by_period_paginated(p_start_date date, p_end_date date, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0, p_order_by text DEFAULT 'data_pagamento'::text, p_order_dir text DEFAULT 'DESC'::text) RETURNS TABLE(id uuid, data_pagamento date, tipo text, competencia_ano integer, competencia_mes integer, forma_pagamento text, valor numeric, created_at timestamp with time zone, socio_nome text, socio_cpf text, total_count bigint, total_amount numeric)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
     AS $$
+DECLARE
+    v_offset INT := (p_page - 1) * p_page_size;
 BEGIN
     RETURN QUERY
     WITH base AS (
         SELECT 
             fl.id,
-            fl.data_pagamento,
+            fl.socio_cpf,
+            s.nome as socio_nome,
             fl.tipo,
             fl.competencia_ano,
             fl.competencia_mes,
-            fl.forma_pagamento,
             fl.valor,
-            fl.created_at,
-            s.nome as socio_nome,
-            s.cpf as socio_cpf
+            fl.forma_pagamento,
+            fl.data_pagamento
         FROM public.financeiro_lancamentos fl
-        JOIN public.socios s ON s.cpf = fl.socio_cpf
-        WHERE fl.status = 'pago'
-          AND fl.data_pagamento >= p_start_date
-          AND fl.data_pagamento <= p_end_date
+        JOIN public.socios s ON fl.socio_cpf = s.cpf
+        WHERE fl.data_pagamento BETWEEN p_start_date AND p_end_date
+          AND fl.status = 'pago'
     ),
     stats AS (
         SELECT count(*) as count, sum(base.valor) as amount FROM base
     )
     SELECT 
-        b.id,
-        b.data_pagamento,
-        b.tipo,
-        b.competencia_ano,
-        b.competencia_mes,
-        b.forma_pagamento,
-        b.valor,
-        b.created_at,
-        b.socio_nome,
-        b.socio_cpf, 
-        st.count as total_count, 
-        st.amount as total_amount
-    FROM base b, stats st
-    ORDER BY 
-        CASE WHEN p_order_by = 'data_pagamento' AND p_order_dir = 'ASC' THEN b.data_pagamento END ASC,
-        CASE WHEN p_order_by = 'data_pagamento' AND p_order_dir = 'DESC' THEN b.data_pagamento END DESC,
-        CASE WHEN p_order_by = 'created_at' AND p_order_dir = 'ASC' THEN b.created_at END ASC,
-        CASE WHEN p_order_by = 'created_at' AND p_order_dir = 'DESC' THEN b.created_at END DESC
-    LIMIT p_limit
-    OFFSET p_offset;
+        base.id,
+        base.socio_cpf,
+        base.socio_nome,
+        base.tipo,
+        base.competencia_ano,
+        base.competencia_mes,
+        base.valor,
+        base.forma_pagamento,
+        base.data_pagamento,
+        stats.count as total_count,
+        stats.amount as total_amount
+    FROM base, stats
+    ORDER BY base.data_pagamento DESC, base.id
+    LIMIT p_page_size
+    OFFSET v_offset;
 END;
 $$;
 
@@ -1137,44 +680,54 @@ $$;
 -- Name: get_socio_financial_status(text, text, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.get_socio_financial_status(p_cpf text, p_regime text, p_isento boolean, p_liberado boolean) RETURNS text
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
+CREATE FUNCTION public.get_socio_financial_status(p_cpf text, p_regime text, p_isento boolean DEFAULT false, p_liberado boolean DEFAULT false) RETURNS text
+    LANGUAGE plpgsql STABLE
     AS $$
 DECLARE
-    v_current_year int := EXTRACT(year FROM CURRENT_DATE);
-    v_current_month int := EXTRACT(month FROM CURRENT_DATE);
+    v_ano_atual INT := EXTRACT(year FROM CURRENT_DATE);
+    v_mes_atual INT := EXTRACT(month FROM CURRENT_DATE);
+    v_pendente BOOLEAN;
 BEGIN
+    -- 1. Prioridade mxima: Iseno ou Liberao Manual
     IF p_isento OR p_liberado THEN
-        RETURN 'ISENTO';
+        RETURN 'em_dia';
     END IF;
 
+    -- 2. Lgica por Regime
     IF p_regime = 'anuidade' THEN
-        IF EXISTS (
+        -- Verifica se a anuidade do ano atual est paga
+        SELECT NOT EXISTS (
             SELECT 1 FROM public.financeiro_lancamentos 
-            WHERE socio_cpf = p_cpf AND tipo = 'anuidade' AND competencia_ano = v_current_year AND status = 'pago'
-        ) THEN
-            RETURN 'EM_DIA';
-        ELSE
-            RETURN 'EM_ATRASO';
-        END IF;
+            WHERE socio_cpf = p_cpf 
+            AND tipo = 'anuidade' 
+            AND competencia_ano = v_ano_atual
+            AND status = 'pago'
+        ) INTO v_pendente;
+        
+        RETURN CASE WHEN v_pendente THEN 'atrasado' ELSE 'em_dia' END;
+    
     ELSIF p_regime = 'mensalidade' THEN
-        IF NOT EXISTS (
-            SELECT 1 
-            FROM generate_series(1, v_current_month) m
+        -- Verifica se o ms atual (ou anterior) est pago
+        -- Simplificado: se deve mais de 2 meses, est atrasado
+        SELECT (
+            SELECT COUNT(*) 
+            FROM (
+                SELECT generate_series(1, v_mes_atual) as mes
+            ) s
             WHERE NOT EXISTS (
                 SELECT 1 FROM public.financeiro_lancamentos 
-                WHERE socio_cpf = p_cpf AND tipo = 'mensalidade' 
-                  AND competencia_ano = v_current_year AND competencia_mes = m AND status = 'pago'
+                WHERE socio_cpf = p_cpf 
+                AND tipo = 'mensalidade' 
+                AND competencia_ano = v_ano_atual
+                AND competencia_mes = s.mes
+                AND status = 'pago'
             )
-        ) THEN
-            RETURN 'EM_DIA';
-        ELSE
-            RETURN 'EM_ATRASO';
-        END IF;
-    ELSE
-        RETURN 'EM_ATRASO';
+        ) > 2 INTO v_pendente;
+
+        RETURN CASE WHEN v_pendente THEN 'atrasado' ELSE 'em_dia' END;
     END IF;
+
+    RETURN 'atrasado';
 END;
 $$;
 
@@ -1185,12 +738,13 @@ $$;
 
 CREATE FUNCTION public.handle_delete_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
+  -- Remove da tabela public.User quando o registro  deletado do auth.users
   DELETE FROM public."User" WHERE id = OLD.id;
   RETURN OLD;
-END; $$;
+END;
+$$;
 
 
 --
@@ -1199,21 +753,16 @@ END; $$;
 
 CREATE FUNCTION public.handle_new_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  INSERT INTO public."User" (id, email, role)
+  INSERT INTO public."User" (id, email, nome, role)
   VALUES (
-    NEW.id, 
-    NEW.email, 
-    COALESCE(NEW.raw_app_meta_data->>'role', 'user')
-  )
-  ON CONFLICT (id) DO UPDATE 
-  SET 
-    email = EXCLUDED.email,
-    role = COALESCE(EXCLUDED.role, public."User".role);
-  
-  RETURN NEW;
+    new.id, 
+    new.email, 
+    COALESCE(new.raw_user_meta_data->>'nome', new.raw_user_meta_data->>'full_name', ''),
+    COALESCE(new.raw_user_meta_data->>'role', 'user')
+  );
+  RETURN new;
 END;
 $$;
 
@@ -1224,49 +773,13 @@ $$;
 
 CREATE FUNCTION public.handle_update_user() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  UPDATE public."User" SET email = NEW.email WHERE id = NEW.id;
+  UPDATE public."User"
+  SET email = NEW.email,
+      nome = COALESCE(NEW.raw_user_meta_data->>'nome', NEW.raw_user_meta_data->>'full_name', nome)
+  WHERE id = NEW.id;
   RETURN NEW;
-END; $$;
-
-
---
--- Name: launch_bulk_contribution(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.launch_bulk_contribution(p_tipo_cobranca_id uuid) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_valor numeric(10,2);
-  v_count integer := 0;
-BEGIN
-  SELECT valor_padrao INTO v_valor
-  FROM public.tipos_cobranca
-  WHERE id = p_tipo_cobranca_id
-    AND categoria = 'contribuicao'
-    AND obrigatoriedade = 'compulsoria'
-    AND ativo = true;
-
-  IF v_valor IS NULL THEN
-    RAISE EXCEPTION 'Tipo de cobrança inválido ou sem valor padrão definido';
-  END IF;
-
-  INSERT INTO public.financeiro_cobrancas_geradas (tipo_cobranca_id, socio_cpf, valor)
-  SELECT p_tipo_cobranca_id, s.cpf, v_valor
-  FROM public.socios s
-  WHERE s.situacao = 'ATIVO'
-    AND NOT EXISTS (
-      SELECT 1 FROM public.financeiro_cobrancas_geradas cg
-      WHERE cg.tipo_cobranca_id = p_tipo_cobranca_id
-        AND cg.socio_cpf = s.cpf
-    );
-
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count;
 END;
 $$;
 
@@ -1276,529 +789,20 @@ $$;
 --
 
 CREATE FUNCTION public.proc_audit_finance_change() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
+    LANGUAGE plpgsql
     AS $$
 BEGIN
-    INSERT INTO public.audit_log_financeiro (
-        table_name,
-        record_id,
-        operation,
-        old_data,
-        new_data,
-        changed_by
-    )
-    VALUES (
-        TG_TABLE_NAME,
-        CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END,
-        TG_OP,
-        CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) END,
-        CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END,
-        auth.uid()
-    );
+    IF (TG_OP = 'UPDATE') THEN
+        INSERT INTO public.audit_log_financeiro(table_name, record_id, operation, old_data, new_data, changed_by)
+        VALUES (TG_TABLE_NAME, OLD.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW), auth.uid());
+    ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO public.audit_log_financeiro(table_name, record_id, operation, new_data, changed_by)
+        VALUES (TG_TABLE_NAME, NEW.id, 'INSERT', to_jsonb(NEW), auth.uid());
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO public.audit_log_financeiro(table_name, record_id, operation, old_data, changed_by)
+        VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', to_jsonb(OLD), auth.uid());
+    END IF;
     RETURN NULL;
-END;
-$$;
-
-
---
--- Name: purge_cancelled_bulk_v1(integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.purge_cancelled_bulk_v1(p_older_than_days integer) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-    v_count int;
-    v_admin_count int;
-BEGIN
-    SELECT count(*) INTO v_admin_count FROM public."User" u
-    WHERE u.id = auth.uid() AND u.role = 'admin';
-    
-    IF v_admin_count = 0 THEN
-        RAISE EXCEPTION 'Acesso negado: Requer privilégios de administrador.';
-    END IF;
-
-    INSERT INTO public.audit_log_financeiro (
-        table_name, record_id, operation, old_data, changed_by
-    )
-    SELECT 
-        'financeiro_lancamentos', l.id, 'PURGE_BULK', to_jsonb(l.*), auth.uid()
-    FROM public.financeiro_lancamentos l
-    WHERE l.status = 'cancelado' 
-      AND l.cancelado_em < (now() - (p_older_than_days || ' days')::interval);
-
-    UPDATE public.financeiro_cobrancas_geradas
-    SET lancamento_id = NULL
-    WHERE lancamento_id IN (
-        SELECT l.id FROM public.financeiro_lancamentos l
-        WHERE l.status = 'cancelado' 
-          AND l.cancelado_em < (now() - (p_older_than_days || ' days')::interval)
-    );
-
-    WITH deleted AS (
-        DELETE FROM public.financeiro_lancamentos
-        WHERE status = 'cancelado'
-        AND cancelado_em < (now() - (p_older_than_days || ' days')::interval)
-        RETURNING id
-    )
-    SELECT count(*) INTO v_count FROM deleted;
-
-    RETURN v_count;
-END;
-$$;
-
-
---
--- Name: FUNCTION purge_cancelled_bulk_v1(p_older_than_days integer); Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON FUNCTION public.purge_cancelled_bulk_v1(p_older_than_days integer) IS 'Limpa lançamentos cancelados antigos em lote. Apenas Admins.';
-
-
---
--- Name: purge_payment_v1(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.purge_payment_v1(p_id uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-    v_admin_count int;
-    v_old_data jsonb;
-BEGIN
-    SELECT count(*) INTO v_admin_count FROM public."User" u
-    WHERE u.id = auth.uid() AND u.role = 'admin';
-    
-    IF v_admin_count = 0 THEN
-        RAISE EXCEPTION 'Acesso negado: Requer privilégios de administrador.';
-    END IF;
-
-    SELECT to_jsonb(l.*) INTO v_old_data 
-    FROM public.financeiro_lancamentos l 
-    WHERE l.id = p_id;
-
-    IF v_old_data IS NULL THEN
-        RAISE EXCEPTION 'Lançamento não encontrado.';
-    END IF;
-
-    IF (v_old_data->>'status') != 'cancelado' THEN
-        RAISE EXCEPTION 'Apenas lançamentos com status "cancelado" podem ser excluídos permanentemente.';
-    END IF;
-
-    UPDATE public.financeiro_cobrancas_geradas
-    SET lancamento_id = NULL
-    WHERE lancamento_id = p_id;
-
-    INSERT INTO public.audit_log_financeiro (
-        table_name, record_id, operation, old_data, changed_by
-    ) VALUES (
-        'financeiro_lancamentos', p_id, 'PURGE', v_old_data, auth.uid()
-    );
-
-    DELETE FROM public.financeiro_lancamentos WHERE id = p_id;
-END;
-$$;
-
-
---
--- Name: FUNCTION purge_payment_v1(p_id uuid); Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON FUNCTION public.purge_payment_v1(p_id uuid) IS 'Exclui fisicamente um lançamento cancelado após auditoria. Apenas Admins.';
-
-
---
--- Name: reap_batch_upsert_anual_v2(jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_batch_upsert_anual_v2(p_entries jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  entry jsonb;
-  v_cpf text;
-  v_anual jsonb;
-  v_ano text;
-  v_ano_data jsonb;
-BEGIN
-  FOR entry IN SELECT * FROM jsonb_array_elements(p_entries)
-  LOOP
-    v_cpf := entry->>'cpf';
-    v_anual := entry->'anual';
-
-    -- Garante que o registro base existe
-    INSERT INTO public.reap (cpf, anual)
-    VALUES (v_cpf, v_anual)
-    ON CONFLICT (cpf) DO NOTHING;
-
-    -- Faz o merge profundo por ano
-    FOR v_ano, v_ano_data IN SELECT * FROM jsonb_each(v_anual)
-    LOOP
-      UPDATE public.reap
-      SET
-        anual = anual || jsonb_build_object(
-          v_ano,
-          COALESCE(anual -> v_ano, '{"enviado": false, "tem_problema": false, "data_envio": null, "obs": null}'::jsonb) || v_ano_data
-        ),
-        updated_at = now()
-      WHERE cpf = v_cpf;
-    END LOOP;
-  END LOOP;
-END;
-$$;
-
-
---
--- Name: reap_batch_upsert_simplificado(jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_batch_upsert_simplificado(p_entries jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  entry jsonb;
-BEGIN
-  FOR entry IN SELECT * FROM jsonb_array_elements(p_entries)
-  LOOP
-    INSERT INTO public.reap (cpf, simplificado, updated_at)
-    VALUES (
-      entry->>'cpf',
-      entry->'simplificado',
-      now()
-    )
-    ON CONFLICT (cpf) DO UPDATE
-    SET
-      simplificado = public.reap.simplificado || (entry->'simplificado'),
-      updated_at = now();
-  END LOOP;
-END;
-$$;
-
-
---
--- Name: reap_batch_upsert_simplificado_v2(jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_batch_upsert_simplificado_v2(p_entries jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  entry jsonb;
-  v_cpf text;
-  v_simplificado jsonb;
-  v_ano text;
-  v_ano_data jsonb;
-BEGIN
-  FOR entry IN SELECT * FROM jsonb_array_elements(p_entries)
-  LOOP
-    v_cpf := entry->>'cpf';
-    v_simplificado := entry->'simplificado';
-
-    -- Garante que o registro base existe
-    INSERT INTO public.reap (cpf, simplificado)
-    VALUES (v_cpf, v_simplificado)
-    ON CONFLICT (cpf) DO NOTHING;
-
-    -- Faz o merge profundo por ano
-    FOR v_ano, v_ano_data IN SELECT * FROM jsonb_each(v_simplificado)
-    LOOP
-      UPDATE public.reap
-      SET
-        simplificado = simplificado || jsonb_build_object(
-          v_ano,
-          COALESCE(simplificado -> v_ano, '{"enviado": false, "tem_problema": false, "obs": null}'::jsonb) || v_ano_data
-        ),
-        updated_at = now()
-      WHERE cpf = v_cpf;
-    END LOOP;
-  END LOOP;
-END;
-$$;
-
-
---
--- Name: reap_upsert_anual_ano(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_upsert_anual_ano(p_cpf text, p_ano text, p_data jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-  INSERT INTO public.reap (cpf, anual, updated_at)
-  VALUES (p_cpf, jsonb_build_object(p_ano, p_data), now())
-  ON CONFLICT (cpf) DO UPDATE
-  SET
-    anual = public.reap.anual || jsonb_build_object(
-      p_ano,
-      COALESCE(public.reap.anual -> p_ano,
-        '{"enviado": false, "data_envio": null, "tem_problema": false, "obs": null}'::jsonb) || p_data
-    ),
-    updated_at = now();
-END;
-$$;
-
-
---
--- Name: reap_upsert_full(text, jsonb, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_upsert_full(p_cpf text, p_simplificado jsonb, p_anual jsonb, p_observacoes text DEFAULT NULL::text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-  INSERT INTO public.reap (cpf, simplificado, anual, observacoes, updated_at)
-  VALUES (p_cpf, p_simplificado, p_anual, p_observacoes, now())
-  ON CONFLICT (cpf) DO UPDATE
-  SET
-    simplificado = EXCLUDED.simplificado,
-    anual = EXCLUDED.anual,
-    observacoes = EXCLUDED.observacoes,
-    updated_at = now();
-END;
-$$;
-
-
---
--- Name: reap_upsert_simplificado_ano(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reap_upsert_simplificado_ano(p_cpf text, p_ano text, p_data jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-BEGIN
-  INSERT INTO public.reap (cpf, simplificado, updated_at)
-  VALUES (p_cpf, jsonb_build_object(p_ano, p_data), now())
-  ON CONFLICT (cpf) DO UPDATE
-  SET
-    simplificado = public.reap.simplificado || jsonb_build_object(
-      p_ano,
-      COALESCE(public.reap.simplificado -> p_ano, 
-        '{"enviado": false, "tem_problema": false, "obs": null}'::jsonb) || p_data
-    ),
-    updated_at = now();
-END;
-$$;
-
-
---
--- Name: register_payment_session(text, uuid, text, date, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.register_payment_session(p_socio_cpf text, p_sessao_id uuid, p_forma_pagamento text, p_data_pagamento date, p_itens jsonb, p_daes jsonb DEFAULT '[]'::jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_item jsonb;
-  v_dae jsonb;
-  v_daes_array jsonb := COALESCE(p_daes, '[]'::jsonb);
-  v_user_id uuid := auth.uid();
-  v_grupo_id uuid := NULL;
-BEGIN
-  IF jsonb_array_length(v_daes_array) > 0 THEN
-    IF (v_daes_array->0->>'tipo_boleto') != 'unitario' THEN
-       v_grupo_id := gen_random_uuid();
-    END IF;
-  END IF;
-
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_itens)
-  LOOP
-    INSERT INTO public.financeiro_lancamentos (
-      socio_cpf, sessao_id, tipo, valor, forma_pagamento,
-      data_pagamento, competencia_ano, competencia_mes,
-      tipo_cobranca_id, descricao, registrado_por
-    ) VALUES (
-      p_socio_cpf, p_sessao_id, (v_item->>'tipo'), (v_item->>'valor')::numeric,
-      p_forma_pagamento, p_data_pagamento, (v_item->>'competencia_ano')::integer,
-      (v_item->>'competencia_mes')::integer,
-      CASE WHEN (v_item->>'tipo_cobranca_id') = '' THEN NULL ELSE (v_item->>'tipo_cobranca_id')::uuid END,
-      (v_item->>'descricao'), v_user_id
-    );
-
-    IF (v_item->>'tipo_cobranca_id') IS NOT NULL AND (v_item->>'tipo_cobranca_id') != '' THEN
-      UPDATE public.financeiro_cobrancas_geradas
-      SET status = 'pago', lancamento_id = (
-        SELECT id FROM public.financeiro_lancamentos
-        WHERE sessao_id = p_sessao_id AND tipo_cobranca_id = (v_item->>'tipo_cobranca_id')::uuid
-        ORDER BY created_at DESC LIMIT 1
-      ), updated_at = now()
-      WHERE socio_cpf = p_socio_cpf
-        AND tipo_cobranca_id = (v_item->>'tipo_cobranca_id')::uuid
-        AND status = 'pendente';
-    END IF;
-  END LOOP;
-
-  FOR v_dae IN SELECT * FROM jsonb_array_elements(v_daes_array)
-  LOOP
-    INSERT INTO public.financeiro_dae (
-      socio_cpf, sessao_id, tipo_boleto, competencia_ano,
-      competencia_mes, valor, forma_pagamento, registrado_por,
-      data_recebimento, grupo_id
-    ) VALUES (
-      p_socio_cpf, p_sessao_id, (v_dae->>'tipo_boleto'),
-      (v_dae->>'competencia_ano')::integer, (v_dae->>'competencia_mes')::integer,
-      (v_dae->>'valor')::numeric, p_forma_pagamento, v_user_id,
-      p_data_pagamento,
-      CASE WHEN (v_dae->>'tipo_boleto') = 'unitario' THEN NULL ELSE v_grupo_id END
-    );
-  END LOOP;
-END;
-$$;
-
-
---
--- Name: socio_inadimplente_ano(text, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.socio_inadimplente_ano(p_cpf text, p_ano integer) RETURNS boolean
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_isento              boolean;
-  v_liberado_presidente boolean;
-  v_regime              text;
-  v_ano_base            integer;
-  v_tem_pagamento       boolean;
-BEGIN
-  -- Verifica isenção ou liberação manual
-  SELECT 
-    COALESCE(isento, false),
-    COALESCE(liberado_pelo_presidente, false)
-  INTO v_isento, v_liberado_presidente
-  FROM public.financeiro_config_socio WHERE cpf = p_cpf;
-  
-  IF v_isento OR v_liberado_presidente THEN RETURN false; END IF;
-
-  SELECT ano_base_cobranca INTO v_ano_base FROM public.parametros_financeiros LIMIT 1;
-  IF p_ano < v_ano_base THEN RETURN false; END IF;
-
-  -- Busca o regime vigente (fallback para o padrão global se não definido no sócio)
-  SELECT COALESCE(cfg.regime, pf.regime_padrao)
-  INTO v_regime
-  FROM (SELECT regime_padrao FROM public.parametros_financeiros LIMIT 1) pf
-  LEFT JOIN public.financeiro_config_socio cfg ON cfg.cpf = p_cpf;
-
-  IF v_regime = 'anuidade' THEN
-    SELECT EXISTS(
-      SELECT 1 FROM public.financeiro_lancamentos
-      WHERE socio_cpf = p_cpf AND tipo = 'anuidade'
-        AND competencia_ano = p_ano AND status = 'pago'
-    ) INTO v_tem_pagamento;
-  ELSE
-    SELECT NOT EXISTS(
-      SELECT 1 FROM generate_series(1, EXTRACT(MONTH FROM CURRENT_DATE)::int) m
-      WHERE NOT EXISTS (
-        SELECT 1 FROM public.financeiro_lancamentos
-        WHERE socio_cpf = p_cpf AND tipo = 'mensalidade'
-          AND competencia_ano = p_ano AND competencia_mes = m AND status = 'pago'
-      )
-    ) INTO v_tem_pagamento;
-  END IF;
-
-  RETURN NOT v_tem_pagamento;
-END;
-$$;
-
-
---
--- Name: update_dae_group(uuid, integer, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_dae_group(p_grupo_id uuid, p_new_year integer, p_items jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_novo_grupo_id uuid := gen_random_uuid();
-  v_membro_base   record;
-  v_item          jsonb;
-BEGIN
-  SELECT socio_cpf, sessao_id, tipo_boleto, forma_pagamento, data_recebimento 
-  INTO v_membro_base
-  FROM public.financeiro_dae 
-  WHERE grupo_id = p_grupo_id 
-  LIMIT 1;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Grupo não encontrado: %', p_grupo_id;
-  END IF;
-
-  UPDATE public.financeiro_dae
-  SET status = 'cancelado',
-      cancelado_em = now(),
-      cancelado_por = auth.uid(),
-      cancelamento_obs = 'Correção: Grupo re-emitido devido a edição de valores/competência'
-  WHERE grupo_id = p_grupo_id AND status != 'cancelado';
-
-  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
-  LOOP
-    INSERT INTO public.financeiro_dae (
-      socio_cpf, sessao_id, tipo_boleto, competencia_ano, competencia_mes,
-      valor, forma_pagamento, boleto_pago, data_pagamento_boleto,
-      status, registrado_por, data_recebimento, grupo_id
-    )
-    VALUES (
-      v_membro_base.socio_cpf, v_membro_base.sessao_id, v_membro_base.tipo_boleto,
-      p_new_year, (v_item->>'mes')::int, (v_item->>'valor')::numeric,
-      v_membro_base.forma_pagamento,
-      COALESCE((SELECT boleto_pago FROM public.financeiro_dae WHERE grupo_id = p_grupo_id AND competencia_mes = (v_item->>'mes')::int LIMIT 1), false),
-      (SELECT data_pagamento_boleto FROM public.financeiro_dae WHERE grupo_id = p_grupo_id AND competencia_mes = (v_item->>'mes')::int LIMIT 1),
-      'pago', auth.uid(), v_membro_base.data_recebimento, v_novo_grupo_id
-    );
-  END LOOP;
-END;
-$$;
-
-
---
--- Name: update_extension_license(text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_extension_license(p_key text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-BEGIN
-  UPDATE public.configuracao_entidade
-  SET extensao_license_key = p_key,
-      updated_at = now()
-  WHERE id = 1;
-END;
-$$;
-
-
---
--- Name: update_member_regime(text, text, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_member_regime(p_cpf text, p_novo_regime text, p_observacao text DEFAULT NULL::text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE
-  v_user_id uuid := auth.uid();
-BEGIN
-  UPDATE public.financeiro_historico_regime
-  SET vigente_ate = CURRENT_DATE
-  WHERE socio_cpf = p_cpf AND vigente_ate IS NULL;
-
-  INSERT INTO public.financeiro_historico_regime (socio_cpf, regime, vigente_desde, alterado_por, observacao)
-  VALUES (p_cpf, p_novo_regime, CURRENT_DATE, v_user_id, p_observacao);
-
-  INSERT INTO public.financeiro_config_socio (cpf, regime)
-  VALUES (p_cpf, p_novo_regime)
-  ON CONFLICT (cpf)
-  DO UPDATE SET regime = p_novo_regime, updated_at = now();
 END;
 $$;
 
@@ -1808,815 +812,27 @@ $$;
 --
 
 CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
+    LANGUAGE plpgsql
     AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$;
 
 
 --
--- Name: apply_rls(jsonb, integer); Type: FUNCTION; Schema: realtime; Owner: -
+-- Name: email(text); Type: FUNCTION; Schema: storage; Owner: -
 --
 
-CREATE FUNCTION realtime.apply_rls(wal jsonb, max_record_bytes integer DEFAULT (1024 * 1024)) RETURNS SETOF realtime.wal_rls
-    LANGUAGE plpgsql
-    AS $$
-declare
--- Regclass of the table e.g. public.notes
-entity_ regclass = (quote_ident(wal ->> 'schema') || '.' || quote_ident(wal ->> 'table'))::regclass;
-
--- I, U, D, T: insert, update ...
-action realtime.action = (
-    case wal ->> 'action'
-        when 'I' then 'INSERT'
-        when 'U' then 'UPDATE'
-        when 'D' then 'DELETE'
-        else 'ERROR'
-    end
-);
-
--- Is row level security enabled for the table
-is_rls_enabled bool = relrowsecurity from pg_class where oid = entity_;
-
-subscriptions realtime.subscription[] = array_agg(subs)
-    from
-        realtime.subscription subs
-    where
-        subs.entity = entity_
-        -- Filter by action early - only get subscriptions interested in this action
-        -- action_filter column can be: '*' (all), 'INSERT', 'UPDATE', or 'DELETE'
-        and (subs.action_filter = '*' or subs.action_filter = action::text);
-
--- Subscription vars
-roles regrole[] = array_agg(distinct us.claims_role::text)
-    from
-        unnest(subscriptions) us;
-
-working_role regrole;
-claimed_role regrole;
-claims jsonb;
-
-subscription_id uuid;
-subscription_has_access bool;
-visible_to_subscription_ids uuid[] = '{}';
-
--- structured info for wal's columns
-columns realtime.wal_column[];
--- previous identity values for update/delete
-old_columns realtime.wal_column[];
-
-error_record_exceeds_max_size boolean = octet_length(wal::text) > max_record_bytes;
-
--- Primary jsonb output for record
-output jsonb;
-
-begin
-perform set_config('role', null, true);
-
-columns =
-    array_agg(
-        (
-            x->>'name',
-            x->>'type',
-            x->>'typeoid',
-            realtime.cast(
-                (x->'value') #>> '{}',
-                coalesce(
-                    (x->>'typeoid')::regtype, -- null when wal2json version <= 2.4
-                    (x->>'type')::regtype
-                )
-            ),
-            (pks ->> 'name') is not null,
-            true
-        )::realtime.wal_column
-    )
-    from
-        jsonb_array_elements(wal -> 'columns') x
-        left join jsonb_array_elements(wal -> 'pk') pks
-            on (x ->> 'name') = (pks ->> 'name');
-
-old_columns =
-    array_agg(
-        (
-            x->>'name',
-            x->>'type',
-            x->>'typeoid',
-            realtime.cast(
-                (x->'value') #>> '{}',
-                coalesce(
-                    (x->>'typeoid')::regtype, -- null when wal2json version <= 2.4
-                    (x->>'type')::regtype
-                )
-            ),
-            (pks ->> 'name') is not null,
-            true
-        )::realtime.wal_column
-    )
-    from
-        jsonb_array_elements(wal -> 'identity') x
-        left join jsonb_array_elements(wal -> 'pk') pks
-            on (x ->> 'name') = (pks ->> 'name');
-
-for working_role in select * from unnest(roles) loop
-
-    -- Update `is_selectable` for columns and old_columns
-    columns =
-        array_agg(
-            (
-                c.name,
-                c.type_name,
-                c.type_oid,
-                c.value,
-                c.is_pkey,
-                pg_catalog.has_column_privilege(working_role, entity_, c.name, 'SELECT')
-            )::realtime.wal_column
-        )
-        from
-            unnest(columns) c;
-
-    old_columns =
-            array_agg(
-                (
-                    c.name,
-                    c.type_name,
-                    c.type_oid,
-                    c.value,
-                    c.is_pkey,
-                    pg_catalog.has_column_privilege(working_role, entity_, c.name, 'SELECT')
-                )::realtime.wal_column
-            )
-            from
-                unnest(old_columns) c;
-
-    if action <> 'DELETE' and count(1) = 0 from unnest(columns) c where c.is_pkey then
-        return next (
-            jsonb_build_object(
-                'schema', wal ->> 'schema',
-                'table', wal ->> 'table',
-                'type', action
-            ),
-            is_rls_enabled,
-            -- subscriptions is already filtered by entity
-            (select array_agg(s.subscription_id) from unnest(subscriptions) as s where claims_role = working_role),
-            array['Error 400: Bad Request, no primary key']
-        )::realtime.wal_rls;
-
-    -- The claims role does not have SELECT permission to the primary key of entity
-    elsif action <> 'DELETE' and sum(c.is_selectable::int) <> count(1) from unnest(columns) c where c.is_pkey then
-        return next (
-            jsonb_build_object(
-                'schema', wal ->> 'schema',
-                'table', wal ->> 'table',
-                'type', action
-            ),
-            is_rls_enabled,
-            (select array_agg(s.subscription_id) from unnest(subscriptions) as s where claims_role = working_role),
-            array['Error 401: Unauthorized']
-        )::realtime.wal_rls;
-
-    else
-        output = jsonb_build_object(
-            'schema', wal ->> 'schema',
-            'table', wal ->> 'table',
-            'type', action,
-            'commit_timestamp', to_char(
-                ((wal ->> 'timestamp')::timestamptz at time zone 'utc'),
-                'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
-            ),
-            'columns', (
-                select
-                    jsonb_agg(
-                        jsonb_build_object(
-                            'name', pa.attname,
-                            'type', pt.typname
-                        )
-                        order by pa.attnum asc
-                    )
-                from
-                    pg_attribute pa
-                    join pg_type pt
-                        on pa.atttypid = pt.oid
-                where
-                    attrelid = entity_
-                    and attnum > 0
-                    and pg_catalog.has_column_privilege(working_role, entity_, pa.attname, 'SELECT')
-            )
-        )
-        -- Add "record" key for insert and update
-        || case
-            when action in ('INSERT', 'UPDATE') then
-                jsonb_build_object(
-                    'record',
-                    (
-                        select
-                            jsonb_object_agg(
-                                -- if unchanged toast, get column name and value from old record
-                                coalesce((c).name, (oc).name),
-                                case
-                                    when (c).name is null then (oc).value
-                                    else (c).value
-                                end
-                            )
-                        from
-                            unnest(columns) c
-                            full outer join unnest(old_columns) oc
-                                on (c).name = (oc).name
-                        where
-                            coalesce((c).is_selectable, (oc).is_selectable)
-                            and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
-                    )
-                )
-            else '{}'::jsonb
-        end
-        -- Add "old_record" key for update and delete
-        || case
-            when action = 'UPDATE' then
-                jsonb_build_object(
-                        'old_record',
-                        (
-                            select jsonb_object_agg((c).name, (c).value)
-                            from unnest(old_columns) c
-                            where
-                                (c).is_selectable
-                                and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
-                        )
-                    )
-            when action = 'DELETE' then
-                jsonb_build_object(
-                    'old_record',
-                    (
-                        select jsonb_object_agg((c).name, (c).value)
-                        from unnest(old_columns) c
-                        where
-                            (c).is_selectable
-                            and ( not error_record_exceeds_max_size or (octet_length((c).value::text) <= 64))
-                            and ( not is_rls_enabled or (c).is_pkey ) -- if RLS enabled, we can't secure deletes so filter to pkey
-                    )
-                )
-            else '{}'::jsonb
-        end;
-
-        -- Create the prepared statement
-        if is_rls_enabled and action <> 'DELETE' then
-            if (select 1 from pg_prepared_statements where name = 'walrus_rls_stmt' limit 1) > 0 then
-                deallocate walrus_rls_stmt;
-            end if;
-            execute realtime.build_prepared_statement_sql('walrus_rls_stmt', entity_, columns);
-        end if;
-
-        visible_to_subscription_ids = '{}';
-
-        for subscription_id, claims in (
-                select
-                    subs.subscription_id,
-                    subs.claims
-                from
-                    unnest(subscriptions) subs
-                where
-                    subs.entity = entity_
-                    and subs.claims_role = working_role
-                    and (
-                        realtime.is_visible_through_filters(columns, subs.filters)
-                        or (
-                          action = 'DELETE'
-                          and realtime.is_visible_through_filters(old_columns, subs.filters)
-                        )
-                    )
-        ) loop
-
-            if not is_rls_enabled or action = 'DELETE' then
-                visible_to_subscription_ids = visible_to_subscription_ids || subscription_id;
-            else
-                -- Check if RLS allows the role to see the record
-                perform
-                    -- Trim leading and trailing quotes from working_role because set_config
-                    -- doesn't recognize the role as valid if they are included
-                    set_config('role', trim(both '"' from working_role::text), true),
-                    set_config('request.jwt.claims', claims::text, true);
-
-                execute 'execute walrus_rls_stmt' into subscription_has_access;
-
-                if subscription_has_access then
-                    visible_to_subscription_ids = visible_to_subscription_ids || subscription_id;
-                end if;
-            end if;
-        end loop;
-
-        perform set_config('role', null, true);
-
-        return next (
-            output,
-            is_rls_enabled,
-            visible_to_subscription_ids,
-            case
-                when error_record_exceeds_max_size then array['Error 413: Payload Too Large']
-                else '{}'
-            end
-        )::realtime.wal_rls;
-
-    end if;
-end loop;
-
-perform set_config('role', null, true);
-end;
-$$;
-
-
---
--- Name: broadcast_changes(text, text, text, text, text, record, record, text); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.broadcast_changes(topic_name text, event_name text, operation text, table_name text, table_schema text, new record, old record, level text DEFAULT 'ROW'::text) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    -- Declare a variable to hold the JSONB representation of the row
-    row_data jsonb := '{}'::jsonb;
-BEGIN
-    IF level = 'STATEMENT' THEN
-        RAISE EXCEPTION 'function can only be triggered for each row, not for each statement';
-    END IF;
-    -- Check the operation type and handle accordingly
-    IF operation = 'INSERT' OR operation = 'UPDATE' OR operation = 'DELETE' THEN
-        row_data := jsonb_build_object('old_record', OLD, 'record', NEW, 'operation', operation, 'table', table_name, 'schema', table_schema);
-        PERFORM realtime.send (row_data, event_name, topic_name);
-    ELSE
-        RAISE EXCEPTION 'Unexpected operation type: %', operation;
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE EXCEPTION 'Failed to process the row: %', SQLERRM;
-END;
-
-$$;
-
-
---
--- Name: build_prepared_statement_sql(text, regclass, realtime.wal_column[]); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.build_prepared_statement_sql(prepared_statement_name text, entity regclass, columns realtime.wal_column[]) RETURNS text
-    LANGUAGE sql
-    AS $$
-      /*
-      Builds a sql string that, if executed, creates a prepared statement to
-      tests retrive a row from *entity* by its primary key columns.
-      Example
-          select realtime.build_prepared_statement_sql('public.notes', '{"id"}'::text[], '{"bigint"}'::text[])
-      */
-          select
-      'prepare ' || prepared_statement_name || ' as
-          select
-              exists(
-                  select
-                      1
-                  from
-                      ' || entity || '
-                  where
-                      ' || string_agg(quote_ident(pkc.name) || '=' || quote_nullable(pkc.value #>> '{}') , ' and ') || '
-              )'
-          from
-              unnest(columns) pkc
-          where
-              pkc.is_pkey
-          group by
-              entity
-      $$;
-
-
---
--- Name: cast(text, regtype); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime."cast"(val text, type_ regtype) RETURNS jsonb
-    LANGUAGE plpgsql IMMUTABLE
-    AS $$
-declare
-  res jsonb;
-begin
-  if type_::text = 'bytea' then
-    return to_jsonb(val);
-  end if;
-  execute format('select to_jsonb(%L::'|| type_::text || ')', val) into res;
-  return res;
-end
-$$;
-
-
---
--- Name: check_equality_op(realtime.equality_op, regtype, text, text); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.check_equality_op(op realtime.equality_op, type_ regtype, val_1 text, val_2 text) RETURNS boolean
-    LANGUAGE plpgsql IMMUTABLE
-    AS $$
-      /*
-      Casts *val_1* and *val_2* as type *type_* and check the *op* condition for truthiness
-      */
-      declare
-          op_symbol text = (
-              case
-                  when op = 'eq' then '='
-                  when op = 'neq' then '!='
-                  when op = 'lt' then '<'
-                  when op = 'lte' then '<='
-                  when op = 'gt' then '>'
-                  when op = 'gte' then '>='
-                  when op = 'in' then '= any'
-                  else 'UNKNOWN OP'
-              end
-          );
-          res boolean;
-      begin
-          execute format(
-              'select %L::'|| type_::text || ' ' || op_symbol
-              || ' ( %L::'
-              || (
-                  case
-                      when op = 'in' then type_::text || '[]'
-                      else type_::text end
-              )
-              || ')', val_1, val_2) into res;
-          return res;
-      end;
-      $$;
-
-
---
--- Name: is_visible_through_filters(realtime.wal_column[], realtime.user_defined_filter[]); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.is_visible_through_filters(columns realtime.wal_column[], filters realtime.user_defined_filter[]) RETURNS boolean
-    LANGUAGE sql IMMUTABLE
-    AS $_$
-    /*
-    Should the record be visible (true) or filtered out (false) after *filters* are applied
-    */
-        select
-            -- Default to allowed when no filters present
-            $2 is null -- no filters. this should not happen because subscriptions has a default
-            or array_length($2, 1) is null -- array length of an empty array is null
-            or bool_and(
-                coalesce(
-                    realtime.check_equality_op(
-                        op:=f.op,
-                        type_:=coalesce(
-                            col.type_oid::regtype, -- null when wal2json version <= 2.4
-                            col.type_name::regtype
-                        ),
-                        -- cast jsonb to text
-                        val_1:=col.value #>> '{}',
-                        val_2:=f.value
-                    ),
-                    false -- if null, filter does not match
-                )
-            )
-        from
-            unnest(filters) f
-            join unnest(columns) col
-                on f.column_name = col.name;
-    $_$;
-
-
---
--- Name: list_changes(name, name, integer, integer); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.list_changes(publication name, slot_name name, max_changes integer, max_record_bytes integer) RETURNS TABLE(wal jsonb, is_rls_enabled boolean, subscription_ids uuid[], errors text[], slot_changes_count bigint)
-    LANGUAGE sql
-    SET log_min_messages TO 'fatal'
-    AS $$
-  WITH pub AS (
-    SELECT
-      concat_ws(
-        ',',
-        CASE WHEN bool_or(pubinsert) THEN 'insert' ELSE NULL END,
-        CASE WHEN bool_or(pubupdate) THEN 'update' ELSE NULL END,
-        CASE WHEN bool_or(pubdelete) THEN 'delete' ELSE NULL END
-      ) AS w2j_actions,
-      coalesce(
-        string_agg(
-          realtime.quote_wal2json(format('%I.%I', schemaname, tablename)::regclass),
-          ','
-        ) filter (WHERE ppt.tablename IS NOT NULL AND ppt.tablename NOT LIKE '% %'),
-        ''
-      ) AS w2j_add_tables
-    FROM pg_publication pp
-    LEFT JOIN pg_publication_tables ppt ON pp.pubname = ppt.pubname
-    WHERE pp.pubname = publication
-    GROUP BY pp.pubname
-    LIMIT 1
-  ),
-  -- MATERIALIZED ensures pg_logical_slot_get_changes is called exactly once
-  w2j AS MATERIALIZED (
-    SELECT x.*, pub.w2j_add_tables
-    FROM pub,
-         pg_logical_slot_get_changes(
-           slot_name, null, max_changes,
-           'include-pk', 'true',
-           'include-transaction', 'false',
-           'include-timestamp', 'true',
-           'include-type-oids', 'true',
-           'format-version', '2',
-           'actions', pub.w2j_actions,
-           'add-tables', pub.w2j_add_tables
-         ) x
-  ),
-  -- Count raw slot entries before apply_rls/subscription filter
-  slot_count AS (
-    SELECT count(*)::bigint AS cnt
-    FROM w2j
-    WHERE w2j.w2j_add_tables <> ''
-  ),
-  -- Apply RLS and filter as before
-  rls_filtered AS (
-    SELECT xyz.wal, xyz.is_rls_enabled, xyz.subscription_ids, xyz.errors
-    FROM w2j,
-         realtime.apply_rls(
-           wal := w2j.data::jsonb,
-           max_record_bytes := max_record_bytes
-         ) xyz(wal, is_rls_enabled, subscription_ids, errors)
-    WHERE w2j.w2j_add_tables <> ''
-      AND xyz.subscription_ids[1] IS NOT NULL
-  )
-  -- Real rows with slot count attached
-  SELECT rf.wal, rf.is_rls_enabled, rf.subscription_ids, rf.errors, sc.cnt
-  FROM rls_filtered rf, slot_count sc
-
-  UNION ALL
-
-  -- Sentinel row: always returned when no real rows exist so Elixir can
-  -- always read slot_changes_count. Identified by wal IS NULL.
-  SELECT null, null, null, null, sc.cnt
-  FROM slot_count sc
-  WHERE NOT EXISTS (SELECT 1 FROM rls_filtered)
-$$;
-
-
---
--- Name: quote_wal2json(regclass); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.quote_wal2json(entity regclass) RETURNS text
-    LANGUAGE sql IMMUTABLE STRICT
-    AS $$
-      select
-        (
-          select string_agg('' || ch,'')
-          from unnest(string_to_array(nsp.nspname::text, null)) with ordinality x(ch, idx)
-          where
-            not (x.idx = 1 and x.ch = '"')
-            and not (
-              x.idx = array_length(string_to_array(nsp.nspname::text, null), 1)
-              and x.ch = '"'
-            )
-        )
-        || '.'
-        || (
-          select string_agg('' || ch,'')
-          from unnest(string_to_array(pc.relname::text, null)) with ordinality x(ch, idx)
-          where
-            not (x.idx = 1 and x.ch = '"')
-            and not (
-              x.idx = array_length(string_to_array(nsp.nspname::text, null), 1)
-              and x.ch = '"'
-            )
-          )
-      from
-        pg_class pc
-        join pg_namespace nsp
-          on pc.relnamespace = nsp.oid
-      where
-        pc.oid = entity
-    $$;
-
-
---
--- Name: send(jsonb, text, text, boolean); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean DEFAULT true) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  generated_id uuid;
-  final_payload jsonb;
-BEGIN
-  BEGIN
-    -- Generate a new UUID for the id
-    generated_id := gen_random_uuid();
-
-    -- Check if payload has an 'id' key, if not, add the generated UUID
-    IF payload ? 'id' THEN
-      final_payload := payload;
-    ELSE
-      final_payload := jsonb_set(payload, '{id}', to_jsonb(generated_id));
-    END IF;
-
-    -- Set the topic configuration
-    EXECUTE format('SET LOCAL realtime.topic TO %L', topic);
-
-    -- Attempt to insert the message
-    INSERT INTO realtime.messages (id, payload, event, topic, private, extension)
-    VALUES (generated_id, final_payload, event, topic, private, 'broadcast');
-  EXCEPTION
-    WHEN OTHERS THEN
-      -- Capture and notify the error
-      RAISE WARNING 'ErrorSendingBroadcastMessage: %', SQLERRM;
-  END;
-END;
-$$;
-
-
---
--- Name: subscription_check_filters(); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.subscription_check_filters() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-    /*
-    Validates that the user defined filters for a subscription:
-    - refer to valid columns that the claimed role may access
-    - values are coercable to the correct column type
-    */
-    declare
-        col_names text[] = coalesce(
-                array_agg(c.column_name order by c.ordinal_position),
-                '{}'::text[]
-            )
-            from
-                information_schema.columns c
-            where
-                format('%I.%I', c.table_schema, c.table_name)::regclass = new.entity
-                and pg_catalog.has_column_privilege(
-                    (new.claims ->> 'role'),
-                    format('%I.%I', c.table_schema, c.table_name)::regclass,
-                    c.column_name,
-                    'SELECT'
-                );
-        filter realtime.user_defined_filter;
-        col_type regtype;
-
-        in_val jsonb;
-    begin
-        for filter in select * from unnest(new.filters) loop
-            -- Filtered column is valid
-            if not filter.column_name = any(col_names) then
-                raise exception 'invalid column for filter %', filter.column_name;
-            end if;
-
-            -- Type is sanitized and safe for string interpolation
-            col_type = (
-                select atttypid::regtype
-                from pg_catalog.pg_attribute
-                where attrelid = new.entity
-                      and attname = filter.column_name
-            );
-            if col_type is null then
-                raise exception 'failed to lookup type for column %', filter.column_name;
-            end if;
-
-            -- Set maximum number of entries for in filter
-            if filter.op = 'in'::realtime.equality_op then
-                in_val = realtime.cast(filter.value, (col_type::text || '[]')::regtype);
-                if coalesce(jsonb_array_length(in_val), 0) > 100 then
-                    raise exception 'too many values for `in` filter. Maximum 100';
-                end if;
-            else
-                -- raises an exception if value is not coercable to type
-                perform realtime.cast(filter.value, col_type);
-            end if;
-
-        end loop;
-
-        -- Apply consistent order to filters so the unique constraint on
-        -- (subscription_id, entity, filters) can't be tricked by a different filter order
-        new.filters = coalesce(
-            array_agg(f order by f.column_name, f.op, f.value),
-            '{}'
-        ) from unnest(new.filters) f;
-
-        return new;
-    end;
-    $$;
-
-
---
--- Name: to_regrole(text); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.to_regrole(role_name text) RETURNS regrole
-    LANGUAGE sql IMMUTABLE
-    AS $$ select role_name::regrole $$;
-
-
---
--- Name: topic(); Type: FUNCTION; Schema: realtime; Owner: -
---
-
-CREATE FUNCTION realtime.topic() RETURNS text
+CREATE FUNCTION storage.email() RETURNS text
     LANGUAGE sql STABLE
     AS $$
-select nullif(current_setting('realtime.topic', true), '')::text;
-$$;
-
-
---
--- Name: allow_any_operation(text[]); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.allow_any_operation(expected_operations text[]) RETURNS boolean
-    LANGUAGE sql STABLE
-    AS $$
-  WITH current_operation AS (
-    SELECT storage.operation() AS raw_operation
-  ),
-  normalized AS (
-    SELECT CASE
-      WHEN raw_operation LIKE 'storage.%' THEN substr(raw_operation, 9)
-      ELSE raw_operation
-    END AS current_operation
-    FROM current_operation
-  )
-  SELECT EXISTS (
-    SELECT 1
-    FROM normalized n
-    CROSS JOIN LATERAL unnest(expected_operations) AS expected_operation
-    WHERE expected_operation IS NOT NULL
-      AND expected_operation <> ''
-      AND n.current_operation = CASE
-        WHEN expected_operation LIKE 'storage.%' THEN substr(expected_operation, 9)
-        ELSE expected_operation
-      END
-  );
-$$;
-
-
---
--- Name: allow_only_operation(text); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.allow_only_operation(expected_operation text) RETURNS boolean
-    LANGUAGE sql STABLE
-    AS $$
-  WITH current_operation AS (
-    SELECT storage.operation() AS raw_operation
-  ),
-  normalized AS (
-    SELECT
-      CASE
-        WHEN raw_operation LIKE 'storage.%' THEN substr(raw_operation, 9)
-        ELSE raw_operation
-      END AS current_operation,
-      CASE
-        WHEN expected_operation LIKE 'storage.%' THEN substr(expected_operation, 9)
-        ELSE expected_operation
-      END AS requested_operation
-    FROM current_operation
-  )
-  SELECT CASE
-    WHEN requested_operation IS NULL OR requested_operation = '' THEN FALSE
-    ELSE COALESCE(current_operation = requested_operation, FALSE)
-  END
-  FROM normalized;
-$$;
-
-
---
--- Name: can_insert_object(text, text, uuid, jsonb); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.can_insert_object(bucketid text, name text, owner uuid, metadata jsonb) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  INSERT INTO "storage"."objects" ("bucket_id", "name", "owner", "metadata") VALUES (bucketid, name, owner, metadata);
-  -- hack to rollback the successful insert
-  RAISE sqlstate 'PT200' using
-  message = 'ROLLBACK',
-  detail = 'rollback successful insert';
-END
-$$;
-
-
---
--- Name: enforce_bucket_name_length(); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.enforce_bucket_name_length() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-begin
-    if length(new.name) > 100 then
-        raise exception 'bucket name "%" is too long (% characters). Max is 100.', new.name, length(new.name);
-    end if;
-    return new;
-end;
+  select 
+  		coalesce(
+  			nullif(current_setting('request.jwt.claim.email', true), ''),
+  			(current_setting('request.jwt.claims', true)::jsonb ->> 'email')
+  		)::text
 $$;
 
 
@@ -2629,12 +845,22 @@ CREATE FUNCTION storage.extension(name text) RETURNS text
     AS $$
 DECLARE
 _parts text[];
-_filename text;
+_static_extensions text[];
 BEGIN
-	select string_to_array(name, '/') into _parts;
-	select _parts[array_length(_parts,1)] into _filename;
-	-- @todo return the last part instead of 2
-	return reverse(split_part(reverse(_filename), '.', 1));
+    _static_extensions := ARRAY['tar.gz', 'tar.bz2', 'tar.xz'];
+    _parts := split_part(name, '.', 2);
+
+    IF _parts IS NULL THEN
+        RETURN '';
+    END IF;
+
+    FOR i IN 1..array_upper(_static_extensions, 1) LOOP
+        IF name ILIKE '%.' || _static_extensions[i] THEN
+            RETURN _static_extensions[i];
+        END IF;
+    END LOOP;
+
+    RETURN reverse(split_part(reverse(name), '.', 1));
 END
 $$;
 
@@ -2649,8 +875,11 @@ CREATE FUNCTION storage.filename(name text) RETURNS text
 DECLARE
 _parts text[];
 BEGIN
-	select string_to_array(name, '/') into _parts;
-	return _parts[array_length(_parts,1)];
+	_parts := split_part(name, '/', 2);
+	IF _parts IS NULL THEN
+		RETURN name;
+	END IF;
+	RETURN reverse(split_part(reverse(name), '/', 1));
 END
 $$;
 
@@ -2665,8 +894,11 @@ CREATE FUNCTION storage.foldername(name text) RETURNS text[]
 DECLARE
 _parts text[];
 BEGIN
-	select string_to_array(name, '/') into _parts;
-	return _parts[1:array_length(_parts,1)-1];
+	_parts := string_to_array(name, '/');
+	IF array_length(_parts, 1) <= 1 THEN
+		RETURN '{}';
+	END IF;
+	RETURN _parts[1:array_length(_parts, 1)-1];
 END
 $$;
 
@@ -2675,13 +907,21 @@ $$;
 -- Name: get_common_prefix(text, text, text); Type: FUNCTION; Schema: storage; Owner: -
 --
 
-CREATE FUNCTION storage.get_common_prefix(p_key text, p_prefix text, p_delimiter text) RETURNS text
-    LANGUAGE sql IMMUTABLE
+CREATE FUNCTION storage.get_common_prefix(name text, prefix text, delimiter text) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE
     AS $$
-SELECT CASE
-    WHEN position(p_delimiter IN substring(p_key FROM length(p_prefix) + 1)) > 0
-    THEN left(p_key, length(p_prefix) + position(p_delimiter IN substring(p_key FROM length(p_prefix) + 1)))
-    ELSE NULL
+DECLARE
+    v_common_prefix text;
+    v_prefix_len int;
+BEGIN
+    v_prefix_len := length(prefix);
+    -- Check if the name starts with the prefix and contains the delimiter after the prefix
+    IF left(name, v_prefix_len) = prefix AND position(delimiter in substring(name from v_prefix_len + 1)) > 0 THEN
+        v_common_prefix := substring(name from 1 for v_prefix_len + position(delimiter in substring(name from v_prefix_len + 1)));
+        RETURN v_common_prefix;
+    ELSE
+        RETURN NULL;
+    END IF;
 END;
 $$;
 
@@ -2694,500 +934,95 @@ CREATE FUNCTION storage.get_size_by_bucket() RETURNS TABLE(size bigint, bucket_i
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    return query
-        select sum((metadata->>'size')::int) as size, obj.bucket_id
-        from "storage".objects as obj
-        group by obj.bucket_id;
+    RETURN QUERY
+        select sum(size) as size, bucket_id
+        from "storage"."objects"
+        group by bucket_id;
 END
 $$;
-
-
---
--- Name: list_multipart_uploads_with_delimiter(text, text, text, integer, text, text); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, next_key_token text DEFAULT ''::text, next_upload_token text DEFAULT ''::text) RETURNS TABLE(key text, id text, created_at timestamp with time zone)
-    LANGUAGE plpgsql
-    AS $_$
-BEGIN
-    RETURN QUERY EXECUTE
-        'SELECT DISTINCT ON(key COLLATE "C") * from (
-            SELECT
-                CASE
-                    WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN
-                        substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1)))
-                    ELSE
-                        key
-                END AS key, id, created_at
-            FROM
-                storage.s3_multipart_uploads
-            WHERE
-                bucket_id = $5 AND
-                key ILIKE $1 || ''%'' AND
-                CASE
-                    WHEN $4 != '''' AND $6 = '''' THEN
-                        CASE
-                            WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN
-                                substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1))) COLLATE "C" > $4
-                            ELSE
-                                key COLLATE "C" > $4
-                            END
-                    ELSE
-                        true
-                END AND
-                CASE
-                    WHEN $6 != '''' THEN
-                        id COLLATE "C" > $6
-                    ELSE
-                        true
-                    END
-            ORDER BY
-                key COLLATE "C" ASC, created_at ASC) as e order by key COLLATE "C" LIMIT $3'
-        USING prefix_param, delimiter_param, max_keys, next_key_token, bucket_id, next_upload_token;
-END;
-$_$;
 
 
 --
 -- Name: list_objects_with_delimiter(text, text, text, integer, text, text, text); Type: FUNCTION; Schema: storage; Owner: -
 --
 
-CREATE FUNCTION storage.list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, start_after text DEFAULT ''::text, next_token text DEFAULT ''::text, sort_order text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, metadata jsonb, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone)
+CREATE FUNCTION storage.list_objects_with_delimiter(bucketname text, prefix text, delimiter text, limits integer DEFAULT 100, offsets integer DEFAULT 0, start_after text DEFAULT ''::text, sort_order text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)
     LANGUAGE plpgsql STABLE
     AS $_$
 DECLARE
-    v_peek_name TEXT;
-    v_current RECORD;
-    v_common_prefix TEXT;
-
-    -- Configuration
-    v_is_asc BOOLEAN;
-    v_prefix TEXT;
-    v_start TEXT;
-    v_upper_bound TEXT;
-    v_file_batch_size INT;
-
-    -- Seek state
-    v_next_seek TEXT;
-    v_count INT := 0;
-
-    -- Dynamic SQL for batch query only
-    v_batch_query TEXT;
-
+    v_batch_query text;
+    v_is_asc boolean;
+    v_next_seek text;
+    v_count int := 0;
+    v_skipped int := 0;
+    v_current record;
+    v_file_batch_size int := 100;
+    v_common_prefix text;
+    v_prefix_lower text;
+    v_upper_bound text;
 BEGIN
-    -- ========================================================================
-    -- INITIALIZATION
-    -- ========================================================================
-    v_is_asc := lower(coalesce(sort_order, 'asc')) = 'asc';
-    v_prefix := coalesce(prefix_param, '');
-    v_start := CASE WHEN coalesce(next_token, '') <> '' THEN next_token ELSE coalesce(start_after, '') END;
-    v_file_batch_size := LEAST(GREATEST(max_keys * 2, 100), 1000);
+    v_is_asc := lower(sort_order) = 'asc';
+    v_prefix_lower := lower(prefix);
 
-    -- Calculate upper bound for prefix filtering (bytewise, using COLLATE "C")
-    IF v_prefix = '' THEN
-        v_upper_bound := NULL;
-    ELSIF right(v_prefix, 1) = delimiter_param THEN
-        v_upper_bound := left(v_prefix, -1) || chr(ascii(delimiter_param) + 1);
-    ELSE
-        v_upper_bound := left(v_prefix, -1) || chr(ascii(right(v_prefix, 1)) + 1);
-    END IF;
-
-    -- Build batch query (dynamic SQL - called infrequently, amortized over many rows)
+    -- Precompute upper bound for prefix (one past prefix)
     IF v_is_asc THEN
-        IF v_upper_bound IS NOT NULL THEN
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND o.name COLLATE "C" >= $2 ' ||
-                'AND o.name COLLATE "C" < $3 ORDER BY o.name COLLATE "C" ASC LIMIT $4';
-        ELSE
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND o.name COLLATE "C" >= $2 ' ||
-                'ORDER BY o.name COLLATE "C" ASC LIMIT $4';
-        END IF;
-    ELSE
-        IF v_upper_bound IS NOT NULL THEN
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND o.name COLLATE "C" < $2 ' ||
-                'AND o.name COLLATE "C" >= $3 ORDER BY o.name COLLATE "C" DESC LIMIT $4';
-        ELSE
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND o.name COLLATE "C" < $2 ' ||
-                'ORDER BY o.name COLLATE "C" DESC LIMIT $4';
-        END IF;
+        v_upper_bound := lower(left(prefix, -1)) || chr(ascii(right(prefix, 1)) + 1);
     END IF;
 
-    -- ========================================================================
-    -- SEEK INITIALIZATION: Determine starting position
-    -- ========================================================================
-    IF v_start = '' THEN
+    -- Build the batch query for files
+    v_batch_query := format($sql$
+        SELECT name, id, updated_at, created_at, last_accessed_at, metadata
+        FROM storage.objects
+        WHERE bucket_id = $1
+          AND lower(name) %s $2
+          AND lower(name) %s $3
+        ORDER BY lower(name) %s
+        LIMIT $4
+    $sql$,
+        CASE WHEN v_is_asc THEN '>' ELSE '<' END,
+        CASE WHEN v_is_asc THEN '<' ELSE '>=' END,
+        sort_order
+    );
+
+    v_next_seek := lower(start_after);
+    IF v_next_seek = '' THEN
         IF v_is_asc THEN
-            v_next_seek := v_prefix;
+            v_next_seek := v_prefix_lower;
         ELSE
-            -- DESC without cursor: find the last item in range
-            IF v_upper_bound IS NOT NULL THEN
-                SELECT o.name INTO v_next_seek FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" >= v_prefix AND o.name COLLATE "C" < v_upper_bound
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            ELSIF v_prefix <> '' THEN
-                SELECT o.name INTO v_next_seek FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" >= v_prefix
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            ELSE
-                SELECT o.name INTO v_next_seek FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            END IF;
-
-            IF v_next_seek IS NOT NULL THEN
-                v_next_seek := v_next_seek || delimiter_param;
-            ELSE
-                RETURN;
-            END IF;
-        END IF;
-    ELSE
-        -- Cursor provided: determine if it refers to a folder or leaf
-        IF EXISTS (
-            SELECT 1 FROM storage.objects o
-            WHERE o.bucket_id = _bucket_id
-              AND o.name COLLATE "C" LIKE v_start || delimiter_param || '%'
-            LIMIT 1
-        ) THEN
-            -- Cursor refers to a folder
-            IF v_is_asc THEN
-                v_next_seek := v_start || chr(ascii(delimiter_param) + 1);
-            ELSE
-                v_next_seek := v_start || delimiter_param;
-            END IF;
-        ELSE
-            -- Cursor refers to a leaf object
-            IF v_is_asc THEN
-                v_next_seek := v_start || delimiter_param;
-            ELSE
-                v_next_seek := v_start;
-            END IF;
+            -- For DESC, start at the upper bound of the prefix
+            v_next_seek := v_prefix_lower || chr(255);
         END IF;
     END IF;
 
-    -- ========================================================================
-    -- MAIN LOOP: Hybrid peek-then-batch algorithm
-    -- Uses STATIC SQL for peek (hot path) and DYNAMIC SQL for batch
-    -- ========================================================================
-    LOOP
-        EXIT WHEN v_count >= max_keys;
-
-        -- STEP 1: PEEK using STATIC SQL (plan cached, very fast)
-        IF v_is_asc THEN
-            IF v_upper_bound IS NOT NULL THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" >= v_next_seek AND o.name COLLATE "C" < v_upper_bound
-                ORDER BY o.name COLLATE "C" ASC LIMIT 1;
-            ELSE
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" >= v_next_seek
-                ORDER BY o.name COLLATE "C" ASC LIMIT 1;
-            END IF;
-        ELSE
-            IF v_upper_bound IS NOT NULL THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" < v_next_seek AND o.name COLLATE "C" >= v_prefix
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            ELSIF v_prefix <> '' THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" < v_next_seek AND o.name COLLATE "C" >= v_prefix
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            ELSE
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = _bucket_id AND o.name COLLATE "C" < v_next_seek
-                ORDER BY o.name COLLATE "C" DESC LIMIT 1;
-            END IF;
-        END IF;
-
-        EXIT WHEN v_peek_name IS NULL;
-
-        -- STEP 2: Check if this is a FOLDER or FILE
-        v_common_prefix := storage.get_common_prefix(v_peek_name, v_prefix, delimiter_param);
-
-        IF v_common_prefix IS NOT NULL THEN
-            -- FOLDER: Emit and skip to next folder (no heap access needed)
-            name := rtrim(v_common_prefix, delimiter_param);
-            id := NULL;
-            updated_at := NULL;
-            created_at := NULL;
-            last_accessed_at := NULL;
-            metadata := NULL;
-            RETURN NEXT;
-            v_count := v_count + 1;
-
-            -- Advance seek past the folder range
-            IF v_is_asc THEN
-                v_next_seek := left(v_common_prefix, -1) || chr(ascii(delimiter_param) + 1);
-            ELSE
-                v_next_seek := v_common_prefix;
-            END IF;
-        ELSE
-            -- FILE: Batch fetch using DYNAMIC SQL (overhead amortized over many rows)
-            -- For ASC: upper_bound is the exclusive upper limit (< condition)
-            -- For DESC: prefix is the inclusive lower limit (>= condition)
-            FOR v_current IN EXECUTE v_batch_query USING _bucket_id, v_next_seek,
-                CASE WHEN v_is_asc THEN COALESCE(v_upper_bound, v_prefix) ELSE v_prefix END, v_file_batch_size
-            LOOP
-                v_common_prefix := storage.get_common_prefix(v_current.name, v_prefix, delimiter_param);
-
-                IF v_common_prefix IS NOT NULL THEN
-                    -- Hit a folder: exit batch, let peek handle it
-                    v_next_seek := v_current.name;
-                    EXIT;
-                END IF;
-
-                -- Emit file
-                name := v_current.name;
-                id := v_current.id;
-                updated_at := v_current.updated_at;
-                created_at := v_current.created_at;
-                last_accessed_at := v_current.last_accessed_at;
-                metadata := v_current.metadata;
-                RETURN NEXT;
-                v_count := v_count + 1;
-
-                -- Advance seek past this file
-                IF v_is_asc THEN
-                    v_next_seek := v_current.name || delimiter_param;
-                ELSE
-                    v_next_seek := v_current.name;
-                END IF;
-
-                EXIT WHEN v_count >= max_keys;
-            END LOOP;
-        END IF;
-    END LOOP;
-END;
-$_$;
-
-
---
--- Name: operation(); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.operation() RETURNS text
-    LANGUAGE plpgsql STABLE
-    AS $$
-BEGIN
-    RETURN current_setting('storage.operation', true);
-END;
-$$;
-
-
---
--- Name: protect_delete(); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.protect_delete() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Check if storage.allow_delete_query is set to 'true'
-    IF COALESCE(current_setting('storage.allow_delete_query', true), 'false') != 'true' THEN
-        RAISE EXCEPTION 'Direct deletion from storage tables is not allowed. Use the Storage API instead.'
-            USING HINT = 'This prevents accidental data loss from orphaned objects.',
-                  ERRCODE = '42501';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-
-
---
--- Name: search(text, text, integer, integer, integer, text, text, text); Type: FUNCTION; Schema: storage; Owner: -
---
-
-CREATE FUNCTION storage.search(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text) RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)
-    LANGUAGE plpgsql STABLE
-    AS $_$
-DECLARE
-    v_peek_name TEXT;
-    v_current RECORD;
-    v_common_prefix TEXT;
-    v_delimiter CONSTANT TEXT := '/';
-
-    -- Configuration
-    v_limit INT;
-    v_prefix TEXT;
-    v_prefix_lower TEXT;
-    v_is_asc BOOLEAN;
-    v_order_by TEXT;
-    v_sort_order TEXT;
-    v_upper_bound TEXT;
-    v_file_batch_size INT;
-
-    -- Dynamic SQL for batch query only
-    v_batch_query TEXT;
-
-    -- Seek state
-    v_next_seek TEXT;
-    v_count INT := 0;
-    v_skipped INT := 0;
-BEGIN
-    -- ========================================================================
-    -- INITIALIZATION
-    -- ========================================================================
-    v_limit := LEAST(coalesce(limits, 100), 1500);
-    v_prefix := coalesce(prefix, '') || coalesce(search, '');
-    v_prefix_lower := lower(v_prefix);
-    v_is_asc := lower(coalesce(sortorder, 'asc')) = 'asc';
-    v_file_batch_size := LEAST(GREATEST(v_limit * 2, 100), 1000);
-
-    -- Validate sort column
-    CASE lower(coalesce(sortcolumn, 'name'))
-        WHEN 'name' THEN v_order_by := 'name';
-        WHEN 'updated_at' THEN v_order_by := 'updated_at';
-        WHEN 'created_at' THEN v_order_by := 'created_at';
-        WHEN 'last_accessed_at' THEN v_order_by := 'last_accessed_at';
-        ELSE v_order_by := 'name';
-    END CASE;
-
-    v_sort_order := CASE WHEN v_is_asc THEN 'asc' ELSE 'desc' END;
-
-    -- ========================================================================
-    -- NON-NAME SORTING: Use path_tokens approach (unchanged)
-    -- ========================================================================
-    IF v_order_by != 'name' THEN
-        RETURN QUERY EXECUTE format(
-            $sql$
-            WITH folders AS (
-                SELECT path_tokens[$1] AS folder
-                FROM storage.objects
-                WHERE objects.name ILIKE $2 || '%%'
-                  AND bucket_id = $3
-                  AND array_length(objects.path_tokens, 1) <> $1
-                GROUP BY folder
-                ORDER BY folder %s
-            )
-            (SELECT folder AS "name",
-                   NULL::uuid AS id,
-                   NULL::timestamptz AS updated_at,
-                   NULL::timestamptz AS created_at,
-                   NULL::timestamptz AS last_accessed_at,
-                   NULL::jsonb AS metadata FROM folders)
-            UNION ALL
-            (SELECT path_tokens[$1] AS "name",
-                   id, updated_at, created_at, last_accessed_at, metadata
-             FROM storage.objects
-             WHERE objects.name ILIKE $2 || '%%'
-               AND bucket_id = $3
-               AND array_length(objects.path_tokens, 1) = $1
-             ORDER BY %I %s)
-            LIMIT $4 OFFSET $5
-            $sql$, v_sort_order, v_order_by, v_sort_order
-        ) USING levels, v_prefix, bucketname, v_limit, offsets;
-        RETURN;
-    END IF;
-
-    -- ========================================================================
-    -- NAME SORTING: Hybrid skip-scan with batch optimization
-    -- ========================================================================
-
-    -- Calculate upper bound for prefix filtering
-    IF v_prefix_lower = '' THEN
-        v_upper_bound := NULL;
-    ELSIF right(v_prefix_lower, 1) = v_delimiter THEN
-        v_upper_bound := left(v_prefix_lower, -1) || chr(ascii(v_delimiter) + 1);
-    ELSE
-        v_upper_bound := left(v_prefix_lower, -1) || chr(ascii(right(v_prefix_lower, 1)) + 1);
-    END IF;
-
-    -- Build batch query (dynamic SQL - called infrequently, amortized over many rows)
-    IF v_is_asc THEN
-        IF v_upper_bound IS NOT NULL THEN
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND lower(o.name) COLLATE "C" >= $2 ' ||
-                'AND lower(o.name) COLLATE "C" < $3 ORDER BY lower(o.name) COLLATE "C" ASC LIMIT $4';
-        ELSE
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND lower(o.name) COLLATE "C" >= $2 ' ||
-                'ORDER BY lower(o.name) COLLATE "C" ASC LIMIT $4';
-        END IF;
-    ELSE
-        IF v_upper_bound IS NOT NULL THEN
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND lower(o.name) COLLATE "C" < $2 ' ||
-                'AND lower(o.name) COLLATE "C" >= $3 ORDER BY lower(o.name) COLLATE "C" DESC LIMIT $4';
-        ELSE
-            v_batch_query := 'SELECT o.name, o.id, o.updated_at, o.created_at, o.last_accessed_at, o.metadata ' ||
-                'FROM storage.objects o WHERE o.bucket_id = $1 AND lower(o.name) COLLATE "C" < $2 ' ||
-                'ORDER BY lower(o.name) COLLATE "C" DESC LIMIT $4';
-        END IF;
-    END IF;
-
-    -- Initialize seek position
-    IF v_is_asc THEN
-        v_next_seek := v_prefix_lower;
-    ELSE
-        -- DESC: find the last item in range first (static SQL)
-        IF v_upper_bound IS NOT NULL THEN
-            SELECT o.name INTO v_peek_name FROM storage.objects o
-            WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" >= v_prefix_lower AND lower(o.name) COLLATE "C" < v_upper_bound
-            ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-        ELSIF v_prefix_lower <> '' THEN
-            SELECT o.name INTO v_peek_name FROM storage.objects o
-            WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" >= v_prefix_lower
-            ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-        ELSE
-            SELECT o.name INTO v_peek_name FROM storage.objects o
-            WHERE o.bucket_id = bucketname
-            ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-        END IF;
-
-        IF v_peek_name IS NOT NULL THEN
-            v_next_seek := lower(v_peek_name) || v_delimiter;
-        ELSE
-            RETURN;
-        END IF;
-    END IF;
-
-    -- ========================================================================
-    -- MAIN LOOP: Hybrid peek-then-batch algorithm
-    -- Uses STATIC SQL for peek (hot path) and DYNAMIC SQL for batch
-    -- ========================================================================
     LOOP
         EXIT WHEN v_count >= v_limit;
 
-        -- STEP 1: PEEK using STATIC SQL (plan cached, very fast)
-        IF v_is_asc THEN
-            IF v_upper_bound IS NOT NULL THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" >= v_next_seek AND lower(o.name) COLLATE "C" < v_upper_bound
-                ORDER BY lower(o.name) COLLATE "C" ASC LIMIT 1;
-            ELSE
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" >= v_next_seek
-                ORDER BY lower(o.name) COLLATE "C" ASC LIMIT 1;
-            END IF;
-        ELSE
-            IF v_upper_bound IS NOT NULL THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" < v_next_seek AND lower(o.name) COLLATE "C" >= v_prefix_lower
-                ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-            ELSIF v_prefix_lower <> '' THEN
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" < v_next_seek AND lower(o.name) COLLATE "C" >= v_prefix_lower
-                ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-            ELSE
-                SELECT o.name INTO v_peek_name FROM storage.objects o
-                WHERE o.bucket_id = bucketname AND lower(o.name) COLLATE "C" < v_next_seek
-                ORDER BY lower(o.name) COLLATE "C" DESC LIMIT 1;
-            END IF;
-        END IF;
+        -- PEEK at the next item to determine if it's a file or folder
+        EXECUTE format($sql$
+            SELECT name
+            FROM storage.objects
+            WHERE bucket_id = $1
+              AND lower(name) %s $2
+              AND lower(name) %s $3
+            ORDER BY lower(name) %s
+            LIMIT 1
+        $sql$,
+            CASE WHEN v_is_asc THEN '>' ELSE '<' END,
+            CASE WHEN v_is_asc THEN '<' ELSE '>=' END,
+            sort_order
+        ) INTO v_current USING bucketname, v_next_seek,
+            CASE WHEN v_is_asc THEN COALESCE(v_upper_bound, v_prefix_lower) ELSE v_prefix_lower END;
 
-        EXIT WHEN v_peek_name IS NULL;
+        EXIT WHEN v_current IS NULL;
 
-        -- STEP 2: Check if this is a FOLDER or FILE
-        v_common_prefix := storage.get_common_prefix(lower(v_peek_name), v_prefix_lower, v_delimiter);
+        v_common_prefix := storage.get_common_prefix(lower(v_current.name), v_prefix_lower, v_delimiter);
 
         IF v_common_prefix IS NOT NULL THEN
-            -- FOLDER: Handle offset, emit if needed, skip to next folder
+            -- FOLDER: Emit and seek past folder
             IF v_skipped < offsets THEN
                 v_skipped := v_skipped + 1;
             ELSE
-                name := split_part(rtrim(storage.get_common_prefix(v_peek_name, v_prefix, v_delimiter), v_delimiter), v_delimiter, levels);
+                name := split_part(v_common_prefix, v_delimiter, levels);
                 id := NULL;
                 updated_at := NULL;
                 created_at := NULL;
@@ -3197,7 +1032,6 @@ BEGIN
                 v_count := v_count + 1;
             END IF;
 
-            -- Advance seek past the folder range
             IF v_is_asc THEN
                 v_next_seek := lower(left(v_common_prefix, -1)) || chr(ascii(v_delimiter) + 1);
             ELSE
@@ -4143,14 +1977,14 @@ CREATE TABLE public.configuracao_entidade (
 -- Name: COLUMN configuracao_entidade.acesso_expira_em; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.configuracao_entidade.acesso_expira_em IS 'Data de expiração da licença do sindicato (centralizada)';
+COMMENT ON COLUMN public.configuracao_entidade.acesso_expira_em IS 'Data de expirao da licena do sindicato (centralizada)';
 
 
 --
 -- Name: COLUMN configuracao_entidade.extensao_license_key; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.configuracao_entidade.extensao_license_key IS 'Chave de licença da Extensão SIGESS vinculada a esta entidade';
+COMMENT ON COLUMN public.configuracao_entidade.extensao_license_key IS 'Chave de licena da Extenso SIGESS vinculada a esta entidade';
 
 
 --
@@ -4522,10 +2356,6 @@ CREATE TABLE public.tipos_cobranca (
 --
 
 CREATE VIEW public.v_debitos_socio WITH (security_invoker='on') AS
- WITH anos AS (
-         SELECT generate_series(( SELECT COALESCE(min(parametros_financeiros.ano_base_cobranca), 2024) AS "coalesce"
-                   FROM public.parametros_financeiros), (EXTRACT(year FROM CURRENT_DATE))::integer) AS ano
-        )
  SELECT s.cpf,
     s.nome,
     a.ano,
@@ -4535,7 +2365,8 @@ CREATE VIEW public.v_debitos_socio WITH (security_invoker='on') AS
     COALESCE(cfg.isento, false) AS isento,
     COALESCE(cfg.liberado_pelo_presidente, false) AS liberado
    FROM (((public.socios s
-     CROSS JOIN anos a)
+     CROSS JOIN ( SELECT generate_series(( SELECT COALESCE(min(parametros_financeiros.ano_base_cobranca), 2024) AS "coalesce"
+                   FROM public.parametros_financeiros), (EXTRACT(year FROM CURRENT_DATE))::integer) AS ano) a)
      LEFT JOIN ( SELECT parametros_financeiros.regime_padrao
            FROM public.parametros_financeiros
          LIMIT 1) pf ON (true))
@@ -4571,8 +2402,17 @@ CREATE VIEW public.v_requerimentos_busca WITH (security_invoker='true') AS
 --
 
 CREATE VIEW public.v_situacao_financeira_socio AS
- WITH base AS (
-         SELECT s.cpf,
+ SELECT cpf,
+    nome,
+    situacao_associativa,
+    regime,
+    isento,
+    liberado_presidente,
+    anuidades_pagas,
+    ultimo_pagamento,
+    public.get_socio_financial_status(cpf, regime, isento, liberado_presidente) AS situacao_geral,
+    meses_pagos_atual
+   FROM ( SELECT s.cpf,
             s.nome,
             s.situacao AS situacao_associativa,
             COALESCE(cfg.regime, pf.regime_padrao) AS regime,
@@ -4587,19 +2427,7 @@ CREATE VIEW public.v_situacao_financeira_socio AS
                  LIMIT 1) pf ON (true))
              LEFT JOIN public.financeiro_config_socio cfg ON ((cfg.cpf = s.cpf)))
              LEFT JOIN public.financeiro_lancamentos fl ON ((fl.socio_cpf = s.cpf)))
-          GROUP BY s.cpf, s.nome, s.situacao, cfg.regime, pf.regime_padrao, cfg.isento, cfg.liberado_pelo_presidente
-        )
- SELECT cpf,
-    nome,
-    situacao_associativa,
-    regime,
-    isento,
-    liberado_presidente,
-    anuidades_pagas,
-    ultimo_pagamento,
-    public.get_socio_financial_status(cpf, regime, isento, liberado_presidente) AS situacao_geral,
-    meses_pagos_atual
-   FROM base;
+          GROUP BY s.cpf, s.nome, s.situacao, cfg.regime, pf.regime_padrao, cfg.isento, cfg.liberado_pelo_presidente) base;
 
 
 --
@@ -6298,14 +4126,14 @@ CREATE INDEX idx_multipart_uploads_list ON storage.s3_multipart_uploads USING bt
 -- Name: idx_objects_bucket_id_name; Type: INDEX; Schema: storage; Owner: -
 --
 
-CREATE INDEX idx_objects_bucket_id_name ON storage.objects USING btree (bucket_id, name COLLATE "C");
+CREATE INDEX idx_objects_bucket_id_name ON storage.objects USING btree (bucket_id, name COLLATE \"C\");
 
 
 --
 -- Name: idx_objects_bucket_id_name_lower; Type: INDEX; Schema: storage; Owner: -
 --
 
-CREATE INDEX idx_objects_bucket_id_name_lower ON storage.objects USING btree (bucket_id, lower(name) COLLATE "C");
+CREATE INDEX idx_objects_bucket_id_name_lower ON storage.objects USING btree (bucket_id, lower(name) COLLATE \"C\");
 
 
 --
@@ -6709,7 +4537,7 @@ ALTER TABLE ONLY auth.webauthn_credentials
 --
 
 ALTER TABLE ONLY public.audit_log_financeiro
-    ADD CONSTRAINT audit_log_financeiro_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public."User"(id);
+    ADD CONSTRAINT audit_log_financeiro_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6717,7 +4545,7 @@ ALTER TABLE ONLY public.audit_log_financeiro
 --
 
 ALTER TABLE ONLY public.financeiro_cobrancas_geradas
-    ADD CONSTRAINT financeiro_cobrancas_geradas_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_cobrancas_geradas_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6757,7 +4585,7 @@ ALTER TABLE ONLY public.financeiro_config_socio
 --
 
 ALTER TABLE ONLY public.financeiro_config_socio
-    ADD CONSTRAINT financeiro_config_socio_liberacao_usuario_id_fkey FOREIGN KEY (liberacao_usuario_id) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_config_socio_liberacao_usuario_id_fkey FOREIGN KEY (liberacao_usuario_id) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6765,7 +4593,7 @@ ALTER TABLE ONLY public.financeiro_config_socio
 --
 
 ALTER TABLE ONLY public.financeiro_dae
-    ADD CONSTRAINT financeiro_dae_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_dae_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6773,7 +4601,7 @@ ALTER TABLE ONLY public.financeiro_dae
 --
 
 ALTER TABLE ONLY public.financeiro_dae
-    ADD CONSTRAINT financeiro_dae_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_dae_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6789,7 +4617,7 @@ ALTER TABLE ONLY public.financeiro_dae
 --
 
 ALTER TABLE ONLY public.financeiro_historico_regime
-    ADD CONSTRAINT financeiro_historico_regime_alterado_por_fkey FOREIGN KEY (alterado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_historico_regime_alterado_por_fkey FOREIGN KEY (alterado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6805,7 +4633,7 @@ ALTER TABLE ONLY public.financeiro_historico_regime
 --
 
 ALTER TABLE ONLY public.financeiro_lancamentos
-    ADD CONSTRAINT financeiro_lancamentos_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_lancamentos_cancelado_por_fkey FOREIGN KEY (cancelado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6813,7 +4641,7 @@ ALTER TABLE ONLY public.financeiro_lancamentos
 --
 
 ALTER TABLE ONLY public.financeiro_lancamentos
-    ADD CONSTRAINT financeiro_lancamentos_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public."User"(id);
+    ADD CONSTRAINT financeiro_lancamentos_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6845,7 +4673,7 @@ ALTER TABLE ONLY public.logs_eventos_requerimento
 --
 
 ALTER TABLE ONLY public.logs_eventos_requerimento
-    ADD CONSTRAINT logs_eventos_requerimento_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public."User"(id);
+    ADD CONSTRAINT logs_eventos_requerimento_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.\"User\"(id);
 
 
 --
@@ -6869,7 +4697,7 @@ ALTER TABLE ONLY public.requerimentos
 --
 
 ALTER TABLE ONLY storage.objects
-    ADD CONSTRAINT "objects_bucketId_fkey" FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+    ADD CONSTRAINT \"objects_bucketId_fkey\" FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
 
 
 --
@@ -7004,177 +4832,177 @@ ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
 -- Name: audit_log_financeiro Admins podem ver auditoria; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins podem ver auditoria" ON public.audit_log_financeiro FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public."User"
-  WHERE (("User".id = ( SELECT auth.uid() AS uid)) AND ("User".role = 'admin'::text)))));
+CREATE POLICY \"Admins podem ver auditoria\" ON public.audit_log_financeiro FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.\"User\"
+  WHERE ((\"User\".id = ( SELECT auth.uid() AS uid)) AND (\"User\".role = 'admin'::text)))));
 
 
 --
 -- Name: audit_log_financeiro Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.audit_log_financeiro TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.audit_log_financeiro TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: entidade Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.entidade TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.entidade TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: financeiro_cobrancas_geradas Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.financeiro_cobrancas_geradas TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.financeiro_cobrancas_geradas TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: financeiro_config_socio Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.financeiro_config_socio TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.financeiro_config_socio TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: financeiro_dae Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.financeiro_dae TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.financeiro_dae TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: financeiro_historico_regime Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.financeiro_historico_regime TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.financeiro_historico_regime TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: financeiro_lancamentos Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.financeiro_lancamentos TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.financeiro_lancamentos TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: localidades Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.localidades TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.localidades TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: parametros Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.parametros TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.parametros TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: parametros_financeiros Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.parametros_financeiros TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.parametros_financeiros TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: reap Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.reap TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.reap TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: requerimentos Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.requerimentos TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.requerimentos TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: socios Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.socios TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.socios TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: templates Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.templates TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.templates TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: tipos_cobranca Allow all for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow all for authenticated users" ON public.tipos_cobranca TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
+CREATE POLICY \"Allow all for authenticated users\" ON public.tipos_cobranca TO authenticated USING ((( SELECT auth.uid() AS uid) IS NOT NULL));
 
 
 --
 -- Name: User Allow user to read own User data; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow user to read own User data" ON public."User" FOR SELECT TO authenticated USING (((( SELECT auth.uid() AS uid) = id) OR ((( SELECT (auth.jwt() -> 'app_metadata'::text)) ->> 'role'::text) = 'admin'::text)));
+CREATE POLICY \"Allow user to read own User data\" ON public.\"User\" FOR SELECT TO authenticated USING (((( SELECT auth.uid() AS uid) = id) OR ((( SELECT (auth.jwt() -> 'app_metadata'::text)) ->> 'role'::text) = 'admin'::text)));
 
 
 --
 -- Name: User Allow user to update own data; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Allow user to update own data" ON public."User" FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = id)) WITH CHECK ((( SELECT auth.uid() AS uid) = id));
+CREATE POLICY \"Allow user to update own data\" ON public.\"User\" FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = id)) WITH CHECK ((( SELECT auth.uid() AS uid) = id));
 
 
 --
 -- Name: foto_upload_tokens Enable insert for authenticated; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Enable insert for authenticated" ON public.foto_upload_tokens FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY \"Enable insert for authenticated\" ON public.foto_upload_tokens FOR INSERT TO authenticated WITH CHECK (true);
 
 
 --
 -- Name: audit_log_financeiro Enable insert for authenticated users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Enable insert for authenticated users" ON public.audit_log_financeiro FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY \"Enable insert for authenticated users\" ON public.audit_log_financeiro FOR INSERT TO authenticated WITH CHECK (true);
 
 
 --
 -- Name: foto_upload_tokens Enable select by token; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Enable select by token" ON public.foto_upload_tokens FOR SELECT USING (true);
+CREATE POLICY \"Enable select by token\" ON public.foto_upload_tokens FOR SELECT USING (true);
 
 
 --
--- Name: configuracao_entidade Permitir gestão para usuários autenticados; Type: POLICY; Schema: public; Owner: -
+-- Name: configuracao_entidade Permitir gesto para usurios autenticados; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Permitir gestão para usuários autenticados" ON public.configuracao_entidade TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY \"Permitir gesto para usurios autenticados\" ON public.configuracao_entidade TO authenticated USING (true) WITH CHECK (true);
 
 
 --
 -- Name: configuracao_entidade Permitir leitura para todos autenticados; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Permitir leitura para todos autenticados" ON public.configuracao_entidade FOR SELECT TO authenticated USING (true);
+CREATE POLICY \"Permitir leitura para todos autenticados\" ON public.configuracao_entidade FOR SELECT TO authenticated USING (true);
 
 
 --
 -- Name: User Service role can manage users; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Service role can manage users" ON public."User" TO service_role USING (true);
+CREATE POLICY \"Service role can manage users\" ON public.\"User\" TO service_role USING (true);
 
 
 --
 -- Name: User; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
-ALTER TABLE public."User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.\"User\" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: audit_log_financeiro; Type: ROW SECURITY; Schema: public; Owner: -
@@ -7285,38 +5113,38 @@ ALTER TABLE public.tipos_cobranca ENABLE ROW LEVEL SECURITY;
 ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: objects Acesso público para visualização de branding; Type: POLICY; Schema: storage; Owner: -
+-- Name: objects Acesso pblico para visualizao de branding; Type: POLICY; Schema: storage; Owner: -
 --
 
-CREATE POLICY "Acesso público para visualização de branding" ON storage.objects FOR SELECT USING ((bucket_id = 'branding'::text));
-
-
---
--- Name: objects Acesso total para usuários autenticados no branding; Type: POLICY; Schema: storage; Owner: -
---
-
-CREATE POLICY "Acesso total para usuários autenticados no branding" ON storage.objects TO authenticated USING ((bucket_id = 'branding'::text)) WITH CHECK ((bucket_id = 'branding'::text));
+CREATE POLICY \"Acesso pblico para visualizao de branding\" ON storage.objects FOR SELECT USING ((bucket_id = 'branding'::text));
 
 
 --
--- Name: objects Acesso total para usuários autenticados_documentos; Type: POLICY; Schema: storage; Owner: -
+-- Name: objects Acesso total para usurios autenticados no branding; Type: POLICY; Schema: storage; Owner: -
 --
 
-CREATE POLICY "Acesso total para usuários autenticados_documentos" ON storage.objects TO authenticated USING ((bucket_id = 'documentos'::text));
+CREATE POLICY \"Acesso total para usurios autenticados no branding\" ON storage.objects TO authenticated USING ((bucket_id = 'branding'::text)) WITH CHECK ((bucket_id = 'branding'::text));
 
 
 --
--- Name: objects Acesso total para usuários autenticados_fotos; Type: POLICY; Schema: storage; Owner: -
+-- Name: objects Acesso total para usurios autenticados_documentos; Type: POLICY; Schema: storage; Owner: -
 --
 
-CREATE POLICY "Acesso total para usuários autenticados_fotos" ON storage.objects TO authenticated USING ((bucket_id = 'fotos'::text));
+CREATE POLICY \"Acesso total para usurios autenticados_documentos\" ON storage.objects TO authenticated USING ((bucket_id = 'documentos'::text));
+
+
+--
+-- Name: objects Acesso total para usurios autenticados_fotos; Type: POLICY; Schema: storage; Owner: -
+--
+
+CREATE POLICY \"Acesso total para usurios autenticados_fotos\" ON storage.objects TO authenticated USING ((bucket_id = 'fotos'::text));
 
 
 --
 -- Name: objects Public Access; Type: POLICY; Schema: storage; Owner: -
 --
 
-CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING ((bucket_id = 'fotos'::text));
+CREATE POLICY \"Public Access\" ON storage.objects FOR SELECT USING ((bucket_id = 'fotos'::text));
 
 
 --
@@ -7451,5 +5279,4 @@ CREATE EVENT TRIGGER pgrst_drop_watch ON sql_drop
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Qz6wzESwTPQOk7LISpPZWhvpEESkNJr2O84f8woaWRsMpSPKw6LFrwRzRuAVuYk
-
+`;

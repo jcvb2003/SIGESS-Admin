@@ -49,7 +49,7 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
+
     if (authError || !user) throw new Error("Unauthorized: Invalid admin token");
 
     const payload: OnboardingPayload = await req.json();
@@ -89,11 +89,11 @@ serve(async (req: Request) => {
 });
 
 async function updateJob(
-  supabaseAdmin: SupabaseClient, 
-  jobId: string, 
-  status: string, 
-  stepIncrement: number = 0, 
-  error_detail?: string, 
+  supabaseAdmin: SupabaseClient,
+  jobId: string,
+  status: string,
+  stepIncrement: number = 0,
+  error_detail?: string,
   entidadeId?: string
 ) {
   const updates: Record<string, string | number | null> = { status };
@@ -150,7 +150,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
       const tempPass = sysConfig.default_admin_password || Deno.env.get("DEFAULT_ADMIN_PASSWORD") || "Mudar@12345";
       await createAdminUser(projectUrl, serviceRoleKey, adminEmail, tempPass);
-      await updateJob(supabaseAdmin, jobId, "creating_admin", 1); 
+      await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
     }
 
     // 5. Registration
@@ -199,7 +199,7 @@ async function setupProjectAuth(projectRef: string, token: string, resendKey: st
 
 async function runProjectMigrations(projectRef: string, token: string) {
   const api = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
-  
+
   // 1. Get applied migrations from the target database
   let appliedSet = new Set<string>();
   try {
@@ -237,15 +237,15 @@ async function runProjectMigrations(projectRef: string, token: string) {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ query: (migrationsBundle as Record<string, string>)[name] })
     });
-    
+
     if (!res.ok) throw new Error(`Migration ${name} Error: ${await res.text()}`);
 
     // Record success in target DB
     await fetch(api, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        query: `INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ('${name.split('_')[0]}', '${name}', 'success') ON CONFLICT (migration_name) DO UPDATE SET status = 'success';` 
+      body: JSON.stringify({
+        query: `INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ('${name.split('_')[0]}', '${name}', 'success') ON CONFLICT (migration_name) DO UPDATE SET status = 'success';`
       })
     });
   }
@@ -254,11 +254,11 @@ async function runProjectMigrations(projectRef: string, token: string) {
 async function runProjectSeed(url: string, key: string, label: string, code: string, token: string, projectRef: string) {
   if (!seedSql) return;
   const api = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
-  
+
   // Check if seed was already applied (roughly, by checking if the entity name is already updated)
   // Actually, seeding is usually safe to repeat if it uses UPSERT, but our seed might not.
   // For now, we'll just run it. If it fails, it will stop the job, which is fine.
-  
+
   const seedRes = await fetch(api, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -271,7 +271,7 @@ async function runProjectSeed(url: string, key: string, label: string, code: str
       throw new Error(`Seed Error: ${err}`);
     }
   }
-  
+
   const client = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   await client.from('entidade').update({ nome_entidade: label, nome_abreviado: code.toUpperCase() }).neq('id', '00000000-0000-0000-0000-000000000000');
 }
@@ -282,7 +282,7 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   if (authError && !authError.message.includes("already exists")) {
     throw authError;
   }
-  
+
   for (let i = 0; i < 5; i++) {
     await new Promise(r => setTimeout(r, 1000));
     const { data: publicUser } = await client.from("User").select("id").eq("email", email).single();
@@ -303,17 +303,17 @@ async function registerTenantInCentral(admin: SupabaseClient, label: string, cod
     supabase_publishable_key: anon, supabase_secret_keys: sr, supabase_access_token: pat, assinatura: 'anual'
   }).select('id').single();
   if (error || !tenant) throw new Error(`Failed to register tenant: ${error?.message}`);
-  
-  const migrationNames = Object.keys(migrationsBundle).sort((a,b) => a.localeCompare(b));
+
+  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
   await admin.from('schema_migrations').insert(migrationNames.map(n => ({ tenant_id: tenant.id, migration_name: n, status: 'success' })));
   return tenant.id;
 }
 
 async function setupVercelEnv(projectId: string, token: string, code: string, url: string, key: string) {
   const sanitizedCode = code.toUpperCase().replace(/-/g, '_');
-  const envs = [ 
-    {k: `VITE_SUPABASE_URL_${sanitizedCode}`, v: url}, 
-    {k: `VITE_SUPABASE_ANON_KEY_${sanitizedCode}`, v: key} 
+  const envs = [
+    { k: `VITE_SUPABASE_URL_${sanitizedCode}`, v: url },
+    { k: `VITE_SUPABASE_ANON_KEY_${sanitizedCode}`, v: key }
   ];
   for (const env of envs) {
     const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {

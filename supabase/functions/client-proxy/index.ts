@@ -327,9 +327,9 @@ async function listBuckets(clientUrl: string, clientKey: string) {
 async function testClientConnection(clientUrl: string, clientKey: string) {
   const start = Date.now();
   try {
-    // Ping PostgREST with service_role_key as requested
-    // Route: /rest/v1/configuracao_entidade?limit=0
-    const res = await fetch(`${clientUrl}/rest/v1/configuracao_entidade?limit=0`, {
+    // Ping Auth Admin API instead of PostgREST
+    // This is more reliable for new projects where migrations haven't run yet
+    const res = await fetch(`${clientUrl}/auth/v1/admin/users?per_page=1`, {
       method: "GET",
       headers: {
         apikey: clientKey,
@@ -688,7 +688,8 @@ interface ClientConfig {
 
 async function handleMigrationActions(action: string, clientId: string, client: ClientConfig, supabaseAdmin: SupabaseClient, params: Record<string, unknown>) {
   if (action === "get-migrations-status") {
-    const migrationNames = (params.migrationNames as string[]) || [];
+    const safeParams = params || {};
+    const migrationNames = (safeParams.migrationNames as string[]) || [];
     return await getMigrationsStatus(clientId, supabaseAdmin, migrationNames);
   }
 
@@ -749,7 +750,9 @@ async function handleAction(clientId: string, action: string, params: Record<str
     );
 
     // If key is known to be broken, block critical management actions
-    if (health.status === 'broken' && action !== 'health-check') {
+    // BUT allow migration actions because they might be the fix
+    const isMigrationAction = action === 'get-migrations-status' || action === 'execute-migration';
+    if (health.status === 'broken' && action !== 'health-check' && !isMigrationAction) {
       throw new Error("Conexão com o inquilino interrompida (Service Role Key Inválida). Verifique as configurações.");
     }
   }
@@ -776,16 +779,20 @@ async function handleAction(clientId: string, action: string, params: Record<str
 }
 
 serve(async (req: Request) => {
+  console.log(`[PROXY_LOG] Request: ${req.method} | Path: ${new URL(req.url).pathname}`);
+  
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   try {
-    // 1. Initialize Supabase Admin
-    // @ts-expect-error: Deno global is available in Edge Functions runtime
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    // @ts-expect-error: Deno global is available in Edge Functions runtime
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("[PROXY_LOG] CRITICAL: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not defined in environment");
+      throw createHttpError("Internal configuration error: missing env vars", 500);
+    }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false }
@@ -795,7 +802,8 @@ serve(async (req: Request) => {
     const activeUser = await validateAdminSession(req, supabaseAdmin);
     
     const body = await req.json().catch(() => ({}));
-    const { clientId, action, params } = body;
+    console.log(`[PROXY_LOG] Body received:`, JSON.stringify(body));
+    const { clientId, action, params = {} } = body;
 
     if (!clientId || !action) {
       throw createHttpError("Missing clientId or action in request body", 400);
@@ -821,17 +829,21 @@ serve(async (req: Request) => {
 
 async function validateAdminSession(req: Request, supabase: SupabaseClient) {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) throw createHttpError("Missing Authorization header", 401);
+  if (!authHeader) {
+    console.error("DEBUG: Missing Authorization header");
+    throw createHttpError("Missing Authorization header", 401);
+  }
 
   const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
   if (authError || !user) {
+    console.error("DEBUG: Auth error or user not found:", authError);
     throw createHttpError("Unauthorized access to proxy: Invalid or expired token", 401);
   }
 
   if (user.app_metadata?.role !== 'admin') {
-    console.error(`Forbidden: User ${user.email} attempted admin action without proper role.`);
+    console.error(`Forbidden: User ${user.email} attempted admin action without proper role. Role: ${user.app_metadata?.role}`);
     throw createHttpError("Forbidden: Admin access required", 403);
   }
 
@@ -839,6 +851,7 @@ async function validateAdminSession(req: Request, supabase: SupabaseClient) {
 }
 
 async function getClientConfig(supabase: SupabaseClient, clientId: string) {
+  console.log(`DEBUG: Fetching config for client ${clientId}...`);
   const { data: client, error } = await supabase
     .from("entidades")
     .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at")
@@ -846,6 +859,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
     .single();
 
   if (error || !client) {
+    console.error(`DEBUG: Error fetching client config: ${error?.message}`);
     throw createHttpError(`Client reach error: ${error?.message || "Not found"}`, 404);
   }
   return client;
@@ -854,19 +868,24 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
 function handleError(err: unknown) {
   let errorMessage = "Erro desconhecido";
   let status = 500;
+  let stack = "";
 
   if (err && typeof err === 'object') {
     const errorObj = err as Record<string, unknown>;
     if (typeof errorObj.status === 'number') status = errorObj.status;
     if (typeof errorObj.message === 'string') errorMessage = errorObj.message;
+    if (err instanceof Error) stack = err.stack || "";
   } else if (err instanceof Error) {
     errorMessage = err.message;
+    stack = err.stack || "";
   } else if (typeof err === 'string') {
     errorMessage = err;
   }
 
   console.error(`Critical Proxy Error [${status}]:`, errorMessage);
-  return new Response(JSON.stringify({ error: errorMessage }), {
+  if (stack) console.error("Stack:", stack);
+  
+  return new Response(JSON.stringify({ error: errorMessage, details: stack }), {
     status: status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

@@ -16,7 +16,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const secret = req.headers.get("x-app-secret");
-    // Segurança Mandatória: Exige o segredo do app para qualquer validação
+    // Seguranca Mandatoria: Exige o segredo do app para qualquer validacao
     if (!APP_SECRET || secret !== APP_SECRET) {
       return new Response(JSON.stringify({ ok: false, reason: "unauthorized_access" }), { 
         status: 401, 
@@ -60,8 +60,8 @@ Deno.serve(async (req: Request) => {
     // Add valid_until for anti-replay (15 minutes of cache)
     const validUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     
-    // Fixamos a ordem das chaves para que a assinatura JSON.stringify seja determinística
-    // Deve coincidir EXATAMENTE com a ordem reconstruída no cliente (license.ts)
+    // Fixamos a ordem das chaves para que a assinatura JSON.stringify seja deterministica
+    // Deve coincidir EXATAMENTE com a ordem reconstruida no cliente (license.ts)
     const payload = {
       ok: result.ok,
       plan: result.plan,
@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
-    // Extraímos o nome específico deste dispositivo do metadados retornado pelo banco
+    // Extraimos o nome especifico deste dispositivo do metadados retornado pelo banco
     const specificDeviceName = result.device_metadata?.[fingerprint] || "PC";
 
     return new Response(JSON.stringify({ ...payload, sig, device_name: specificDeviceName }), { 

@@ -5,10 +5,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // @ts-expect-error: Deno-specific URL imports
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { migrationsBundle } from "../_shared/migrations_bundle.ts";
-import { initialSchemaSql } from "../_shared/initial_schema.ts";
-import { seedSql } from "../_shared/seed.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -68,7 +64,7 @@ serve(async (req: Request) => {
         supabase_account_id: payload.supabaseAccountId,
         status: "pending",
         current_step: 0,
-        total_steps: payload.adminEmail ? 10 : 8
+        total_steps: 8
       })
       .select("id")
       .single();
@@ -97,7 +93,7 @@ async function updateJob(
   error_detail?: string,
   entidadeId?: string
 ) {
-  const updates: Record<string, string | number | null> = { status };
+  const updates: Record<string, any> = { status };
   if (error_detail) updates.error_detail = error_detail;
   if (entidadeId) updates.entidade_id = entidadeId;
   if (['completed', 'failed'].includes(status)) updates.completed_at = new Date().toISOString();
@@ -128,7 +124,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
     const managementToken = accountData.management_token;
 
     if (!vercelProjectId || !vercelToken || !managementToken || !resendApiKey) {
-      throw new Error("Configurações incompletas (Vercel, Supabase ou Resend ausentes).");
+      throw new Error("Configuracoes incompletas (Vercel, Supabase ou Resend ausentes).");
     }
 
     // 1. Keys
@@ -141,17 +137,16 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
 
     // 3. Database (Migrations & Seed)
     await updateJob(supabaseAdmin, jobId, "running_migrations", 1);
-    await runProjectMigrations(projectRef, managementToken);
-
-    await updateJob(supabaseAdmin, jobId, "seeding", 1);
-    await runProjectSeed(projectUrl, serviceRoleKey, tenantLabel, tenantCode, managementToken, projectRef);
+    await runProjectMigrations(projectRef, managementToken, supabaseAdmin);
 
     // 4. Admin User
     if (adminEmail) {
       await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
       const tempPass = sysConfig.default_admin_password || Deno.env.get("DEFAULT_ADMIN_PASSWORD") || "Mudar@12345";
       await createAdminUser(projectUrl, serviceRoleKey, adminEmail, tempPass);
-      await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
+    } else {
+      // Pular passo do admin se não fornecido para manter contagem consistente
+      await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
     }
 
     // 5. Registration
@@ -164,6 +159,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
     await triggerVercelRedeploy(vercelProjectId, vercelToken);
     await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
 
+    // 7. Finalização
     await updateJob(supabaseAdmin, jobId, "completed", 1);
   } catch (error) {
     console.error(`[Job ${jobId}] Failed:`, error);
@@ -178,15 +174,11 @@ async function fetchProjectKeys(projectRef: string, token: string) {
   if (!res.ok) throw new Error(`Fetch Keys error: ${await res.text()}`);
   const keys: SupabaseApiKey[] = await res.json();
   
-  // Prioritize modern publishable keys (sb_publishable_...) over legacy anon keys
   const pubKey = keys.find((k) => k.api_key.startsWith("sb_publishable_"))?.api_key;
   const anonKey = pubKey || keys.find((k) => k.name === "anon")?.api_key;
-  
   const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
   
   if (!anonKey || !serviceRoleKey) throw new Error("Chaves de API (anon/publishable ou service_role) ausentes.");
-  
-  console.log(`[${projectRef}] Chaves recuperadas (Modern: ${!!pubKey})`);
   return { anonKey, serviceRoleKey };
 }
 
@@ -205,115 +197,39 @@ async function setupProjectAuth(projectRef: string, token: string, resendKey: st
   if (!res.ok) throw new Error(`Config Auth error: ${await res.text()}`);
 }
 
-async function runProjectMigrations(projectRef: string, token: string) {
-  const api = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
-  console.log(`[${projectRef}] Analisando estado do banco de dados...`);
-
-  const runSql = async (sql: string) => {
-    const r = await fetch(api, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: sql })
-    });
-    if (!r.ok) throw new Error(`SQL Error: ${await r.text()}`);
-    return r.json();
-  };
-
-  // 1. Check if the database is fresh (doesn't have public.entidade)
-  let isFresh = false;
-  try {
-    const checkEntidade = await fetch(api, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT 1 FROM public.entidade LIMIT 1" })
-    });
-    if (!checkEntidade.ok) isFresh = true;
-  } catch (e) {
-    isFresh = true;
-  }
-
-  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
-
-  if (isFresh) {
-    console.log(`[${projectRef}] Banco virgem detectado. Aplicando Mega Dump inicial...`);
-    await runSql(initialSchemaSql);
-    
-    console.log(`[${projectRef}] Registrando ${migrationNames.length} migrations como aplicadas...`);
-    // Create tracking tables if they don't exist
-    await runSql(`
-      CREATE SCHEMA IF NOT EXISTS supabase_migrations;
-      CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text primary key, statements text[], name text, migration_name text unique, status text, error_detail text, created_at timestamptz default now());
-      CREATE TABLE IF NOT EXISTS public._migrations (filename text primary key, applied_at timestamptz default now());
-    `);
-
-    // Bulk insert into both tracking tables
-    const valuesPublic = migrationNames.map(n => `('${n}.sql')`).join(",");
-    const valuesSupabase = migrationNames.map(n => `('${n.split('_')[0]}', '${n}', 'success')`).join(",");
-    
-    if (valuesPublic) {
-      await runSql(`INSERT INTO public._migrations (filename) VALUES ${valuesPublic} ON CONFLICT DO NOTHING;`);
-      await runSql(`INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ${valuesSupabase} ON CONFLICT DO NOTHING;`);
-    }
-  } else {
-    console.log(`[${projectRef}] Banco existente detectado. Aplicando deltas incrementais...`);
-    
-    // Get applied migrations
-    let appliedSet = new Set<string>();
-    try {
-      const { result } = await runSql("SELECT migration_name FROM supabase_migrations.schema_migrations");
-      if (Array.isArray(result)) appliedSet = new Set(result.map(m => m.migration_name));
-    } catch (e) {
-      console.log(`[${projectRef}] Falha ao ler migrations aplicadas. Criando tabela...`);
-      await runSql("CREATE SCHEMA IF NOT EXISTS supabase_migrations; CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text primary key, statements text[], name text, migration_name text unique, status text, error_detail text, created_at timestamptz default now());");
-    }
-
-    let count = 0;
-    for (const name of migrationNames) {
-      if (appliedSet.has(name)) continue;
-
-      console.log(`[${projectRef}] Aplicando delta: ${name}`);
-      await runSql((migrationsBundle as Record<string, string>)[name]);
-      
-      // Record success in both tables
-      await runSql(`INSERT INTO supabase_migrations.schema_migrations (version, migration_name, status) VALUES ('${name.split('_')[0]}', '${name}', 'success') ON CONFLICT (migration_name) DO UPDATE SET status = 'success';`);
-      await runSql(`CREATE TABLE IF NOT EXISTS public._migrations (filename text primary key, applied_at timestamptz default now()); INSERT INTO public._migrations (filename) VALUES ('${name}.sql') ON CONFLICT DO NOTHING;`);
-      count++;
-    }
-    console.log(`[${projectRef}] Sincronização concluída. ${count} migrations aplicadas.`);
-  }
+async function fetchSqlFromStorage(supabaseAdmin: SupabaseClient, filename: string): Promise<string> {
+  const { data, error } = await supabaseAdmin.storage.from('migrations').download(filename);
+  if (error || !data) throw new Error(`Storage fetch failed for ${filename}: ${error?.message}`);
+  return new TextDecoder('utf-8').decode(await data.arrayBuffer());
 }
 
-async function runProjectSeed(url: string, key: string, label: string, code: string, token: string, projectRef: string) {
-  if (!seedSql) return;
-  const api = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
-
-  // Check if seed was already applied (roughly, by checking if the entity name is already updated)
-  // Actually, seeding is usually safe to repeat if it uses UPSERT, but our seed might not.
-  // For now, we'll just run it. If it fails, it will stop the job, which is fine.
-
-  const seedRes = await fetch(api, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: seedSql })
-  });
-  if (!seedRes.ok) {
-    const err = await seedRes.text();
-    // If it's a "already exists" error in seed, we might want to ignore it
-    if (!err.includes("already exists")) {
-      throw new Error(`Seed Error: ${err}`);
+async function runProjectMigrations(projectRef: string, accessToken: string, supabaseAdmin: SupabaseClient) {
+  const queryApiUrl = `https://api.supabase.com/v1/projects/${projectRef}/database/query`;
+  const runQuery = async (query: string) => {
+    const res = await fetch(queryApiUrl, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(`Management API error: ${err.message || res.statusText}`);
     }
-  }
+  };
 
-  const client = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-  await client.from('entidade').update({ nome_entidade: label, nome_abreviado: code.toUpperCase() }).neq('id', '00000000-0000-0000-0000-000000000000');
+  const initialSchema = await fetchSqlFromStorage(supabaseAdmin, 'initial_schema.sql');
+  await runQuery(initialSchema);
+
+  const seed = await fetchSqlFromStorage(supabaseAdmin, 'seed.sql');
+  await runQuery(seed);
+
+  return { success: true };
 }
 
 async function createAdminUser(url: string, key: string, email: string, pass: string) {
   const client = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   const { error: authError } = await client.auth.admin.createUser({ email, password: pass, email_confirm: true });
-  if (authError && !authError.message.includes("already exists")) {
-    throw authError;
-  }
+  if (authError && !authError.message.includes("already exists")) throw authError;
 
   for (let i = 0; i < 5; i++) {
     await new Promise(r => setTimeout(r, 1000));
@@ -326,7 +242,6 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
 }
 
 async function registerTenantInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string) {
-  // Check if already registered
   const { data: existing } = await admin.from('entidades').select('id').eq('tenant_code', code.toLowerCase()).single();
   if (existing) return existing.id;
 
@@ -336,17 +251,13 @@ async function registerTenantInCentral(admin: SupabaseClient, label: string, cod
   }).select('id').single();
   if (error || !tenant) throw new Error(`Failed to register tenant: ${error?.message}`);
 
-  const migrationNames = Object.keys(migrationsBundle).sort((a, b) => a.localeCompare(b));
-  await admin.from('schema_migrations').insert(migrationNames.map(n => ({ tenant_id: tenant.id, migration_name: n, status: 'success' })));
+  await admin.from('schema_migrations').insert({ tenant_id: tenant.id, migration_name: 'initial_schema.sql', status: 'success' });
   return tenant.id;
 }
 
 async function setupVercelEnv(projectId: string, token: string, code: string, url: string, key: string) {
   const sanitizedCode = code.toUpperCase().replace(/-/g, '_');
-  const envs = [
-    { k: `VITE_SUPABASE_URL_${sanitizedCode}`, v: url },
-    { k: `VITE_SUPABASE_ANON_KEY_${sanitizedCode}`, v: key }
-  ];
+  const envs = [{ k: `VITE_SUPABASE_URL_${sanitizedCode}`, v: url }, { k: `VITE_SUPABASE_ANON_KEY_${sanitizedCode}`, v: key }];
   for (const env of envs) {
     const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
       method: "POST",
@@ -355,9 +266,7 @@ async function setupVercelEnv(projectId: string, token: string, code: string, ur
     });
     if (!res.ok) {
       const errorText = await res.text();
-      if (!errorText.includes("already exists")) {
-        throw new Error(`Vercel Env error: ${errorText}`);
-      }
+      if (!errorText.includes("already exists")) throw new Error(`Vercel Env error: ${errorText}`);
     }
   }
 }

@@ -347,7 +347,7 @@ async function testClientConnection(clientUrl: string, clientKey: string) {
     return {
       status: "broken" as const,
       latency,
-      error: `Erro de Autenticação/Acesso (${res.status}): ${errText.substring(0, 100)}`
+      error: `Erro de Autenticacao/Acesso (${res.status}): ${errText.substring(0, 100)}`
     };
   } catch (e) {
     return {
@@ -367,7 +367,7 @@ async function updateClientHealth(supabaseAdmin: SupabaseClient, clientId: strin
     })
     .eq("id", clientId);
     
-  if (error) console.error("Erro ao salvar status de saúde no banco Master:", error);
+  if (error) console.error("Erro ao salvar status de saude no banco Master:", error);
 }
 
 async function validateKeyLazy(supabaseAdmin: SupabaseClient, clientId: string, clientUrl: string, clientKey: string, currentStatus?: string, lastCheck?: string | null) {
@@ -375,7 +375,7 @@ async function validateKeyLazy(supabaseAdmin: SupabaseClient, clientId: string, 
   const now = Date.now();
   const lastCheckTime = lastCheck ? new Date(lastCheck).getTime() : 0;
 
-  // Disparar se status desconhecido ou última verificação há mais de 1 hora
+  // Disparar se status desconhecido ou ultima verificacao ha mais de 1 hora
   if (currentStatus === 'unknown' || (now - lastCheckTime) > ONE_HOUR) {
     console.log(`Lazy Validation: Checking tenant ${clientId}...`);
     const health = await testClientConnection(clientUrl, clientKey);
@@ -404,6 +404,23 @@ async function healthCheck(clientUrl: string, clientKey?: string) {
     latency: health.latency,
     error: health.error
   };
+}
+
+async function fetchSqlFromStorage(
+  supabaseAdmin: SupabaseClient,
+  filename: string
+): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .storage
+    .from('migrations')
+    .download(filename);
+
+  if (error || !data) {
+    throw new Error(`Storage fetch failed for ${filename}: ${error?.message}`);
+  }
+
+  // Garantir UTF-8 explícito na leitura do blob
+  return new TextDecoder('utf-8').decode(await data.arrayBuffer());
 }
 
 async function getMigrationsStatus(tenantId: string, supabaseAdmin: SupabaseClient, migrationNames: string[] = []) {
@@ -464,17 +481,18 @@ async function executeMigration(
   accessToken: string, 
   tenantId: string, 
   supabaseAdmin: SupabaseClient,
-  sql?: string,
+  _sql?: string,
   migrationName?: string
 ) {
-  if (!sql || !migrationName) {
-    throw new Error("Missing SQL or migrationName for execution");
+  if (!migrationName) {
+    throw new Error("Missing migrationName for execution");
   }
 
-  // Record attempting
   const projectRef = projectUrl.split(".")[0].split("//")[1];
+  console.log(`Applying storage migration ${migrationName} for tenant ${tenantId}...`);
 
-  console.log(`Applying injected migration ${migrationName} for tenant ${tenantId}...`);
+  // Fetch SQL from Storage instead of taking it as param
+  const sql = await fetchSqlFromStorage(supabaseAdmin, migrationName);
 
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
     method: "POST",
@@ -695,7 +713,7 @@ async function handleMigrationActions(action: string, clientId: string, client: 
 
   if (action === "execute-migration") {
     if (!client.supabase_access_token || !client.supabase_secret_keys) {
-      throw new Error("Supabase Access Token (PAT) ou Service Role Key não configurados para este cliente");
+      throw new Error("Supabase Access Token (PAT) ou Service Role Key nao configurados para este cliente");
     }
     return await executeMigration(
       client.supabase_url, 
@@ -753,7 +771,7 @@ async function handleAction(clientId: string, action: string, params: Record<str
     // BUT allow migration actions because they might be the fix
     const isMigrationAction = action === 'get-migrations-status' || action === 'execute-migration';
     if (health.status === 'broken' && action !== 'health-check' && !isMigrationAction) {
-      throw new Error("Conexão com o inquilino interrompida (Service Role Key Inválida). Verifique as configurações.");
+      throw new Error("Conexao com o inquilino interrompida (Service Role Key Invalida). Verifique as configuracoes.");
     }
   }
 

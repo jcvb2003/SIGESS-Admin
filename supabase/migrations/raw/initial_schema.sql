@@ -1,8 +1,4 @@
-// SIGESS INITIAL SCHEMA - RECONSTRUCTED FROM SINPESCA-OEIRAS
-// Generated at: 2026-04-27
-// Source Project: tnrzxuznerneilxoojgv
-
-export const initialSchemaSql = `-- SIGESS INITIAL SCHEMA
+-- SIGESS INITIAL SCHEMA
 -- FONTE: SINPESCA-OEIRAS (tnrzxuznerneilxoojgv)
 -- RECONSTRUÇÃO TOTAL "ZERO ABSOLUTO"
 
@@ -613,11 +609,25 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- STORAGE POLICIES
-CREATE POLICY "Acesso total para usuários autenticados_documentos" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'documentos'::text);
-CREATE POLICY "Public Access" ON storage.objects FOR SELECT TO public USING (bucket_id = 'fotos'::text);
-CREATE POLICY "Acesso total para usuários autenticados_fotos" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'fotos'::text);
-CREATE POLICY "Acesso público para visualização de branding" ON storage.objects FOR SELECT TO public USING (bucket_id = 'branding'::text);
-CREATE POLICY "Acesso total para usuários autenticados no branding" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'branding'::text) WITH CHECK (bucket_id = 'branding'::text);
+DO $$ BEGIN
+  CREATE POLICY "Acesso total para usuários autenticados_documentos" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'documentos'::text);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Public Access" ON storage.objects FOR SELECT TO public USING (bucket_id = 'fotos'::text);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Acesso total para usuários autenticados_fotos" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'fotos'::text);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Acesso público para visualização de branding" ON storage.objects FOR SELECT TO public USING (bucket_id = 'branding'::text);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Acesso total para usuários autenticados no branding" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'branding'::text) WITH CHECK (bucket_id = 'branding'::text);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 12. AUTH TRIGGERS (Sync public.User)
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'pg_temp' AS $function$
@@ -654,4 +664,3 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'Erro ao configurar Auth Triggers: %', SQLERRM;
 END $$;
-`;

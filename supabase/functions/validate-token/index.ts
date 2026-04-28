@@ -22,7 +22,7 @@ serve(async (req: Request) => {
       const err = await res.json().catch(() => ({}));
       return new Response(JSON.stringify({ 
         valid: false, 
-        message: err.message || "Token inválido ou sem permissões." 
+        message: err.message || "Token invalido ou sem permissoes." 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -41,7 +41,7 @@ serve(async (req: Request) => {
   } catch (error) {
     return new Response(JSON.stringify({ 
       valid: false, 
-      message: error instanceof Error ? error.message : "Erro interno de validação" 
+      message: error instanceof Error ? error.message : "Erro interno de validacao" 
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,

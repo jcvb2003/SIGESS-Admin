@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ── list_devices ─────────────────────────────────────────────────────────
+    // ?? list_devices ?????????????????????????????????????????????????????????
     if (action === "list_devices") {
       const fingerprints = (license.fingerprints ?? []) as string[]
       const metadata = (license.device_metadata ?? {}) as Record<string, string>
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ── deactivate_device ────────────────────────────────────────────────────
+    // ?? deactivate_device ????????????????????????????????????????????????????
     if (action === "deactivate_device") {
       if (!fingerprint) {
         return new Response(
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
 
       if (rpcError) throw rpcError
 
-      // REALTIME BROADCAST: Notifica a extensão para invalidar o cache
+      // REALTIME BROADCAST: Notifica a extensao para invalidar o cache
       if (result.ok) {
         console.info(`[Broadcast] Invaliding license cache: ${key}`);
         const channel = supabase.channel(`sigess:license:${key}`)
@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
               payload: { fingerprint }
             })
             console.info(`[Broadcast] Signal sent for device ${fingerprint}:`, resp);
-            // Remove o canal após o envio para não deixar conexões abertas
+            // Remove o canal apos o envio para nao deixar conexoes abertas
             await supabase.removeChannel(channel)
           }
         })

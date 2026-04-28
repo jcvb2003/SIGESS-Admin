@@ -1,4 +1,3 @@
-export const seedSql = `
 -- SIGESS Seed Data
 -- Default data for fresh project initialization
 
@@ -38,4 +37,3 @@ INSERT INTO public.entidade (
 INSERT INTO public.configuracao_entidade (id, max_socios, cor_primaria, cor_secundaria, cor_sidebar)
 VALUES (1, 100, '160 84% 39%', '152 69% 41%', '0 0% 98%')
 ON CONFLICT DO NOTHING;
-`;

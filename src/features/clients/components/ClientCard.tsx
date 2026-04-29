@@ -1,4 +1,4 @@
-import { MoreVertical, Trash2, ExternalLink } from "lucide-react";
+import { MoreVertical, Trash2, ExternalLink, CreditCard } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { ptBR } from "date-fns/locale";
 interface ClientCardProps {
   client: Client;
   onDelete: (client: Client) => void;
+  onSubscription: (client: Client) => void;
   onClick: (client: Client) => void;
 }
 
@@ -81,6 +82,10 @@ export function ClientCard({ client, onDelete, onClick }: ClientCardProps) {
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(client.supabase_url, '_blank'); }}>
               <ExternalLink className="mr-2 h-4 w-4" />
               Abrir Supabase
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSubscription(client); }}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Assinatura
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={(e) => { e.stopPropagation(); onDelete(client); }}

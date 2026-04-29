@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket, Trash2, Info, Settings2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Users, HardDrive, Table, Loader2, RefreshCw, AlertCircle, Pencil, Rocket, Trash2, Info, Settings2, Eye, EyeOff, ShieldCheck, CreditCard } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { ptBR } from "date-fns/locale";
 import {
   useClientDetail,
   EditClientModal,
+  SubscriptionModal,
   DeleteClientDialog,
   useDeleteClient,
   HealthCheckCard,
@@ -47,6 +48,7 @@ export default function ClientDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
@@ -67,9 +69,10 @@ export default function ClientDetailPage() {
     staleTime: 1000 * 60 * 10, // 10 minutes cache
   });
 
-  // Query for users
+  // Query for users count only (uses different queryKey to avoid cache collision with UsersTab)
+  // UsersTab has its own query with full role/ativo mapping under ["client-users", id]
   const { data: users = [] } = useQuery({
-    queryKey: ["client-users", id],
+    queryKey: ["client-users-count", id],
     queryFn: async () => {
       const data = await proxyAction(id!, "list-client-members");
       return (data.users || []).map((u: Record<string, unknown>) => ({
@@ -112,6 +115,7 @@ export default function ClientDetailPage() {
       await Promise.all([
         refetchClient(),
         queryClient.invalidateQueries({ queryKey: ['client-buckets', id] }),
+        queryClient.invalidateQueries({ queryKey: ['client-users-count', id] }),
         queryClient.invalidateQueries({ queryKey: ['client-users', id] }),
         queryClient.invalidateQueries({ queryKey: ['client-tables', id] }),
       ]);
@@ -336,6 +340,10 @@ export default function ClientDetailPage() {
               <Pencil className="mr-2 h-4 w-4" />
               Editar
             </Button>
+            <Button variant="outline" onClick={() => setSubscriptionOpen(true)}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Assinatura
+            </Button>
             <Button variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="mr-2 h-4 w-4" />
               Excluir
@@ -451,6 +459,13 @@ export default function ClientDetailPage() {
           client={client}
           open={editOpen}
           onOpenChange={setEditOpen}
+          onUpdated={() => refetchClient()}
+        />
+
+        <SubscriptionModal
+          client={client}
+          open={subscriptionOpen}
+          onOpenChange={setSubscriptionOpen}
           onUpdated={() => refetchClient()}
         />
 

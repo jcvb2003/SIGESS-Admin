@@ -632,15 +632,28 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- 12. AUTH TRIGGERS (Sync public.User)
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'pg_temp' AS $function$
 BEGIN
-  INSERT INTO public."User" (id, email, role)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_app_meta_data->>'role', 'user'))
-  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = COALESCE(EXCLUDED.role, public."User".role);
+  INSERT INTO public."User" (id, email, role, ativo)
+  VALUES (
+    NEW.id, 
+    NEW.email, 
+    COALESCE(NEW.raw_app_meta_data->>'role', 'user'),
+    (NEW.banned_until IS NULL OR NEW.banned_until < NOW())
+  )
+  ON CONFLICT (id) DO UPDATE SET 
+    email = EXCLUDED.email, 
+    role = COALESCE(EXCLUDED.role, public."User".role),
+    ativo = EXCLUDED.ativo;
   RETURN NEW;
 END; $function$;
 
 CREATE OR REPLACE FUNCTION public.handle_update_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'pg_temp' AS $function$
 BEGIN
-  UPDATE public."User" SET email = NEW.email WHERE id = NEW.id;
+  UPDATE public."User" 
+  SET 
+    email = NEW.email,
+    role = COALESCE(NEW.raw_app_meta_data->>'role', public."User".role),
+    ativo = (NEW.banned_until IS NULL OR NEW.banned_until < NOW())
+  WHERE id = NEW.id;
   RETURN NEW;
 END; $function$;
 
@@ -664,3 +677,120 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'Erro ao configurar Auth Triggers: %', SQLERRM;
 END $$;
+
+-- 12.1 FUNÇÕES AUXILIARES E RPCS
+CREATE OR REPLACE FUNCTION public.get_birthday_members(p_day integer, p_month integer)
+ RETURNS TABLE(id uuid, nome text, cpf text, data_de_nascimento date)
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT s.id, s.nome, s.cpf, s.data_de_nascimento
+  FROM public.socios s
+  WHERE 
+    EXTRACT(DAY FROM s.data_de_nascimento) = p_day AND
+    EXTRACT(MONTH FROM s.data_de_nascimento) = p_month
+  ORDER BY s.nome ASC;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_finance_audit_log_v1(p_table_name text DEFAULT NULL::text, p_operation text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, table_name text, record_id uuid, operation text, old_data jsonb, new_data jsonb, changed_by uuid, user_nome text, user_email text, created_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path = public
+AS $$
+DECLARE
+    v_admin_count int;
+BEGIN
+    SELECT count(*) INTO v_admin_count FROM public."User" u
+    WHERE u.id = auth.uid() AND u.role = 'admin';
+    
+    IF v_admin_count = 0 THEN
+        RAISE EXCEPTION 'Acesso negado: Requer privilégios de administrador.';
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        a.id,
+        a.table_name,
+        a.record_id,
+        a.operation,
+        a.old_data,
+        a.new_data,
+        a.changed_by,
+        u.nome as user_nome,
+        u.email as user_email,
+        a.created_at
+    FROM public.audit_log_financeiro a
+    LEFT JOIN public."User" u ON u.id = a.changed_by
+    WHERE (p_table_name IS NULL OR a.table_name = p_table_name)
+      AND (p_operation IS NULL OR a.operation = p_operation)
+    ORDER BY a.created_at DESC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_finance_tab_counts(p_year integer DEFAULT NULL::integer, p_ano_base integer DEFAULT 2024, p_search_term text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE
+ SECURITY DEFINER
+ SET search_path = public
+AS $$
+DECLARE
+  v_year integer;
+  v_required_years integer[];
+  v_result jsonb;
+  v_todos bigint;
+  v_isentos bigint;
+  v_liberados bigint;
+  v_em_dia bigint;
+BEGIN
+  v_year := COALESCE(p_year, EXTRACT(YEAR FROM CURRENT_DATE)::integer);
+  v_required_years := ARRAY(SELECT generate_series(p_ano_base, v_year));
+
+  SELECT
+    COUNT(*),
+    COUNT(*) FILTER (WHERE isento = true),
+    COUNT(*) FILTER (WHERE liberado_presidente = true),
+    COUNT(*) FILTER (
+      WHERE isento = false
+        AND liberado_presidente = false
+        AND anuidades_pagas @> v_required_years
+    )
+  INTO v_todos, v_isentos, v_liberados, v_em_dia
+  FROM v_situacao_financeira_socio
+  WHERE (p_search_term = '' OR nome ILIKE '%' || p_search_term || '%'
+         OR cpf ILIKE '%' || p_search_term || '%');
+
+  v_result := jsonb_build_object(
+    'todos', v_todos,
+    'em-dia', v_em_dia,
+    'inadimplentes', GREATEST(v_todos - COALESCE(v_em_dia, 0) - COALESCE(v_isentos, 0) - COALESCE(v_liberados, 0), 0),
+    'liberados', COALESCE(v_liberados, 0),
+    'isentos', COALESCE(v_isentos, 0)
+  );
+
+  RETURN v_result;
+END;
+$$;
+
+-- 13. PERMISSÕES (GRANTS)
+-- Garantir permissões de uso no schema public
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+-- Garantir permissões em todas as tabelas, sequências e funções
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Configurar permissões padrão para futuros objetos
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;

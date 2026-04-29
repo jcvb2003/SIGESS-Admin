@@ -4,7 +4,7 @@ import { Plus, Users, Loader2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/features/dashboard";
-import { useClients, useDeleteClient, ClientCard, AddTenantDialog, DeleteClientDialog } from "@/features/clients";
+import { useClients, useDeleteClient, ClientCard, AddTenantDialog, DeleteClientDialog, SubscriptionModal } from "@/features/clients";
 import { type Client } from "@/features/clients/types";
 
 export default function ClientsPage() {
@@ -15,6 +15,8 @@ export default function ClientsPage() {
   const deleteClientMutation = useDeleteClient();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [clientForSubscription, setClientForSubscription] = useState<Client | null>(null);
 
   const handleClientClick = (client: Client) => {
     navigate(`/clients/${client.id}`);
@@ -23,6 +25,11 @@ export default function ClientsPage() {
   const handleDeleteClick = (client: Client) => {
     setClientToDelete(client);
     setDeleteDialogOpen(true);
+  };
+
+  const handleSubscriptionClick = (client: Client) => {
+    setClientForSubscription(client);
+    setSubscriptionOpen(true);
   };
 
   const handleConfirmDelete = async () => {
@@ -81,6 +88,7 @@ export default function ClientsPage() {
               key={client.id}
               client={client}
               onDelete={() => handleDeleteClick(client)}
+              onSubscription={() => handleSubscriptionClick(client)}
               onClick={() => handleClientClick(client)}
             />
           ))}
@@ -113,6 +121,14 @@ export default function ClientsPage() {
             onOpenChange={setDeleteDialogOpen}
             clientName={clientToDelete.nome_entidade}
             onConfirm={handleConfirmDelete}
+          />
+        )}
+
+        {clientForSubscription && (
+          <SubscriptionModal
+            client={clientForSubscription}
+            open={subscriptionOpen}
+            onOpenChange={setSubscriptionOpen}
           />
         )}
       </div>

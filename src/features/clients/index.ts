@@ -11,3 +11,4 @@ export * from "./components/MigrationsTab";
 export * from "./components/TablesTab";
 export * from "./components/UsersTab";
 export * from "./components/DeleteClientDialog";
+export * from "./components/SubscriptionModal";

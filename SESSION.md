@@ -6,7 +6,8 @@
 - **Edge Functions**: `tenant-onboarding` e `client-proxy` refatoradas, deploiadas e validadas.
 - **Onboarding Rayssa**: **CONCLUÍDO COM SUCESSO**. O projeto `jmahgvgtjstklabwkkit` foi configurado e as migrações aplicadas.
 - **Idempotência**: Corrigido o erro de "Policy already exists" adicionando blocos `DO $$ BEGIN ... EXCEPTION` no SQL de esquema.
-- **UI Progress**: Corrigida a contagem de passos na função de onboarding (agora 8/8 passos).
+- **UI Progress**: Corrigida a contagem de passos na função de onboarding (Progresso 8/8).
+- **Limpeza**: Removido o arquivo `migrations_bundle.ts` e scripts de scratch.
 
 ## Notas Técnicas
 - As Edge Functions agora usam `TextDecoder('utf-8')` eliminando erros de encoding.
@@ -14,7 +15,6 @@
 - A ferramenta `sync-migrations.cjs` deve ser usada sempre que o esquema local for alterado.
 
 ## Próximos Passos
-- [ ] Limpeza: Remover o arquivo `supabase/functions/_shared/migrations_bundle.ts` (obsoleto).
 - [ ] Documentação: Adicionar nota no README sobre como atualizar o esquema via Storage.
 
 ---

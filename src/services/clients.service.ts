@@ -44,7 +44,19 @@ export async function proxyAction(
     body: { clientId, action, params }
   });
 
-  if (error) throw error;
+  if (error) {
+    // FunctionsHttpError.context is the raw Response — extract the real message
+    const ctx = (error as any).context as Response | undefined;
+    if (ctx) {
+      try {
+        const body = await ctx.clone().json();
+        if (body?.error) throw new Error(body.error);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== 'body used already') throw parseErr;
+      }
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
 
   return data;

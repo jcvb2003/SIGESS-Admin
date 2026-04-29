@@ -62,29 +62,18 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
     queryKey: ["client-users", clientId],
     queryFn: async () => {
       const data = await proxyAction(clientId, "list-client-members");
-      return (data.users || []).map((u: { 
-        id: string; 
-        email?: string; 
-        user_metadata?: { nome?: string };
-        created_at: string; 
-        last_sign_in_at?: string; 
-        acesso_expira_em?: string; 
-        max_socios?: number; 
-        role?: string;
-        isAdmin?: boolean; 
-        ban_duration?: string;
-        hasLegacyMetadata?: boolean;
-      }) => ({
+      console.log('DEBUG: Proxy response for client', clientId, data);
+      return (data.users || []).map((u: any) => ({
         id: u.id,
         email: u.email || "Sem email",
-        name: u.user_metadata?.nome || null,
+        name: u.nome || u.user_metadata?.nome || u.user_metadata?.full_name || null,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at || null,
         acesso_expira_em: u.acesso_expira_em || null,
         max_socios: u.max_socios || null,
         role: u.role || (u.isAdmin ? 'admin' : 'user'),
         isAdmin: u.isAdmin || false,
-        isActive: !u.ban_duration || u.ban_duration === 'none',
+        isActive: u.ativo !== false,
         hasLegacyMetadata: u.hasLegacyMetadata
       }));
     },

@@ -1,7 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import { handleSupabaseError } from "./error.handler";
-import type { DocumentTemplate, DocumentField } from "@/features/documents/types";
 import type { Database } from "./supabase.types";
+
+// Tipos temporários caso a feature documents tenha sido removida
+export type DocumentTemplate = any;
+export type DocumentField = any;
 
 export const documentsService = {
   async listTemplates(): Promise<DocumentTemplate[]> {

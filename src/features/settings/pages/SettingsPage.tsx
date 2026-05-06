@@ -1,8 +1,6 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ProfileSettings } from "../components/ProfileSettings";
-import { NotificationSettings } from "../components/NotificationSettings";
 import { SecuritySettings } from "../components/SecuritySettings";
-import { DatabaseSettings } from "../components/DatabaseSettings";
 import { SupabaseAccountsSettings } from "../components/SupabaseAccountsSettings";
 import { IntegrationSettings } from "../components/IntegrationSettings";
 
@@ -20,9 +18,7 @@ export default function SettingsPage() {
 
         <div className="grid gap-6 max-w-2xl">
           <ProfileSettings />
-          <NotificationSettings />
           <SecuritySettings />
-          <DatabaseSettings />
           <SupabaseAccountsSettings />
           <IntegrationSettings />
         </div>

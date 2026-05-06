@@ -1,6 +1,7 @@
 export interface Client {
   id: string;
   nome_entidade: string;
+  tenant_code: string | null;
   email: string | null;
   telefone: string | null;
   supabase_url: string;

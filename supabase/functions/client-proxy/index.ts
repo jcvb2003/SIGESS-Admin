@@ -26,6 +26,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const BLOCKED = [
+  /DROP\s+TABLE/i,
+  /DROP\s+SCHEMA/i,
+  /TRUNCATE/i,
+  /ALTER\s+TYPE/i,
+  /DELETE\s+FROM\s+\w+\s*($|;|\s+WHERE\s+true)/i,
+];
+
+function isSafe(sql: string) {
+  return !BLOCKED.some((r) => r.test(sql));
+}
+
 async function listUsers(clientUrl: string, clientKey: string) {
   const res = await fetch(`${clientUrl}/auth/v1/admin/users?page=1&per_page=100`, {
     headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
@@ -403,6 +415,25 @@ async function validateKeyLazy(supabaseAdmin: SupabaseClient, clientId: string, 
   return { status: currentStatus };
 }
 
+async function runSql(projectUrl: string, accessToken: string, sql: string) {
+  const projectRef = projectUrl.split(".")[0].split("//")[1];
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: sql }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(`Management API error: ${err.message || res.status}`);
+  }
+
+  return await res.json();
+}
+
 async function healthCheck(clientUrl: string, clientKey?: string) {
   if (!clientKey) {
     // Legacy/Basic check if key not provided
@@ -423,107 +454,222 @@ async function healthCheck(clientUrl: string, clientKey?: string) {
   };
 }
 
-async function getMigrationsStatus(tenantId: string, supabaseAdmin: SupabaseClient, migrationNames: string[] = []) {
-  const { data: appliedMigrations, error } = await supabaseAdmin
-    .from("schema_migrations")
-    .select("migration_name, status, applied_at, error_detail")
-    .eq("tenant_id", tenantId);
+async function getOeirasConfig(supabaseAdmin: SupabaseClient) {
+  const { data: oeiras, error } = await supabaseAdmin
+    .from("entidades")
+    .select("id, nome_entidade, supabase_url, supabase_secret_keys, supabase_access_token")
+    .eq("tenant_code", "sinpesca-oeiras")
+    .single();
+  if (error || !oeiras) throw new Error("Oeiras (Fonte de Verdade) não encontrada no cadastro de entidades");
+  return oeiras;
+}
 
-  if (error) {
-    console.error("Warning: Could not fetch schema_migrations:", error);
-  }
+async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
+  // 1. Lê OEIRAS UMA ÚNICA VEZ
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  const oeirasMigrations = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token!,
+    "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version ASC"
+  );
+  const oeirasVersions = (oeirasMigrations || []).map((m: any) => m.version);
+  const latestOeirasVersion = oeirasVersions.at(-1) ?? null;
+  const oeirasTotal = oeirasVersions.length;
 
-  // migrationNames comes from Admin Panel (Frontend Injection)
-  const sortedNames = [...migrationNames].sort((a, b) => a.localeCompare(b));
+  // 2. Lê todos os tenants do Admin (exceto OEIRAS)
+  const { data: tenants, error } = await supabaseAdmin
+    .from("entidades")
+    .select("id, nome_entidade, supabase_url, supabase_access_token")
+    .neq("tenant_code", "sinpesca-oeiras")
+    .not("supabase_access_token", "is", null);
 
-  let appliedCount = 0;
-  let failedCount = 0;
-  let pendingCount = 0;
+  if (error) throw new Error(`Erro ao buscar tenants: ${error.message}`);
 
-  interface SchemaMigration {
-    migration_name: string;
-    status: string;
-    applied_at: string;
-    error_detail: string | null;
-  }
+  // 3. Calcula diff para cada tenant (sequencial — evita fan-out)
+  const results: Record<string, any> = {};
 
-  const migrations = sortedNames.map(name => {
-    const logs = (appliedMigrations as SchemaMigration[] || []).filter(m => m.migration_name === name);
-    const successLog = logs.find(m => m.status === 'success');
-    // Get most recent failure if any
-    const failLog = logs.slice().sort((a, b) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime()).find(m => m.status === 'failed');
+  // Inclui OEIRAS como sincronizado
+  results[oeiras.id] = {
+    tenantName: oeiras.nome_entidade,
+    latestOeirasVersion,
+    latestTenantVersion: latestOeirasVersion,
+    pendingCount: 0,
+    pending: [],
+    hasPending: false,
+    applied: oeirasTotal,
+    total: oeirasTotal,
+  };
 
-    if (successLog) {
-      appliedCount++;
-      return { name, status: 'success', appliedAt: successLog.applied_at, error: null };
-    } else if (failLog) {
-      failedCount++;
-      return { name, status: 'failed', appliedAt: failLog.applied_at, error: failLog.error_detail };
-    } else {
-      pendingCount++;
-      return { name, status: 'pending', appliedAt: null, error: null };
+  for (const tenant of tenants ?? []) {
+    try {
+      let tenantVersions: string[] = [];
+      try {
+        const rows = await runSql(
+          tenant.supabase_url,
+          tenant.supabase_access_token!,
+          "SELECT version FROM supabase_migrations.schema_migrations"
+        );
+        tenantVersions = (rows || []).map((r: any) => r.version);
+      } catch {
+        // Tenant sem tabela ainda — tudo pendente
+      }
+
+      const tenantVersionSet = new Set(tenantVersions);
+      const pending = oeirasVersions.filter(v => !tenantVersionSet.has(v));
+
+      results[tenant.id] = {
+        tenantName: tenant.nome_entidade,
+        latestOeirasVersion,
+        latestTenantVersion: tenantVersions.at(-1) ?? null,
+        pendingCount: pending.length,
+        pending,
+        hasPending: pending.length > 0,
+      };
+    } catch (e) {
+      results[tenant.id] = {
+        tenantName: tenant.nome_entidade,
+        error: e instanceof Error ? e.message : String(e),
+        hasPending: false,
+        pendingCount: 0,
+      };
     }
+  }
+
+  return { 
+    success: true, 
+    oeirasVersion: latestOeirasVersion, 
+    oeirasTotal,
+    tenants: results 
+  };
+}
+
+async function getMigrationsStatus(tenantId: string, clientUrl: string, clientKey: string, supabaseAdmin: SupabaseClient) {
+  // 1. Get Oeiras Config (Fonte de Verdade)
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  
+  // 2. Read Oeiras migrations via Management API
+  const oeirasMigrations = await runSql(
+    oeiras.supabase_url, 
+    oeiras.supabase_access_token!, 
+    "SELECT version, name, statements FROM supabase_migrations.schema_migrations ORDER BY version ASC"
+  );
+
+  // 3. Read Target Tenant migrations (Direct Source of Truth) via Management API
+  const client = await getClientConfig(supabaseAdmin, tenantId);
+  let tenantMigrations = [];
+  try {
+    tenantMigrations = await runSql(
+      client.supabase_url,
+      client.supabase_access_token!,
+      "SELECT version FROM supabase_migrations.schema_migrations"
+    );
+  } catch (e) {
+    console.warn(`Aviso: Erro ao ler migrations do tenant ${tenantId}: ${e.message}`);
+  }
+
+  const existingMap = new Map(tenantMigrations?.map((m: any) => [m.version, true]) || []);
+
+  const migrations = (oeirasMigrations || []).map((m: any) => {
+    const isApplied = existingMap.has(m.version);
+    return {
+      version: m.version,
+      name: `${m.version}_${m.name}`,
+      status: isApplied ? 'success' : 'pending',
+      appliedAt: null, // Removido por inconsistência entre versões do CLI
+      statementsCount: m.statements?.length || 0
+    };
   });
+
+  const appliedCount = migrations.filter(m => m.status === 'success').length;
+  const pendingCount = migrations.length - appliedCount;
 
   return {
     success: true,
     total: migrations.length,
     applied: appliedCount,
-    failed: failedCount,
     pending: pendingCount,
-    hasPending: pendingCount > 0 || failedCount > 0,
+    hasPending: pendingCount > 0,
     migrations
   };
 }
 
 async function executeMigration(
-  projectUrl: string, 
-  accessToken: string, 
   tenantId: string, 
-  supabaseAdmin: SupabaseClient,
-  sql?: string,
-  migrationName?: string
+  supabaseAdmin: SupabaseClient
 ) {
-  if (!sql || !migrationName) {
-    throw new Error("Missing SQL or migrationName for execution");
+  // 1. Get configs
+  const [oeiras, client] = await Promise.all([
+    getOeirasConfig(supabaseAdmin),
+    getClientConfig(supabaseAdmin, tenantId)
+  ]);
+
+  // 2. Fetch all migrations from Oeiras (Ground Truth)
+  const oeirasMigrations = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token!,
+    "SELECT * FROM supabase_migrations.schema_migrations ORDER BY version ASC"
+  );
+
+  // 3. Fetch applied versions from target tenant
+  let existing: { version: string }[] = [];
+  try {
+    existing = await runSql(
+      client.supabase_url,
+      client.supabase_access_token!,
+      "SELECT version FROM supabase_migrations.schema_migrations"
+    );
+  } catch (e) {
+    console.warn("Tenant likely has no schema_migrations table yet. Proceeding with full migration.");
   }
 
-  // Record attempting
-  const projectRef = projectUrl.split(".")[0].split("//")[1];
+  const existingSet = new Set(existing?.map((m: any) => m.version));
+  const pending = (oeirasMigrations || []).filter((m: any) => !existingSet.has(m.version));
 
-  console.log(`Applying injected migration ${migrationName} for tenant ${tenantId}...`);
+  if (pending.length === 0) return { success: true, message: "Já está atualizado" };
 
-  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: sql }),
-  });
+  const appliedVersions = [];
+  const tenantClient = createClient(client.supabase_url, client.supabase_secret_keys!);
 
-  if (!res.ok) {
-    const result = await res.json().catch(() => ({ message: res.statusText }));
-    const errorMsg = result.message || "Management API error (" + res.status + ")";
-    
-    await supabaseAdmin.from("schema_migrations").insert({
-      tenant_id: tenantId,
-      migration_name: migrationName,
-      status: "failed",
-      error_detail: errorMsg
-    });
+  for (const migration of pending) {
+    const statements: string[] = migration.statements;
+    if (!statements || statements.length === 0) continue;
 
-    throw new Error(`Migration ${migrationName} failed: ${errorMsg}`);
+    // Gate de segurança
+    const safeStatements = statements.filter(isSafe);
+    if (safeStatements.length !== statements.length) {
+      throw new Error(`Migration ${migration.version} bloqueada: contém comandos DDL perigosos.`);
+    }
+
+    try {
+      const sql = ['BEGIN;', ...safeStatements, 'COMMIT;'].join('\n');
+      await runSql(client.supabase_url, client.supabase_access_token!, sql);
+
+      // Registrar sucesso no Admin para observabilidade (Substitui INSERT no tenant)
+      await supabaseAdmin.from('schema_migrations').upsert({
+        tenant_id: tenantId,
+        version: migration.version,
+        migration_name: migration.name,
+        status: 'success',
+        applied_at: new Date().toISOString(),
+      }, { onConflict: 'tenant_id,version' });
+
+      appliedVersions.push(migration.version);
+    } catch (err) {
+      console.error(`Falha na migration ${migration.version}:`, err);
+      // Registra erro no Admin para diagnóstico
+      await supabaseAdmin.from('schema_migrations').upsert({
+        tenant_id: tenantId,
+        version: migration.version,
+        migration_name: migration.name,
+        status: 'error',
+        error_detail: err instanceof Error ? err.message : String(err)
+      }, { onConflict: 'tenant_id,version' });
+      
+      throw err; // Aborta para preservar ordem
+    }
   }
 
-  // Record success
-  await supabaseAdmin.from("schema_migrations").insert({
-    tenant_id: tenantId,
-    migration_name: migrationName,
-    status: "success"
-  });
-
-  return { success: true, migrationName };
+  return { success: true, appliedCount: appliedVersions.length, versions: appliedVersions };
 }
 
 /**
@@ -540,6 +686,58 @@ async function executeRawSql(projectUrl: string, accessToken: string, sql: strin
     body: JSON.stringify({ query: sql }),
   });
   return res.ok;
+}
+
+async function processDataImport(
+  tenantId: string,
+  tableName: string,
+  data: any[],
+  supabaseAdmin: SupabaseClient
+) {
+  // 1. Register import start in Admin
+  const { data: importRecord, error: startError } = await supabaseAdmin
+    .from('data_imports')
+    .insert({
+      tenant_id: tenantId,
+      tabela: tableName,
+      status: 'processing',
+      total_registros: data.length
+    })
+    .select()
+    .single();
+
+  if (startError) throw startError;
+
+  try {
+    const client = await getClientConfig(supabaseAdmin, tenantId);
+    const tenantClient = createClient(client.supabase_url, client.supabase_secret_keys);
+    
+    const { data: result, error: importError } = await tenantClient.rpc('process_data_import', {
+      p_table_name: tableName,
+      p_data: data
+    });
+
+    if (importError) throw importError;
+
+    await supabaseAdmin
+      .from('data_imports')
+      .update({
+        status: result.success ? 'completed' : 'failed',
+        erro_detalhe: result.success ? null : (result.error || "Erro desconhecido")
+      })
+      .eq('id', importRecord.id);
+
+    return result;
+  } catch (err) {
+    await supabaseAdmin
+      .from('data_imports')
+      .update({
+        status: 'failed',
+        erro_detalhe: err instanceof Error ? err.message : String(err)
+      })
+      .eq('id', importRecord.id);
+    throw err;
+  }
 }
 
 async function syncTrialLimits(
@@ -704,24 +902,22 @@ interface ClientConfig {
 }
 
 async function handleMigrationActions(action: string, clientId: string, client: ClientConfig, supabaseAdmin: SupabaseClient, params: Record<string, unknown>) {
+  if (action === "get-all-migrations-status") {
+    return await getAllMigrationsStatus(supabaseAdmin);
+  }
+
   if (action === "get-migrations-status") {
-    const safeParams = params || {};
-    const migrationNames = (safeParams.migrationNames as string[]) || [];
-    return await getMigrationsStatus(clientId, supabaseAdmin, migrationNames);
+    return await getMigrationsStatus(clientId, client.supabase_url, client.supabase_secret_keys!, supabaseAdmin);
   }
 
   if (action === "execute-migration") {
-    if (!client.supabase_access_token || !client.supabase_secret_keys) {
-      throw new Error("Supabase Access Token (PAT) ou Service Role Key n├úo configurados para este cliente");
-    }
-    return await executeMigration(
-      client.supabase_url, 
-      client.supabase_access_token, 
-      clientId, 
-      supabaseAdmin,
-      params.sql as string,
-      params.migrationName as string
-    );
+    return await executeMigration(clientId, supabaseAdmin);
+  }
+
+  if (action === "process-data-import") {
+    const { tableName, data } = params as { tableName: string, data: any[] };
+    if (!tableName || !data) throw new Error("Missing tableName or data for import");
+    return await processDataImport(clientId, tableName, data, supabaseAdmin);
   }
   return null;
 }

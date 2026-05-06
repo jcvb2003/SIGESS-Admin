@@ -7,7 +7,7 @@ import type { Client, ClientCreate, ClientUpdate } from "@/features/clients/type
 export async function listClients(): Promise<Client[]> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .order("data_cadastro", { ascending: false });
 
   if (error) throw handleSupabaseError(error);
@@ -21,7 +21,7 @@ export async function listClients(): Promise<Client[]> {
 export async function getClient(id: string): Promise<Client> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .eq("id", id)
     .single();
 
@@ -37,7 +37,7 @@ export async function getClient(id: string): Promise<Client> {
 
 export async function proxyAction(
   clientId: string, 
-  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member", 
+  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member" | "process-data-import", 
   params?: Record<string, unknown>
 ) {
   const { data, error } = await supabase.functions.invoke("client-proxy", {

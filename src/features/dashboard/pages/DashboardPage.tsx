@@ -141,11 +141,11 @@ export default function DashboardPage() {
                   <span className="text-foreground">Gerenciar Clientes</span>
                 </button>
                 <button
-                  onClick={() => navigate("/global")}
+                  onClick={() => navigate("/observability")}
                   className="flex w-full items-center gap-3 rounded-lg p-3 text-sm transition-colors hover:bg-secondary"
                 >
                   <HardDrive className="h-4 w-4 text-primary" />
-                  <span className="text-foreground">Modelos de Documentos</span>
+                  <span className="text-foreground">Centro de Comando</span>
                 </button>
               </div>
             </Card>

@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 const navigation = [
   { name: "Início", href: "/", icon: Home },
   { name: "Clientes", href: "/clients", icon: Users, showCount: true },
-  { name: "Global", href: "/global", icon: Globe },
+  { name: "Observabilidade", href: "/observability", icon: Globe },
   { name: "Licenças", href: "/licenses", icon: KeyRound },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
@@ -24,7 +24,7 @@ export function AppSidebar() {
 
   const fetchClientCount = async () => {
     try {
-      const { count, error } = await (supabase as any)
+      const { count, error } = await supabase
         .from("entidades")
         .select("*", { count: "exact", head: true });
 

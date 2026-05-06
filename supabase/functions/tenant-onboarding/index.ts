@@ -5,6 +5,178 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // @ts-expect-error: Deno-specific URL imports
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const EMAIL_INVITE_TEMPLATE = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convite para o SIGESS</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e4e4e7; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
+                    <tr>
+                        <td align="center" style="padding: 40px 40px 20px 40px;">
+                            <div style="font-size: 20px; font-weight: 800; color: #059669; letter-spacing: 1px; display: inline-block; padding: 8px 16px; background-color: #ecfdf5; border-radius: 8px; border: 1px solid #d1fae5;">
+                                SIGESS
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 10px 40px 30px 40px;">
+                            <h1 style="margin: 0 0 16px 0; font-size: 32px; line-height: 1.15; font-weight: 800; color: #27272a; text-align: center;">
+                                Simplifique a gestão da<br>
+                                sua <span style="color: #3f7356;">entidade de pesca</span>
+                            </h1>
+                            <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #71717a; text-align: center;">
+                                Chega de planilhas, cadernos e perda de tempo. O SIGESS organiza seus sócios, documentos e finanças de forma simples, segura e 100% online.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px;">
+                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                <tr><td style="border-top: 1px solid #e4e4e7;"></td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" style="padding: 30px 40px 10px 40px;">
+                            <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">Olá,</p>
+                            <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">
+                                Você foi convidado(a) para criar um usuário administrativo no <strong>SIGESS</strong> através do portal <a href="https://app.sigess.com.br" style="color: #059669; text-decoration: none;">app.sigess.com.br</a>.
+                            </p>
+                            <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">
+                                Para aceitar o convite e definir sua senha de acesso, clique no botão abaixo:
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px 40px 40px;">
+                            <table border="0" cellspacing="0" cellpadding="0">
+                                <tr>
+                                    <td align="center" style="border-radius: 6px;" bgcolor="#059669">
+                                        <a href="{{ .ConfirmationURL }}" target="_blank" style="font-size: 16px; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff; text-decoration: none; border-radius: 6px; padding: 14px 32px; border: 1px solid #059669; display: inline-block;">
+                                            Aceitar Convite e Acessar
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px 30px 40px; background-color: #fafafa;">
+                            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a1a1aa; padding-top: 30px;">
+                                Se o botão não funcionar, copie e cole este link no seu navegador:<br>
+                                <a href="{{ .ConfirmationURL }}" style="color: #059669; word-break: break-all; text-decoration: underline;">{{ .ConfirmationURL }}</a>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px;">
+                    <tr>
+                        <td align="center" style="padding: 24px 20px;">
+                            <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #a1a1aa;">
+                                © SIGESS - Sistema de Gestão para Entidades de Pesca.<br>
+                                Se você não esperava por este convite, pode ignorar este email com segurança.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>\`;
+
+const EMAIL_RECOVERY_TEMPLATE = \`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinição de Senha — SIGESS</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e4e4e7; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);">
+                    <tr>
+                        <td align="center" style="padding: 40px 40px 20px 40px;">
+                            <div style="font-size: 20px; font-weight: 800; color: #059669; letter-spacing: 1px; display: inline-block; padding: 8px 16px; background-color: #ecfdf5; border-radius: 8px; border: 1px solid #d1fae5;">
+                                SIGESS
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 10px 40px 30px 40px;">
+                            <h1 style="margin: 0 0 16px 0; font-size: 32px; line-height: 1.15; font-weight: 800; color: #27272a; text-align: center;">
+                                Redefinição de<br>
+                                <span style="color: #3f7356;">senha de acesso</span>
+                            </h1>
+                            <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #71717a; text-align: center;">
+                                Recebemos uma solicitação para redefinir a senha da sua conta no SIGESS. Se não foi você, ignore este email.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px;">
+                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                <tr><td style="border-top: 1px solid #e4e4e7;"></td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" style="padding: 30px 40px 10px 40px;">
+                            <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">Olá,</p>
+                            <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">
+                                Clique no botão abaixo para criar uma nova senha para a sua conta <strong>{{ .Email }}</strong> no SIGESS.
+                            </p>
+                            <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.5; color: #3f3f46;">
+                                Este link é válido por <strong>1 hora</strong> e pode ser usado apenas uma vez.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px 40px 40px;">
+                            <table border="0" cellspacing="0" cellpadding="0">
+                                <tr>
+                                    <td align="center" style="border-radius: 6px;" bgcolor="#059669">
+                                        <a href="{{ .ConfirmationURL }}" target="_blank" style="font-size: 16px; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff; text-decoration: none; border-radius: 6px; padding: 14px 32px; border: 1px solid #059669; display: inline-block;">
+                                            Redefinir Minha Senha
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 0 40px 30px 40px; background-color: #fafafa;">
+                            <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a1a1aa; padding-top: 30px;">
+                                Se o botão não funcionar, copie e cole este link no seu navegador:<br>
+                                <a href="{{ .ConfirmationURL }}" style="color: #059669; word-break: break-all; text-decoration: underline;">{{ .ConfirmationURL }}</a>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px;">
+                    <tr>
+                        <td align="center" style="padding: 24px 20px;">
+                            <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #a1a1aa;">
+                                © SIGESS - Sistema de Gestão para Entidades de Pesca.<br>
+                                Se você não solicitou a redefinição de senha, ignore este email. Sua senha permanece a mesma.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>\`;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -192,6 +364,10 @@ async function setupProjectAuth(projectRef: string, token: string, resendKey: st
       smtp_admin_email: fromEmail || "noreply@sigess.com.br",
       smtp_host: "smtp.resend.com", smtp_port: "465", smtp_user: "resend", smtp_pass: resendKey,
       smtp_sender_name: "SIGESS", smtp_enabled: true,
+      mailer_subjects_invite: "Convite para acessar o SIGESS",
+      mailer_templates_invite_content: EMAIL_INVITE_TEMPLATE,
+      mailer_subjects_recovery: "Redefina sua senha no SIGESS",
+      mailer_templates_recovery_content: EMAIL_RECOVERY_TEMPLATE,
     }),
   });
   if (!res.ok) throw new Error(`Config Auth error: ${await res.text()}`);
@@ -251,7 +427,7 @@ async function registerTenantInCentral(admin: SupabaseClient, label: string, cod
   }).select('id').single();
   if (error || !tenant) throw new Error(`Failed to register tenant: ${error?.message}`);
 
-  await admin.from('schema_migrations').insert({ tenant_id: tenant.id, migration_name: 'initial_schema.sql', status: 'success' });
+  // O monitoramento de schema agora é feito via observability (schema_sync_status)
   return tenant.id;
 }
 

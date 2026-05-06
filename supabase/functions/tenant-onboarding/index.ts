@@ -89,9 +89,9 @@ const EMAIL_INVITE_TEMPLATE = `<!DOCTYPE html>
         </tr>
     </table>
 </body>
-</html>\`;
+</html>`;
 
-const EMAIL_RECOVERY_TEMPLATE = \`<!DOCTYPE html>
+const EMAIL_RECOVERY_TEMPLATE = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -175,7 +175,7 @@ const EMAIL_RECOVERY_TEMPLATE = \`<!DOCTYPE html>
         </tr>
     </table>
 </body>
-</html>\`;
+</html>`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,8 +212,8 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing Authorization header");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "");
@@ -236,12 +236,12 @@ serve(async (req: Request) => {
         supabase_account_id: payload.supabaseAccountId,
         status: "pending",
         current_step: 0,
-        total_steps: 8
+        total_steps: 7
       })
       .select("id")
       .single();
 
-    if (jobError || !job) throw new Error(`Failed to initialize job: ${jobError?.message}`);
+    if (jobError || !job) throw new Error("Failed to initialize job: " + (jobError ? jobError.message : ""));
     EdgeRuntime.waitUntil(processOnboarding(job.id, payload, supabaseAdmin));
 
     return new Response(JSON.stringify({ jobId: job.id }), {
@@ -288,15 +288,13 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
 
     const { data: accountData, error: accountErr } = await supabaseAdmin
       .from("supabase_accounts").select("management_token").eq("id", supabaseAccountId).single();
-    if (accountErr || !accountData) throw new Error(`Falha ao carregar conta Supabase: ${accountErr?.message}`);
+    if (accountErr || !accountData) throw new Error("Falha ao carregar conta Supabase: " + (accountErr ? accountErr.message : ""));
 
-    const vercelProjectId = sysConfig.vercel_project_id || Deno.env.get("VERCEL_PROJECT_ID");
-    const vercelToken = sysConfig.vercel_token || Deno.env.get("VERCEL_TOKEN");
     const resendApiKey = sysConfig.resend_api_key || Deno.env.get("RESEND_API_KEY");
     const managementToken = accountData.management_token;
 
-    if (!vercelProjectId || !vercelToken || !managementToken || !resendApiKey) {
-      throw new Error("Configuracoes incompletas (Vercel, Supabase ou Resend ausentes).");
+    if (!managementToken || !resendApiKey) {
+      throw new Error("Configuracoes incompletas (Supabase ou Resend ausentes).");
     }
 
     // 1. Keys
@@ -318,17 +316,15 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       await createAdminUser(projectUrl, serviceRoleKey, adminEmail, tempPass);
     } else {
       // Pular passo do admin se não fornecido para manter contagem consistente
-      await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
+      await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
     }
 
     // 5. Registration
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
     const entidadeId = await registerTenantInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken);
 
-    // 6. Integrations (Vercel & Stats)
-    await updateJob(supabaseAdmin, jobId, "vercel_setup", 1, undefined, entidadeId);
-    await setupVercelEnv(vercelProjectId, vercelToken, tenantCode, projectUrl, anonKey);
-    await triggerVercelRedeploy(vercelProjectId, vercelToken);
+    // 6. Finalization
+    await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, entidadeId);
     await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
 
     // 7. Finalização
@@ -346,9 +342,12 @@ async function fetchProjectKeys(projectRef: string, token: string) {
   if (!res.ok) throw new Error(`Fetch Keys error: ${await res.text()}`);
   const keys: SupabaseApiKey[] = await res.json();
   
-  const pubKey = keys.find((k) => k.api_key.startsWith("sb_publishable_"))?.api_key;
-  const anonKey = pubKey || keys.find((k) => k.name === "anon")?.api_key;
-  const serviceRoleKey = keys.find((k) => k.name === "service_role")?.api_key;
+  const publishableEntry = keys.find((k) => k.api_key.startsWith("sb_publishable_"));
+  const pubKey = publishableEntry ? publishableEntry.api_key : undefined;
+  const anonEntry = keys.find((k) => k.name === "anon");
+  const anonKey = pubKey || (anonEntry ? anonEntry.api_key : undefined);
+  const serviceRoleEntry = keys.find((k) => k.name === "service_role");
+  const serviceRoleKey = serviceRoleEntry ? serviceRoleEntry.api_key : undefined;
   
   if (!anonKey || !serviceRoleKey) throw new Error("Chaves de API (anon/publishable ou service_role) ausentes.");
   return { anonKey, serviceRoleKey };
@@ -375,7 +374,7 @@ async function setupProjectAuth(projectRef: string, token: string, resendKey: st
 
 async function fetchSqlFromStorage(supabaseAdmin: SupabaseClient, filename: string): Promise<string> {
   const { data, error } = await supabaseAdmin.storage.from('migrations').download(filename);
-  if (error || !data) throw new Error(`Storage fetch failed for ${filename}: ${error?.message}`);
+  if (error || !data) throw new Error("Storage fetch failed for " + filename + ": " + (error ? error.message : ""));
   return new TextDecoder('utf-8').decode(await data.arrayBuffer());
 }
 
@@ -425,41 +424,8 @@ async function registerTenantInCentral(admin: SupabaseClient, label: string, cod
     nome_entidade: label, tenant_code: code.toLowerCase(), supabase_url: url,
     supabase_publishable_key: anon, supabase_secret_keys: sr, supabase_access_token: pat, assinatura: 'anual'
   }).select('id').single();
-  if (error || !tenant) throw new Error(`Failed to register tenant: ${error?.message}`);
+  if (error || !tenant) throw new Error("Failed to register tenant: " + (error ? error.message : ""));
 
   // O monitoramento de schema agora é feito via observability (schema_sync_status)
   return tenant.id;
-}
-
-async function setupVercelEnv(projectId: string, token: string, code: string, url: string, key: string) {
-  const sanitizedCode = code.toUpperCase().replace(/-/g, '_');
-  const envs = [{ k: `VITE_SUPABASE_URL_${sanitizedCode}`, v: url }, { k: `VITE_SUPABASE_ANON_KEY_${sanitizedCode}`, v: key }];
-  for (const env of envs) {
-    const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ key: env.k, value: env.v, type: "plain", target: ["production", "preview"] })
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      if (!errorText.includes("already exists")) throw new Error(`Vercel Env error: ${errorText}`);
-    }
-  }
-}
-
-async function triggerVercelRedeploy(projectId: string, token: string) {
-  const res = await fetch(`https://api.vercel.com/v6/deployments?projectId=${projectId}&target=production&limit=1`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (res.ok) {
-    const data = await res.json();
-    const last = data.deployments?.[0];
-    if (last?.uid) {
-      await fetch("https://api.vercel.com/v13/deployments", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ deploymentId: last.uid, name: last.name || "sigess", target: "production" })
-      });
-    }
-  }
 }

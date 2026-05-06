@@ -1,11 +1,11 @@
 export interface Client {
   id: string;
   nome_entidade: string;
-  tenant_code: string | null;
+  tenant_code: string;
   email: string | null;
   telefone: string | null;
   supabase_url: string;
-  supabase_publishable_key: string | null;
+  supabase_publishable_key: string;
   supabase_secret_keys: string | null;
   supabase_access_token: string | null;
   logo_url: string | null;

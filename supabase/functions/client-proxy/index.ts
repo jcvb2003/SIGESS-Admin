@@ -192,7 +192,7 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
   return results;
 }
 
-async function createClientUser(clientUrl: string, clientKey: string, params?: Record<string, unknown>, limits?: { acesso_expira_em: string | null, max_socios: number | null }) {
+async function createClientUser(clientUrl: string, clientKey: string, params?: Record<string, unknown>, limits?: { acesso_expira_em: string | null, max_socios: number | null }, tenantCode?: string) {
   const { email, role, password, autoConfirm } = params as {
     email: string,
     role: string,
@@ -259,8 +259,13 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
   }
 
   // 2. Otherwise use Invite (Magic Link)
+  const inviteRedirectTo = tenantCode
+    ? `https://app.sigess.com.br/password?tenant=${encodeURIComponent(tenantCode)}`
+    : undefined;
+
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
     data: { role },
+    ...(inviteRedirectTo && { options: { redirectTo: inviteRedirectTo } }),
   });
 
   if (error) throw error;
@@ -268,7 +273,10 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
   const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
     type: 'invite',
     email,
-    options: { data: { role } }
+    options: {
+      data: { role },
+      ...(inviteRedirectTo && { redirectTo: inviteRedirectTo })
+    }
   });
 
   if (data.user) {
@@ -462,6 +470,92 @@ async function getOeirasConfig(supabaseAdmin: SupabaseClient) {
     .single();
   if (error || !oeiras) throw new Error("Oeiras (Fonte de Verdade) não encontrada no cadastro de entidades");
   return oeiras;
+}
+
+async function buildViewSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+) {
+  assertSafeIdentifier(objectName, "objectName");
+  assertSafeIdentifier(schemaName, "schema");
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const schemaLiteral = schemaName.replace(/'/g, "''");
+  const objectLiteral = objectName.replace(/'/g, "''");
+  const qualified = `${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)}`;
+
+  const viewRows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT pg_get_viewdef(format('%I.%I', '${schemaLiteral}', '${objectLiteral}')::regclass, true) AS definition`
+  );
+
+  const definition = viewRows?.[0]?.definition;
+  if (!definition) {
+    throw createHttpError(`View ${schemaName}.${objectName} não encontrada em Oeiras`, 404);
+  }
+
+  return [
+    `CREATE OR REPLACE VIEW ${qualified} AS`,
+    definition.trim().replace(/;$/, ""),
+    ";",
+    `REVOKE ALL ON TABLE ${qualified} FROM ${quoteIdentifier("anon")}, ${quoteIdentifier("authenticated")}, ${quoteIdentifier("service_role")};`,
+    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("anon")};`,
+    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("authenticated")};`,
+    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("service_role")};`,
+  ].join("\n");
+}
+
+async function applySchemaDrift(
+  clientId: string,
+  client: ClientConfig,
+  supabaseAdmin: SupabaseClient,
+  params: Record<string, unknown>,
+) {
+  const { objectType, objectName, schema = "public", mode } = params as ApplySchemaDriftParams;
+
+  if (client.tenant_code === "sinpesca-oeiras") {
+    throw createHttpError("O tenant de referência não pode ser sincronizado contra ele mesmo", 400);
+  }
+
+  if (!client.supabase_access_token) {
+    throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
+  }
+
+  if (objectType !== "view") {
+    throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
+  }
+
+  if (mode !== "dry-run" && mode !== "apply") {
+    throw createHttpError("Modo inválido", 400);
+  }
+
+  const sql = await buildViewSyncSql(supabaseAdmin, objectName, schema);
+
+  if (mode === "dry-run") {
+    return { success: true, mode, objectType, objectName, schema, sql };
+  }
+
+  try {
+    await runSql(client.supabase_url, client.supabase_access_token, sql);
+    return {
+      success: true,
+      mode,
+      objectType,
+      objectName,
+      schema,
+      sql,
+      appliedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw createHttpError(`Falha ao sincronizar ${schema}.${objectName}: ${message}`, 400);
+  }
 }
 
 async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
@@ -899,6 +993,24 @@ interface ClientConfig {
   max_socios?: number | null;
   key_status?: string;
   last_health_check_at?: string | null;
+  tenant_code?: string;
+}
+
+interface ApplySchemaDriftParams {
+  objectType: 'view';
+  objectName: string;
+  schema?: string;
+  mode: 'dry-run' | 'apply';
+}
+
+function assertSafeIdentifier(value: string, fieldName: string) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
+    throw createHttpError(`${fieldName} inválido`, 400);
+  }
+}
+
+function quoteIdentifier(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 async function handleMigrationActions(action: string, clientId: string, client: ClientConfig, supabaseAdmin: SupabaseClient, params: Record<string, unknown>) {
@@ -918,6 +1030,10 @@ async function handleMigrationActions(action: string, clientId: string, client: 
     const { tableName, data } = params as { tableName: string, data: any[] };
     if (!tableName || !data) throw new Error("Missing tableName or data for import");
     return await processDataImport(clientId, tableName, data, supabaseAdmin);
+  }
+
+  if (action === "apply-schema-drift") {
+    return await applySchemaDrift(clientId, client, supabaseAdmin, params);
   }
   return null;
 }
@@ -964,7 +1080,10 @@ async function handleAction(clientId: string, action: string, params: Record<str
 
     // If key is known to be broken, block critical management actions
     // BUT allow migration actions because they might be the fix
-    const isMigrationAction = action === 'get-migrations-status' || action === 'execute-migration';
+    const isMigrationAction =
+      action === 'get-migrations-status' ||
+      action === 'execute-migration' ||
+      action === 'apply-schema-drift';
     if (health.status === 'broken' && action !== 'health-check' && !isMigrationAction) {
       throw new Error("Conex├úo com o inquilino interrompida (Service Role Key Inv├ílida). Verifique as configura├º├Áes.");
     }
@@ -985,7 +1104,7 @@ async function handleAction(clientId: string, action: string, params: Record<str
     return await createClientUser(client.supabase_url, client.supabase_secret_keys, params, {
       acesso_expira_em: client.acesso_expira_em ?? null,
       max_socios: client.max_socios ?? null
-    });
+    }, client.tenant_code ?? undefined);
   }
 
   return await performAction(action, client.supabase_url, client.supabase_secret_keys, params);
@@ -1067,7 +1186,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
   console.log(`DEBUG: Fetching config for client ${clientId}...`);
   const { data: client, error } = await supabase
     .from("entidades")
-    .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, tenant_code")
     .eq("id", clientId)
     .single();
 

@@ -58,6 +58,20 @@ export function ClientCard({ client, onDelete, onClick }: ClientCardProps) {
                     'Status Desconhecido'
                   }
                 />
+                <span
+                  className={`h-2 w-2 rounded-full shrink-0 ${
+                    client.tenant_code && client.supabase_publishable_key
+                      ? 'bg-sky-400'
+                      : 'bg-slate-200'
+                  }`}
+                  title={
+                    client.tenant_code && client.supabase_publishable_key
+                      ? 'Config publica OK'
+                      : !client.tenant_code
+                        ? 'Config publica: tenant_code ausente'
+                        : 'Config publica: anon key ausente'
+                  }
+                />
               </h3>
               <Badge 
                 variant="default"

@@ -37,7 +37,7 @@ export async function getClient(id: string): Promise<Client> {
 
 export async function proxyAction(
   clientId: string, 
-  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member" | "process-data-import", 
+  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member" | "process-data-import" | "apply-schema-drift", 
   params?: Record<string, unknown>
 ) {
   const { data, error } = await supabase.functions.invoke("client-proxy", {

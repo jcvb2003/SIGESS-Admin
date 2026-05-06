@@ -14,56 +14,212 @@ export type Database = {
   }
   public: {
     Tables: {
+      data_imports: {
+        Row: {
+          arquivo: string | null
+          backup_path: string | null
+          created_at: string | null
+          erro_detalhe: string | null
+          executado_por: string | null
+          id: string
+          status: string | null
+          tabela: string | null
+          tenant_id: string | null
+          total_registros: number | null
+        }
+        Insert: {
+          arquivo?: string | null
+          backup_path?: string | null
+          created_at?: string | null
+          erro_detalhe?: string | null
+          executado_por?: string | null
+          id?: string
+          status?: string | null
+          tabela?: string | null
+          tenant_id?: string | null
+          total_registros?: number | null
+        }
+        Update: {
+          arquivo?: string | null
+          backup_path?: string | null
+          created_at?: string | null
+          erro_detalhe?: string | null
+          executado_por?: string | null
+          id?: string
+          status?: string | null
+          tabela?: string | null
+          tenant_id?: string | null
+          total_registros?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_imports_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "entidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      edge_function_audits: {
+        Row: {
+          current_version: number | null
+          function_slug: string
+          id: string
+          last_checked_at: string | null
+          reference_version: number | null
+          status: string | null
+          tenant_id: string | null
+          verify_jwt_current: boolean | null
+          verify_jwt_reference: boolean | null
+        }
+        Insert: {
+          current_version?: number | null
+          function_slug: string
+          id?: string
+          last_checked_at?: string | null
+          reference_version?: number | null
+          status?: string | null
+          tenant_id?: string | null
+          verify_jwt_current?: boolean | null
+          verify_jwt_reference?: boolean | null
+        }
+        Update: {
+          current_version?: number | null
+          function_slug?: string
+          id?: string
+          last_checked_at?: string | null
+          reference_version?: number | null
+          status?: string | null
+          tenant_id?: string | null
+          verify_jwt_current?: boolean | null
+          verify_jwt_reference?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edge_function_audits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "entidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entidades: {
         Row: {
           acesso_expira_em: string | null
           assinatura: string
           data_cadastro: string
           email: string | null
+          health_error_detail: string | null
           id: string
+          key_status: string | null
+          last_health_check_at: string | null
           logo_url: string | null
           max_socios: number | null
           nome_entidade: string
           supabase_access_token: string | null
-          supabase_publishable_key: string | null
+          supabase_publishable_key: string
           supabase_secret_keys: string | null
           supabase_url: string
           telefone: string | null
-          tenant_code: string | null
+          tenant_code: string
         }
         Insert: {
           acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
           email?: string | null
+          health_error_detail?: string | null
           id?: string
+          key_status?: string | null
+          last_health_check_at?: string | null
           logo_url?: string | null
           max_socios?: number | null
           nome_entidade: string
           supabase_access_token?: string | null
-          supabase_publishable_key?: string | null
+          supabase_publishable_key: string
           supabase_secret_keys?: string | null
           supabase_url: string
           telefone?: string | null
-          tenant_code?: string | null
+          tenant_code: string
         }
         Update: {
           acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
           email?: string | null
+          health_error_detail?: string | null
           id?: string
+          key_status?: string | null
+          last_health_check_at?: string | null
           logo_url?: string | null
           max_socios?: number | null
           nome_entidade?: string
           supabase_access_token?: string | null
-          supabase_publishable_key?: string | null
+          supabase_publishable_key?: string
           supabase_secret_keys?: string | null
           supabase_url?: string
           telefone?: string | null
-          tenant_code?: string | null
+          tenant_code?: string
         }
         Relationships: []
+      }
+      export_runs: {
+        Row: {
+          checksum: string | null
+          error_detail: string | null
+          executed_at: string | null
+          file_path: string | null
+          file_size_bytes: number | null
+          id: string
+          run_id: string | null
+          skip_reason: string | null
+          status: string | null
+          tabela: string | null
+          tenant_code: string | null
+          tenant_id: string | null
+          tenant_name: string | null
+        }
+        Insert: {
+          checksum?: string | null
+          error_detail?: string | null
+          executed_at?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          run_id?: string | null
+          skip_reason?: string | null
+          status?: string | null
+          tabela?: string | null
+          tenant_code?: string | null
+          tenant_id?: string | null
+          tenant_name?: string | null
+        }
+        Update: {
+          checksum?: string | null
+          error_detail?: string | null
+          executed_at?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          run_id?: string | null
+          skip_reason?: string | null
+          status?: string | null
+          tabela?: string | null
+          tenant_code?: string | null
+          tenant_id?: string | null
+          tenant_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_runs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "entidades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       licenses: {
         Row: {
@@ -80,6 +236,7 @@ export type Database = {
           max_usage: number | null
           plan: string
           status: string
+          updated_at: string | null
           usage_agro: number | null
           usage_count: number
           usage_manual: number | null
@@ -99,6 +256,7 @@ export type Database = {
           max_usage?: number | null
           plan?: string
           status?: string
+          updated_at?: string | null
           usage_agro?: number | null
           usage_count?: number
           usage_manual?: number | null
@@ -118,6 +276,7 @@ export type Database = {
           max_usage?: number | null
           plan?: string
           status?: string
+          updated_at?: string | null
           usage_agro?: number | null
           usage_count?: number
           usage_manual?: number | null
@@ -199,35 +358,79 @@ export type Database = {
         Row: {
           applied_at: string | null
           applied_by: string | null
+          checksum: string | null
           error_detail: string | null
           id: string
           migration_name: string
+          statements: string | null
           status: string | null
           tenant_id: string | null
+          version: string | null
         }
         Insert: {
           applied_at?: string | null
           applied_by?: string | null
+          checksum?: string | null
           error_detail?: string | null
           id?: string
           migration_name: string
+          statements?: string | null
           status?: string | null
           tenant_id?: string | null
+          version?: string | null
         }
         Update: {
           applied_at?: string | null
           applied_by?: string | null
+          checksum?: string | null
           error_detail?: string | null
           id?: string
           migration_name?: string
+          statements?: string | null
           status?: string | null
           tenant_id?: string | null
+          version?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "schema_migrations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "entidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schema_sync_status: {
+        Row: {
+          checked_at: string | null
+          diffs: Json | null
+          id: string
+          summary: Json | null
+          tenant_id: string | null
+          total_diffs: number | null
+        }
+        Insert: {
+          checked_at?: string | null
+          diffs?: Json | null
+          id?: string
+          summary?: Json | null
+          tenant_id?: string | null
+          total_diffs?: number | null
+        }
+        Update: {
+          checked_at?: string | null
+          diffs?: Json | null
+          id?: string
+          summary?: Json | null
+          tenant_id?: string | null
+          total_diffs?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schema_sync_status_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "entidades"
             referencedColumns: ["id"]
           },

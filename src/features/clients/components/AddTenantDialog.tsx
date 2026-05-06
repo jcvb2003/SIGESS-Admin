@@ -106,7 +106,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
     'seeding': 'Carregando dados iniciais',
     'creating_admin': 'Criando usuário Master',
     'registering_tenant': 'Registrando na Base Admin Central',
-    'vercel_setup': 'Atualizando painel de deploys...',
+    'finalizing_setup': 'Finalizando configurações públicas...',
     'completed': 'Tudo pronto!',
     'failed': 'Falha no processo'
   };

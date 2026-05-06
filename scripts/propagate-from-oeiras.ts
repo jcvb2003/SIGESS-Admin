@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { propagateFromOeiras, TenantConfig } from '../src/shared/propagate';
+import { propagateFromOeiras, TenantConfig } from '../src/features/observability/model/propagate';
 import * as dotenv from 'dotenv';
 import path from 'path';
 

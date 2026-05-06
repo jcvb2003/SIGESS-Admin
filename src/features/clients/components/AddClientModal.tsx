@@ -30,6 +30,7 @@ interface AddClientModalProps {
 export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
   const [formData, setFormData] = useState<ClientCreate & { acesso_expira_em: string | null }>({
     nome_entidade: "",
+    tenant_code: "",
     email: "",
     telefone: "",
     supabase_url: "",
@@ -90,7 +91,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.nome_entidade || !formData.supabase_url || !formData.supabase_publishable_key || !formData.supabase_secret_keys || !formData.telefone) {
+    if (!formData.nome_entidade || !formData.tenant_code || !formData.supabase_url || !formData.supabase_publishable_key || !formData.supabase_secret_keys || !formData.telefone) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
@@ -103,6 +104,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
 
       const payload: ClientCreate = {
         ...formData,
+        tenant_code: formData.tenant_code.trim().toLowerCase(),
         acesso_expira_em,
         max_socios: formData.assinatura === "trial" ? formData.max_socios : null,
       };
@@ -111,6 +113,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
       onOpenChange(false);
       setFormData({
         nome_entidade: "",
+        tenant_code: "",
         email: "",
         telefone: "",
         supabase_url: "",
@@ -148,6 +151,19 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               value={formData.nome_entidade}
               onChange={(e) => handleChange("nome_entidade", e.target.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tenant_code">Tenant Code *</Label>
+            <Input
+              id="tenant_code"
+              placeholder="ex: z2, sinpesca-breves"
+              value={formData.tenant_code}
+              onChange={(e) => handleChange("tenant_code", e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Identificador publico e critico para resolucao dinamica no Web. Use apenas letras minusculas, numeros e hifen.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

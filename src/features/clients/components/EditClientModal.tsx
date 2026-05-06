@@ -17,10 +17,11 @@ interface EditClientModalProps {
 export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditClientModalProps) {
   const [form, setForm] = useState({
     nome_entidade: client.nome_entidade,
+    tenant_code: client.tenant_code,
     email: client.email || "",
     telefone: client.telefone || "",
     supabase_url: client.supabase_url,
-    supabase_publishable_key: client.supabase_publishable_key || "",
+    supabase_publishable_key: client.supabase_publishable_key,
     supabase_secret_keys: "",
     supabase_access_token: "",
     logo_url: client.logo_url || "",
@@ -32,10 +33,11 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
     if (open) {
       setForm({
         nome_entidade: client.nome_entidade,
+        tenant_code: client.tenant_code,
         email: client.email || "",
         telefone: client.telefone || "",
         supabase_url: client.supabase_url,
-        supabase_publishable_key: client.supabase_publishable_key || "",
+        supabase_publishable_key: client.supabase_publishable_key,
         supabase_secret_keys: "",
         supabase_access_token: "",
         logo_url: client.logo_url || "",
@@ -47,10 +49,11 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
     try {
       const updatePayload: Record<string, unknown> = {
         nome_entidade: form.nome_entidade,
+        tenant_code: form.tenant_code.trim().toLowerCase(),
         email: form.email || null,
         telefone: form.telefone || null,
         supabase_url: form.supabase_url,
-        supabase_publishable_key: form.supabase_publishable_key || null,
+        supabase_publishable_key: form.supabase_publishable_key,
         logo_url: form.logo_url || null,
       };
 
@@ -87,6 +90,17 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
           <div>
             <Label>Nome da Entidade *</Label>
             <Input value={form.nome_entidade} onChange={e => update("nome_entidade", e.target.value)} />
+          </div>
+          <div>
+            <Label>Tenant Code *</Label>
+            <Input
+              value={form.tenant_code}
+              onChange={e => update("tenant_code", e.target.value)}
+              placeholder="ex: z2, sinpesca-breves"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Identificador publico e critico para resolucao dinamica no Web. Use apenas letras minusculas, numeros e hifen.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -129,7 +143,13 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button 
               onClick={handleSave} 
-              disabled={updateClientMutation.isPending || !form.nome_entidade || !form.supabase_url}
+              disabled={
+                updateClientMutation.isPending ||
+                !form.nome_entidade ||
+                !form.tenant_code.trim() ||
+                !form.supabase_url ||
+                !form.supabase_publishable_key.trim()
+              }
             >
               {updateClientMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>

@@ -30,6 +30,7 @@ import {
   DeleteClientDialog,
   EditClientModal,
   HealthCheckCard,
+  PublicConfigCard,
   SubscriptionModal,
   TablesTab,
   UsersTab,
@@ -226,8 +227,9 @@ export default function ClientDetailPage() {
 
   const renderDetailsContent = () => (
     <div className="space-y-6 animate-fade-in-up">
-      <div className="max-w-md">
+      <div className="grid gap-4 md:grid-cols-2">
         <HealthCheckCard clientId={client.id} />
+        <PublicConfigCard client={client} />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

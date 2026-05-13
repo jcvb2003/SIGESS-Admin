@@ -472,6 +472,80 @@ async function getOeirasConfig(supabaseAdmin: SupabaseClient) {
   return oeiras;
 }
 
+const CANONICAL_AUTH_CONFIG_FIELDS = new Set([
+  "site_url",
+  "uri_allow_list",
+  "mailer_subjects_invite",
+  "mailer_templates_invite_content",
+  "mailer_subjects_recovery",
+  "mailer_templates_recovery_content",
+]);
+
+function extractProjectRef(projectUrl: string) {
+  return new URL(projectUrl).hostname.split(".")[0];
+}
+
+async function fetchProjectAuthConfig(projectUrl: string, accessToken: string) {
+  const projectRef = extractProjectRef(projectUrl);
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw createHttpError(
+      `Management API Error (${projectRef}) [${res.status}]: ${await res.text()}`,
+      502,
+    );
+  }
+
+  return await res.json();
+}
+
+async function patchProjectAuthConfig(projectUrl: string, accessToken: string, payload: Record<string, unknown>) {
+  const projectRef = extractProjectRef(projectUrl);
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw createHttpError(
+      `Management API Error (${projectRef}) [${res.status}]: ${await res.text()}`,
+      502,
+    );
+  }
+
+  return await res.json();
+}
+
+async function buildAuthConfigSyncPlan(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+) {
+  if (!CANONICAL_AUTH_CONFIG_FIELDS.has(objectName)) {
+    throw createHttpError(`Campo auth_config ainda nÃ£o suportado: ${objectName}`, 400);
+  }
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
+  }
+
+  const oeirasConfig = await fetchProjectAuthConfig(oeiras.supabase_url, oeiras.supabase_access_token);
+  const value = oeirasConfig?.[objectName];
+
+  return {
+    payload: { [objectName]: value },
+    preview: `PATCH /config/auth\n${JSON.stringify({ [objectName]: value }, null, 2)}`,
+  };
+}
+
 async function buildViewSyncSql(
   supabaseAdmin: SupabaseClient,
   objectName: string,
@@ -675,9 +749,46 @@ async function buildPolicySyncSql(
   return [dropSql, `${createParts.join(" ")};`].join("\n");
 }
 
+async function buildGrantSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: grantee } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+  assertSafeIdentifier(grantee, "grantee");
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
+     FROM information_schema.role_table_grants
+     WHERE table_schema = '${escapeLiteral(schemaName)}'
+       AND table_name = '${escapeLiteral(tableName)}'
+       AND grantee = '${escapeLiteral(grantee)}'`,
+  );
+
+  const privileges = rows?.[0]?.privileges as string | null | undefined;
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+  const quotedRole = roleToSql(grantee);
+  const statements = [`REVOKE ALL ON TABLE ${qualifiedTable} FROM ${quotedRole};`];
+
+  if (privileges && privileges.trim().length > 0) {
+    statements.push(`GRANT ${privileges} ON TABLE ${qualifiedTable} TO ${quotedRole};`);
+  }
+
+  return statements.join("\n");
+}
+
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
-  objectType: "view" | "index" | "policy",
+  objectType: "view" | "index" | "policy" | "grant",
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -691,6 +802,10 @@ async function buildSchemaDriftSql(
 
   if (objectType === "index") {
     return await buildIndexSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  }
+
+  if (objectType === "grant") {
+    return await buildGrantSyncSql(supabaseAdmin, objectName, schemaName);
   }
 
   return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
@@ -712,7 +827,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (!["view", "index", "policy"].includes(objectType)) {
+  if (!["view", "index", "policy", "grant", "auth_config"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 
@@ -722,6 +837,31 @@ async function applySchemaDrift(
 
   if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
     throw createHttpError("Tipo de divergÃªncia invÃ¡lido", 400);
+  }
+
+  if (objectType === "auth_config") {
+    const plan = await buildAuthConfigSyncPlan(supabaseAdmin, objectName);
+
+    if (mode === "dry-run") {
+      return { success: true, mode, objectType, objectName, schema, diffType, sql: plan.preview };
+    }
+
+    try {
+      await patchProjectAuthConfig(client.supabase_url, client.supabase_access_token, plan.payload);
+      return {
+        success: true,
+        mode,
+        objectType,
+        objectName,
+        schema,
+        diffType,
+        sql: plan.preview,
+        appliedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw createHttpError(`Falha ao sincronizar auth_config.${objectName}: ${message}`, 400);
+    }
   }
 
   const sql = await buildSchemaDriftSql(
@@ -1193,7 +1333,7 @@ interface ClientConfig {
 }
 
 interface ApplySchemaDriftParams {
-  objectType: 'view' | 'index' | 'policy';
+  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config';
   objectName: string;
   schema?: string;
   diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';

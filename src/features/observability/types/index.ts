@@ -29,7 +29,7 @@ export type TenantSnapshot = {
 };
 
 export type SyncableSchemaDrift = {
-  objectType: "view" | "index" | "policy";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
@@ -38,7 +38,7 @@ export type SyncableSchemaDrift = {
 };
 
 export type SchemaDriftOperation = {
-  objectType: "view" | "index" | "policy";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

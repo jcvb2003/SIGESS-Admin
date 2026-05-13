@@ -28,6 +28,8 @@ function buildOperationsSummary(operations: SchemaDriftOperation[]) {
   const policyRemove = operations.filter(
     (op) => op.objectType === "policy" && op.diffType === "extra_in_tenant",
   ).length;
+  const grantAlign = operations.filter((op) => op.objectType === "grant").length;
+  const authConfigAlign = operations.filter((op) => op.objectType === "auth_config").length;
 
   const lines: string[] = [];
   if (viewAlign > 0) lines.push(`${viewAlign} view${viewAlign > 1 ? "s" : ""} a alinhar`);
@@ -35,6 +37,8 @@ function buildOperationsSummary(operations: SchemaDriftOperation[]) {
   if (indexRemove > 0) lines.push(`${indexRemove} index${indexRemove > 1 ? "es" : ""} a remover`);
   if (policyRecreate > 0) lines.push(`${policyRecreate} polic${policyRecreate > 1 ? "ies" : "y"} a recriar`);
   if (policyRemove > 0) lines.push(`${policyRemove} polic${policyRemove > 1 ? "ies" : "y"} a remover`);
+  if (grantAlign > 0) lines.push(`${grantAlign} grant${grantAlign > 1 ? "s" : ""} a alinhar`);
+  if (authConfigAlign > 0) lines.push(`${authConfigAlign} campo${authConfigAlign > 1 ? "s" : ""} de auth_config a sincronizar`);
 
   return lines;
 }
@@ -51,6 +55,8 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
   const indexesToRemove = operations.filter((op) => op.objectType === "index" && op.diffType === "extra_in_tenant");
   const policiesToRecreate = operations.filter((op) => op.objectType === "policy" && op.diffType !== "extra_in_tenant");
   const policiesToRemove = operations.filter((op) => op.objectType === "policy" && op.diffType === "extra_in_tenant");
+  const grants = operations.filter((op) => op.objectType === "grant");
+  const authConfig = operations.filter((op) => op.objectType === "auth_config");
 
   if (views.length > 0) {
     sections.push(
@@ -88,6 +94,20 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
     );
   }
 
+  if (grants.length > 0) {
+    sections.push(
+      `-- GRANTS (${grants.length} a alinhar)\n${grants.map((op) => op.sql.trim()).join("\n\n")}`,
+    );
+  }
+
+  if (authConfig.length > 0) {
+    sections.push(
+      `-- AUTH CONFIG (${authConfig.length} campo${authConfig.length > 1 ? "s" : ""})\n${authConfig
+        .map((op) => op.sql.trim())
+        .join("\n\n")}`,
+    );
+  }
+
   return sections.join("\n\n");
 }
 
@@ -96,6 +116,8 @@ function sortOperations(operations: SyncableSchemaDrift[]) {
     if (op.objectType === "view") return 0;
     if (op.objectType === "index") return op.diffType === "extra_in_tenant" ? 2 : 1;
     if (op.objectType === "policy") return op.diffType === "extra_in_tenant" ? 4 : 3;
+    if (op.objectType === "grant") return 5;
+    if (op.objectType === "auth_config") return 6;
     return 99;
   };
 
@@ -223,7 +245,7 @@ export function useObservability() {
     operationsInput:
       | SyncableSchemaDrift[]
       | {
-          objectType: "view" | "index" | "policy";
+          objectType: "view" | "index" | "policy" | "grant" | "auth_config";
           objectName: string;
           schema: string;
           diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

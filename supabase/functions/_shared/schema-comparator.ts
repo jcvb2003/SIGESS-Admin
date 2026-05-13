@@ -66,6 +66,40 @@ SELECT json_build_object(
     WHERE n.nspname = 'public'
       AND p.prokind = 'f'
       AND l.lanname != 'c'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass
+          AND d.objid = p.oid
+          AND d.refclassid = 'pg_extension'::regclass
+          AND d.deptype = 'e'
+      )
+  ),
+
+  'function_grants', (
+    SELECT coalesce(json_agg(
+      json_build_object(
+        'schema', n.nspname,
+        'function_name', p.proname,
+        'identity_args', pg_get_function_identity_arguments(p.oid),
+        'grantee', r.rolname,
+        'privilege', 'EXECUTE'
+      ) ORDER BY n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), r.rolname
+    ), '[]'::json)
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN pg_roles r ON has_function_privilege(r.oid, p.oid, 'EXECUTE')
+    WHERE n.nspname = 'public'
+      AND p.prokind = 'f'
+      AND r.rolname IN ('anon', 'authenticated', 'service_role')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass
+          AND d.objid = p.oid
+          AND d.refclassid = 'pg_extension'::regclass
+          AND d.deptype = 'e'
+      )
   ),
 
   'triggers', (
@@ -244,6 +278,14 @@ export interface FunctionDef {
   is_trigger_function: boolean;
 }
 
+export interface FunctionGrantDef {
+  schema: string;
+  function_name: string;
+  identity_args: string;
+  grantee: string;
+  privilege: string;
+}
+
 export interface TriggerDef {
   name: string;
   table: string;
@@ -310,6 +352,7 @@ export interface SchemaSnapshot {
   views: ViewDef[];
   columns: ColumnDef[];
   functions: FunctionDef[];
+  function_grants: FunctionGrantDef[];
   triggers: TriggerDef[];
   rls_state: RLSState[];
   policies: PolicyDef[];
@@ -353,6 +396,7 @@ export type DiffCategory =
   | 'views'
   | 'columns'
   | 'functions'
+  | 'function_grants'
   | 'triggers'
   | 'rls_state'
   | 'policies'
@@ -528,6 +572,10 @@ export function compareSnapshots(
   diffs.push(...compareArrays(oeiras.functions || [], tenant.functions || [], 'functions', 
     f => `${f.name}(${f.identity_args})`, genericCompare));
 
+  // Function grants
+  diffs.push(...compareArrays(oeiras.function_grants || [], tenant.function_grants || [], 'function_grants',
+    g => `${g.schema}.${g.function_name}(${g.identity_args}).${g.grantee}`, genericCompare));
+
   // Triggers
   diffs.push(...compareArrays(oeiras.triggers || [], tenant.triggers || [], 'triggers', 
     t => `${t.table}.${t.name}`, genericCompare));
@@ -586,11 +634,17 @@ export function compareSnapshots(
       'smtp_port', 
       'smtp_user',
       'smtp_sender_name',
+      'site_url',
+      'uri_allow_list',
       'external_email_enabled',
       'external_phone_enabled',
       'mailer_autoconfirm',
       'sms_autoconfirm',
       'external_google_enabled',
+      'mailer_subjects_invite',
+      'mailer_templates_invite_content',
+      'mailer_subjects_recovery',
+      'mailer_templates_recovery_content',
     ];
     
     AUTH_FIELDS_TO_COMPARE.forEach(field => {

@@ -72,6 +72,37 @@ function buildPolicyDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   };
 }
 
+function buildGrantDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "grants" || !isSupportedDiffType(diff.type)) return null;
+
+  const source = pickSource(diff) as { table?: string; grantee?: string } | null;
+  const tableName = source?.table;
+  const grantee = source?.grantee;
+  if (!tableName || !grantee) return null;
+
+  return {
+    objectType: "grant",
+    schema: "public",
+    objectName: `${tableName}.${grantee}`,
+    diffType: diff.type,
+    displayName: `public.${tableName}.${grantee}`,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildAuthConfigDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "auth_config" || !isSupportedDiffType(diff.type)) return null;
+
+  return {
+    objectType: "auth_config",
+    schema: "auth",
+    objectName: diff.key,
+    diffType: diff.type,
+    displayName: `auth.${diff.key}`,
+    relatedDiffCount: 1,
+  };
+}
+
 export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrift[] {
   const syncable = new Map<string, SyncableSchemaDrift>();
 
@@ -79,7 +110,9 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
     const drift =
       buildViewDrift(diff, diffs) ??
       buildIndexDrift(diff) ??
-      buildPolicyDrift(diff);
+      buildPolicyDrift(diff) ??
+      buildGrantDrift(diff) ??
+      buildAuthConfigDrift(diff);
 
     if (!drift) continue;
     syncable.set(`${drift.objectType}:${drift.schema}:${drift.objectName}:${drift.diffType}`, drift);

@@ -28,16 +28,29 @@ export type TenantSnapshot = {
   imports: ImportRecord[];
 };
 
-export type SyncableViewDrift = {
+export type SyncableSchemaDrift = {
+  objectType: "view" | "index" | "policy";
   schema: string;
   objectName: string;
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
+  displayName: string;
   relatedDiffCount: number;
+};
+
+export type SchemaDriftOperation = {
+  objectType: "view" | "index" | "policy";
+  schema: string;
+  objectName: string;
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
+  displayName: string;
+  sql: string;
 };
 
 export type SchemaDriftPreview = {
   targets: Array<{ clientId: string; tenantName: string }>;
-  schema: string;
-  objectName: string;
+  title: string;
+  description: string;
+  operations: SchemaDriftOperation[];
   sql: string;
 };
 

@@ -492,16 +492,31 @@ async function buildViewSyncSql(
   const viewRows = await runSql(
     oeiras.supabase_url,
     oeiras.supabase_access_token,
-    `SELECT pg_get_viewdef(format('%I.%I', '${schemaLiteral}', '${objectLiteral}')::regclass, true) AS definition`
+    `SELECT
+        pg_get_viewdef(format('%I.%I', '${schemaLiteral}', '${objectLiteral}')::regclass, true) AS definition,
+        coalesce(
+          EXISTS (
+            SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            CROSS JOIN LATERAL unnest(coalesce(c.reloptions, ARRAY[]::text[])) AS opt
+            WHERE n.nspname = '${schemaLiteral}'
+              AND c.relname = '${objectLiteral}'
+              AND c.relkind IN ('v','m')
+              AND opt = 'security_invoker=true'
+          ),
+          false
+        ) AS security_invoker`
   );
 
   const definition = viewRows?.[0]?.definition;
   if (!definition) {
     throw createHttpError(`View ${schemaName}.${objectName} não encontrada em Oeiras`, 404);
   }
+  const securityInvoker = Boolean(viewRows?.[0]?.security_invoker);
 
   return [
-    `CREATE OR REPLACE VIEW ${qualified} AS`,
+    `CREATE OR REPLACE VIEW ${qualified}${securityInvoker ? " WITH (security_invoker = true)" : ""} AS`,
     definition.trim().replace(/;$/, ""),
     ";",
     `REVOKE ALL ON TABLE ${qualified} FROM ${quoteIdentifier("anon")}, ${quoteIdentifier("authenticated")}, ${quoteIdentifier("service_role")};`,
@@ -511,13 +526,183 @@ async function buildViewSyncSql(
   ].join("\n");
 }
 
+function escapeLiteral(value: string) {
+  return value.replace(/'/g, "''");
+}
+
+function splitQualifiedObjectName(objectName: string, fieldName: string) {
+  const [head, ...tail] = objectName.split(".");
+  if (!head || tail.length === 0) {
+    throw createHttpError(`${fieldName} inválido`, 400);
+  }
+  return { head, remainder: tail.join(".") };
+}
+
+function normalizeRoles(roles: unknown): string[] {
+  if (Array.isArray(roles)) return roles.map(String);
+  if (typeof roles === "string") {
+    const trimmed = roles.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      return trimmed
+        .slice(1, -1)
+        .split(",")
+        .map((value) => value.replace(/^"|"$/g, "").trim())
+        .filter(Boolean);
+    }
+    return [trimmed];
+  }
+  return [];
+}
+
+function roleToSql(role: string) {
+  return role.toLowerCase() === "public" ? "PUBLIC" : quoteIdentifier(role);
+}
+
+async function buildIndexSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: indexName } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+  assertSafeIdentifier(indexName, "indexName");
+
+  const qualifiedIndex = `${quoteIdentifier(schemaName)}.${quoteIdentifier(indexName)}`;
+  if (diffType === "extra_in_tenant") {
+    return `DROP INDEX IF EXISTS ${qualifiedIndex};`;
+  }
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT indexdef
+     FROM pg_indexes
+     WHERE schemaname = '${escapeLiteral(schemaName)}'
+       AND tablename = '${escapeLiteral(tableName)}'
+       AND indexname = '${escapeLiteral(indexName)}'
+     LIMIT 1`
+  );
+
+  const definition = rows?.[0]?.indexdef;
+  if (!definition) {
+    throw createHttpError(`Index ${schemaName}.${tableName}.${indexName} não encontrado em Oeiras`, 404);
+  }
+
+  const normalizedDefinition = definition
+    .trim()
+    .replace(/;$/, "")
+    .replace(/^CREATE\s+(UNIQUE\s+)?INDEX\s+/i, (_match, uniquePart = "") => {
+      return `CREATE ${uniquePart}INDEX IF NOT EXISTS `;
+    });
+
+  if (diffType === "missing_in_tenant") {
+    return `${normalizedDefinition};`;
+  }
+
+  return [
+    `DROP INDEX IF EXISTS ${qualifiedIndex};`,
+    `${definition.trim().replace(/;$/, "")};`,
+  ].join("\n");
+}
+
+async function buildPolicySyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: policyName } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+  const dropSql = `DROP POLICY IF EXISTS ${quoteIdentifier(policyName)} ON ${qualifiedTable};`;
+
+  if (diffType === "extra_in_tenant") {
+    return dropSql;
+  }
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+     FROM pg_policies
+     WHERE schemaname = '${escapeLiteral(schemaName)}'
+       AND tablename = '${escapeLiteral(tableName)}'
+       AND policyname = '${escapeLiteral(policyName)}'
+     LIMIT 1`
+  );
+
+  const policy = rows?.[0];
+  if (!policy) {
+    throw createHttpError(`Policy ${schemaName}.${tableName}.${policyName} não encontrada em Oeiras`, 404);
+  }
+
+  const roles = normalizeRoles(policy.roles);
+  const permissive = typeof policy.permissive === "string" ? policy.permissive.toUpperCase() : "PERMISSIVE";
+  const cmd = typeof policy.cmd === "string" ? policy.cmd.toUpperCase() : "ALL";
+
+  const createParts = [
+    `CREATE POLICY ${quoteIdentifier(policyName)} ON ${qualifiedTable}`,
+    `AS ${permissive}`,
+    `FOR ${cmd}`,
+  ];
+
+  if (roles.length > 0) {
+    createParts.push(`TO ${roles.map(roleToSql).join(", ")}`);
+  }
+
+  if (policy.qual) {
+    createParts.push(`USING (${policy.qual})`);
+  }
+
+  if (policy.with_check) {
+    createParts.push(`WITH CHECK (${policy.with_check})`);
+  }
+
+  return [dropSql, `${createParts.join(" ")};`].join("\n");
+}
+
+async function buildSchemaDriftSql(
+  supabaseAdmin: SupabaseClient,
+  objectType: "view" | "index" | "policy",
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  if (objectType === "view") {
+    if (diffType === "extra_in_tenant") {
+      throw createHttpError("Views extras ainda não são suportadas pelo sync assistido", 400);
+    }
+    return await buildViewSyncSql(supabaseAdmin, objectName, schemaName);
+  }
+
+  if (objectType === "index") {
+    return await buildIndexSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  }
+
+  return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
+}
+
 async function applySchemaDrift(
   clientId: string,
   client: ClientConfig,
   supabaseAdmin: SupabaseClient,
   params: Record<string, unknown>,
 ) {
-  const { objectType, objectName, schema = "public", mode } = params as ApplySchemaDriftParams;
+  const { objectType, objectName, schema = "public", mode, diffType } = params as ApplySchemaDriftParams;
 
   if (client.tenant_code === "sinpesca-oeiras") {
     throw createHttpError("O tenant de referência não pode ser sincronizado contra ele mesmo", 400);
@@ -527,7 +712,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (objectType !== "view") {
+  if (!["view", "index", "policy"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 
@@ -535,10 +720,20 @@ async function applySchemaDrift(
     throw createHttpError("Modo inválido", 400);
   }
 
-  const sql = await buildViewSyncSql(supabaseAdmin, objectName, schema);
+  if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
+    throw createHttpError("Tipo de divergÃªncia invÃ¡lido", 400);
+  }
+
+  const sql = await buildSchemaDriftSql(
+    supabaseAdmin,
+    objectType,
+    objectName,
+    schema,
+    diffType,
+  );
 
   if (mode === "dry-run") {
-    return { success: true, mode, objectType, objectName, schema, sql };
+    return { success: true, mode, objectType, objectName, schema, diffType, sql };
   }
 
   try {
@@ -549,6 +744,7 @@ async function applySchemaDrift(
       objectType,
       objectName,
       schema,
+      diffType,
       sql,
       appliedAt: new Date().toISOString(),
     };
@@ -997,9 +1193,10 @@ interface ClientConfig {
 }
 
 interface ApplySchemaDriftParams {
-  objectType: 'view';
+  objectType: 'view' | 'index' | 'policy';
   objectName: string;
   schema?: string;
+  diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';
   mode: 'dry-run' | 'apply';
 }
 

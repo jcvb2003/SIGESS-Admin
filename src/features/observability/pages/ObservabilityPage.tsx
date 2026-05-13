@@ -1,12 +1,13 @@
-import { 
-  CheckCircle2, 
-  Database, 
-  Globe2, 
+import {
+  CheckCircle2,
+  Database,
+  Globe2,
   Loader2, 
   RefreshCw, 
-  Rocket, 
-  ServerCrash 
+  Rocket,
+  ServerCrash
 } from "lucide-react";
+import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,8 @@ import { TenantCard } from "../components/TenantCard";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 import { ImportHistoryCard } from "../components/ImportHistoryCard";
+import { getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
+import type { SyncableSchemaDrift } from "../types";
 
 export default function ObservabilityPage() {
   const {
@@ -53,6 +56,60 @@ export default function ObservabilityPage() {
     handlePrepareSchemaSync,
     handleApplySchemaSync,
   } = useObservability();
+
+  const batchSyncCandidate = useMemo(() => {
+    const candidates = new Map<
+      string,
+      {
+        targets: Array<{ clientId: string; tenantName: string }>;
+        operations: SyncableSchemaDrift[];
+      }
+    >();
+
+    for (const status of schemaStatus) {
+      for (const item of getSyncableSchemaDrifts(status.diffs)) {
+        const targets = getTenantsWithSameSchemaDrift(schemaStatus, item);
+        if (targets.length < 2) continue;
+
+        const groupKey = targets
+          .map((target) => target.clientId)
+          .sort()
+          .join(",");
+
+        const existing = candidates.get(groupKey);
+        if (!existing) {
+          candidates.set(groupKey, {
+            targets,
+            operations: [item],
+          });
+          continue;
+        }
+
+        const operationKey = `${item.objectType}:${item.schema}.${item.objectName}:${item.diffType}`;
+        const alreadyIncluded = existing.operations.some(
+          (operation) =>
+            `${operation.objectType}:${operation.schema}.${operation.objectName}:${operation.diffType}` === operationKey,
+        );
+
+        if (!alreadyIncluded) {
+          existing.operations.push(item);
+        }
+      }
+    }
+
+    return Array.from(candidates.values()).sort((a, b) => {
+      if (b.targets.length !== a.targets.length) return b.targets.length - a.targets.length;
+      if (b.operations.length !== a.operations.length) return b.operations.length - a.operations.length;
+      return a.targets[0]?.tenantName.localeCompare(b.targets[0]?.tenantName ?? "") ?? 0;
+    })[0] ?? null;
+  }, [schemaStatus]);
+
+  const batchSyncActionKey = useMemo(() => {
+    if (!batchSyncCandidate) return null;
+    return `${batchSyncCandidate.targets.map((t) => t.clientId).join(",")}:${batchSyncCandidate.operations
+      .map((op) => `${op.objectType}:${op.schema}.${op.objectName}:${op.diffType}`)
+      .join("|")}`;
+  }, [batchSyncCandidate]);
 
   return (
     <MainLayout>
@@ -229,10 +286,36 @@ export default function ObservabilityPage() {
                     Compara fisicamente as tabelas, funções, policies, auth e triggers com a referência (Oeiras).
                   </p>
                 </div>
-                <Button onClick={handleRunSchemaAudit} disabled={isAuditingSchema}>
-                  {isAuditingSchema ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                  Executar Auditoria Profunda
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {batchSyncCandidate ? (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        handlePrepareSchemaSync(
+                          batchSyncCandidate.targets,
+                          batchSyncCandidate.operations,
+                          {
+                            title: `Sync em todos os ${batchSyncCandidate.targets.length} tenants`,
+                            description:
+                              "Lote com todas as divergências sincronizáveis compartilhadas por este mesmo grupo de tenants. O apply será executado sequencialmente em todos os alvos.",
+                          },
+                        )
+                      }
+                      disabled={isPreparingDrift === batchSyncActionKey}
+                    >
+                      {isPreparingDrift === batchSyncActionKey ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Rocket className="mr-2 h-4 w-4" />
+                      )}
+                      Preparar sync em todos ({batchSyncCandidate.targets.length})
+                    </Button>
+                  ) : null}
+                  <Button onClick={handleRunSchemaAudit} disabled={isAuditingSchema}>
+                    {isAuditingSchema ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                    Executar Auditoria Profunda
+                  </Button>
+                </div>
               </div>
             </Card>
 
@@ -281,7 +364,7 @@ export default function ObservabilityPage() {
             }
           }}
         >
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col overflow-hidden">
             <DialogHeader>
               <DialogTitle>Pré-visualização do sync de schema</DialogTitle>
               <DialogDescription>
@@ -294,15 +377,14 @@ export default function ObservabilityPage() {
                       : `${driftPreview.targets.length} tenants`;
                   })()}
                 </strong>{" "}
-                para alinhar{" "}
-                <code>{driftPreview ? `${driftPreview.schema}.${driftPreview.objectName}` : ""}</code>.
+                para alinhar <code>{driftPreview?.title ?? ""}</code>.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="rounded-md border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-slate-300">
-                O SQL abaixo é derivado do estado real do Oeiras. Para views, as colunas e grants
-                relacionados são alinhados pela mesma operação.
+                {driftPreview?.description ??
+                  "O SQL abaixo é derivado do estado real do Oeiras. Para views, as colunas e grants relacionados são alinhados pela mesma operação."}
               </div>
               
               {driftPreview && driftPreview.targets.length > 1 && (
@@ -355,7 +437,11 @@ export default function ObservabilityPage() {
                 </div>
               )}
 
-              <ScrollArea className="h-[420px] rounded-md border border-border/60 bg-secondary/10 p-3 dark:border-sky-900/40 dark:bg-slate-950/40">
+              <ScrollArea
+                className={`rounded-md border border-border/60 bg-secondary/10 p-3 dark:border-sky-900/40 dark:bg-slate-950/40 ${
+                  driftApplyResults.length > 0 ? "h-[220px]" : "h-[420px]"
+                }`}
+              >
                 <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
                   {driftPreview?.sql}
                 </pre>
@@ -373,16 +459,18 @@ export default function ObservabilityPage() {
               >
                 {driftApplyResults.length > 0 ? "Fechar relatório" : "Fechar"}
               </Button>
-              <Button onClick={handleApplySchemaSync} disabled={isApplyingDrift}>
-                {isApplyingDrift ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Rocket className="mr-2 h-4 w-4" />
-                )}
-                {driftPreview?.targets.length && driftPreview.targets.length > 1
-                  ? `Aplicar em ${driftPreview.targets.length} tenants`
-                  : "Aplicar no tenant"}
-              </Button>
+              {driftApplyResults.length === 0 ? (
+                <Button onClick={handleApplySchemaSync} disabled={isApplyingDrift}>
+                  {isApplyingDrift ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Rocket className="mr-2 h-4 w-4" />
+                  )}
+                  {driftPreview?.targets.length && driftPreview.targets.length > 1
+                    ? `Aplicar em ${driftPreview.targets.length} tenants`
+                    : "Aplicar no tenant"}
+                </Button>
+              ) : null}
             </DialogFooter>
           </DialogContent>
         </Dialog>

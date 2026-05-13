@@ -9,7 +9,20 @@ SELECT json_build_object(
   ),
 
   'views', (
-    SELECT json_agg(c.relname ORDER BY c.relname)
+    SELECT coalesce(json_agg(
+      json_build_object(
+        'name', c.relname,
+        'definition', pg_get_viewdef(c.oid, true),
+        'security_invoker', coalesce(
+          EXISTS (
+            SELECT 1
+            FROM unnest(coalesce(c.reloptions, ARRAY[]::text[])) AS opt
+            WHERE opt = 'security_invoker=true'
+          ),
+          false
+        )
+      ) ORDER BY c.relname
+    ), '[]'::json)
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND c.relkind IN ('v','m')
@@ -214,6 +227,12 @@ export interface ColumnDef {
   datetime_precision: number | null;
 }
 
+export interface ViewDef {
+  name: string;
+  definition: string;
+  security_invoker: boolean;
+}
+
 export interface FunctionDef {
   name: string;
   identity_args: string;
@@ -288,7 +307,7 @@ export interface StorageBucketDef {
 
 export interface SchemaSnapshot {
   tables: string[];
-  views: string[];
+  views: ViewDef[];
   columns: ColumnDef[];
   functions: FunctionDef[];
   triggers: TriggerDef[];
@@ -369,6 +388,67 @@ export interface TenantSchemaStatus {
   summary: DiffSummary;
 }
 
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeRoles(value: PolicyDef["roles"]) {
+  if (Array.isArray(value)) return [...value].map(String).sort();
+  if (typeof value === "string") return value;
+  return value ?? null;
+}
+
+function normalizePolicyExpression(value: string | null) {
+  if (!value) return value;
+
+  let normalized = normalizeWhitespace(value);
+
+  normalized = normalized.replace(
+    /\(\s*\(\s*\(\s*SELECT\s+current_setting\s*\(\s*'request\.jwt\.claims'::text,\s*true\s*\)\s+AS\s+current_setting\s*\)\s*\)\s*::jsonb/g,
+    "((current_setting('request.jwt.claims'::text, true))::jsonb"
+  );
+
+  normalized = normalized.replace(
+    /\(\s*SELECT\s+current_setting\s*\(\s*'request\.jwt\.claims'::text,\s*true\s*\)\s+AS\s+current_setting\s*\)/g,
+    "current_setting('request.jwt.claims'::text, true)"
+  );
+
+  normalized = normalized.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+  return normalized;
+}
+
+function comparePolicies(o: PolicyDef, t: PolicyDef) {
+  const normalizedO = {
+    ...o,
+    roles: normalizeRoles(o.roles),
+    qual: normalizePolicyExpression(o.qual),
+    with_check: normalizePolicyExpression(o.with_check),
+  };
+  const normalizedT = {
+    ...t,
+    roles: normalizeRoles(t.roles),
+    qual: normalizePolicyExpression(t.qual),
+    with_check: normalizePolicyExpression(t.with_check),
+  };
+
+  const isEqual = JSON.stringify(normalizedO) === JSON.stringify(normalizedT);
+  return { isEqual, oVal: normalizedO, tVal: normalizedT };
+}
+
+function compareViews(o: ViewDef, t: ViewDef) {
+  const normalizedO = {
+    ...o,
+    definition: normalizeWhitespace(o.definition),
+  };
+  const normalizedT = {
+    ...t,
+    definition: normalizeWhitespace(t.definition),
+  };
+
+  const isEqual = JSON.stringify(normalizedO) === JSON.stringify(normalizedT);
+  return { isEqual, oVal: normalizedO, tVal: normalizedT };
+}
+
 function compareArrays<T>(
   oeirasList: T[], 
   tenantList: T[], 
@@ -438,7 +518,7 @@ export function compareSnapshots(
 
   // Simple string arrays (tables, views)
   diffs.push(...compareArrays(oeiras.tables || [], tenant.tables || [], 'tables', t => t, genericCompare));
-  diffs.push(...compareArrays(oeiras.views || [], tenant.views || [], 'views', v => v, genericCompare));
+  diffs.push(...compareArrays(oeiras.views || [], tenant.views || [], 'views', v => v.name, compareViews));
 
   // Columns
   diffs.push(...compareArrays(oeiras.columns || [], tenant.columns || [], 'columns', 
@@ -462,7 +542,7 @@ export function compareSnapshots(
 
   // Policies
   diffs.push(...compareArrays(oeiras.policies || [], tenant.policies || [], 'policies', 
-    p => `${p.schema}.${p.table}.${p.name}`, genericCompare));
+    p => `${p.schema}.${p.table}.${p.name}`, comparePolicies));
 
   // RLS State
   diffs.push(...compareArrays(oeiras.rls_state || [], tenant.rls_state || [], 'rls_state', 
@@ -485,7 +565,7 @@ export function compareSnapshots(
     diffs.push(...compareArrays(oeirasStorage.buckets || [], tenantStorage.buckets || [], 'buckets', 
       b => b.name, genericCompare));
     diffs.push(...compareArrays(oeirasStorage.policies || [], tenantStorage.policies || [], 'storage_policies', 
-      p => `${p.table}.${p.name}`, genericCompare));
+      p => `${p.table}.${p.name}`, comparePolicies));
   }
 
   // Edge Functions

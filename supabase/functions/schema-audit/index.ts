@@ -23,6 +23,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function buildAuditErrorMessage(error: unknown, tenantCode?: string) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const target = tenantCode ? ` do tenant ${tenantCode}` : "";
+
+  if (raw.includes("Management API Error") && raw.includes("[401]")) {
+    return `PAT inválido ou expirado${target}. Atualize o campo supabase_access_token no Admin antes de rodar a auditoria novamente.`;
+  }
+
+  return raw;
+}
+
 async function getAuthConfig(projectRef: string, token: string): Promise<AuthConfig | null> {
   const url = `https://api.supabase.com/v1/projects/${projectRef}/config/auth`;
   const response = await fetch(url, {
@@ -94,7 +105,18 @@ serve(async (req: Request) => {
     };
 
     const refRef = extractProjectRef(oeiras.supabase_url);
-    const refSnap = await getSnapshot(refRef, oeiras.supabase_access_token);
+    let refSnap;
+    try {
+      refSnap = await getSnapshot(refRef, oeiras.supabase_access_token);
+    } catch (error) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: buildAuditErrorMessage(error, oeiras.tenant_code),
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     if (!refSnap.db) throw new Error("Failed to load reference snapshot (OEIRAS)");
 
@@ -145,7 +167,7 @@ serve(async (req: Request) => {
         results.push({
           tenantId: tenant.id,
           tenantCode: tenant.tenant_code,
-          error: String(err)
+          error: buildAuditErrorMessage(err, tenant.tenant_code)
         });
       }
     }
@@ -158,10 +180,11 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error("Audit error:", error);
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Internal Server Error" 
+      success: false,
+      error: buildAuditErrorMessage(error)
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
+      status: 200,
     });
   }
 });

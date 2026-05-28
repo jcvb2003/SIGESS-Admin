@@ -28,11 +28,17 @@ function buildOperationsSummary(operations: SchemaDriftOperation[]) {
   const policyRemove = operations.filter(
     (op) => op.objectType === "policy" && op.diffType === "extra_in_tenant",
   ).length;
+  const functionAlign = operations.filter((op) => op.objectType === "function").length;
+  const functionGrantAlign = operations.filter((op) => op.objectType === "function_grant").length;
+  const triggerAlign = operations.filter((op) => op.objectType === "trigger").length;
   const grantAlign = operations.filter((op) => op.objectType === "grant").length;
   const authConfigAlign = operations.filter((op) => op.objectType === "auth_config").length;
 
   const lines: string[] = [];
   if (viewAlign > 0) lines.push(`${viewAlign} view${viewAlign > 1 ? "s" : ""} a alinhar`);
+  if (functionAlign > 0) lines.push(`${functionAlign} função${functionAlign > 1 ? "ões" : ""} a alinhar`);
+  if (functionGrantAlign > 0) lines.push(`${functionGrantAlign} grant${functionGrantAlign > 1 ? "s" : ""} de função a alinhar`);
+  if (triggerAlign > 0) lines.push(`${triggerAlign} trigger${triggerAlign > 1 ? "s" : ""} a alinhar`);
   if (indexCreate > 0) lines.push(`${indexCreate} index${indexCreate > 1 ? "es" : ""} a criar`);
   if (indexRemove > 0) lines.push(`${indexRemove} index${indexRemove > 1 ? "es" : ""} a remover`);
   if (policyRecreate > 0) lines.push(`${policyRecreate} polic${policyRecreate > 1 ? "ies" : "y"} a recriar`);
@@ -55,12 +61,35 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
   const indexesToRemove = operations.filter((op) => op.objectType === "index" && op.diffType === "extra_in_tenant");
   const policiesToRecreate = operations.filter((op) => op.objectType === "policy" && op.diffType !== "extra_in_tenant");
   const policiesToRemove = operations.filter((op) => op.objectType === "policy" && op.diffType === "extra_in_tenant");
+  const functions = operations.filter((op) => op.objectType === "function");
+  const functionGrants = operations.filter((op) => op.objectType === "function_grant");
+  const triggers = operations.filter((op) => op.objectType === "trigger");
   const grants = operations.filter((op) => op.objectType === "grant");
   const authConfig = operations.filter((op) => op.objectType === "auth_config");
 
   if (views.length > 0) {
     sections.push(
       `-- VIEWS (${views.length} a alinhar)\n${views.map((op) => op.sql.trim()).join("\n\n")}`,
+    );
+  }
+
+  if (functions.length > 0) {
+    sections.push(
+      `-- FUNCTIONS (${functions.length} a alinhar)\n${functions.map((op) => op.sql.trim()).join("\n\n")}`,
+    );
+  }
+
+  if (functionGrants.length > 0) {
+    sections.push(
+      `-- FUNCTION GRANTS (${functionGrants.length} a alinhar)\n${functionGrants
+        .map((op) => op.sql.trim())
+        .join("\n\n")}`,
+    );
+  }
+
+  if (triggers.length > 0) {
+    sections.push(
+      `-- TRIGGERS (${triggers.length} a alinhar)\n${triggers.map((op) => op.sql.trim()).join("\n\n")}`,
     );
   }
 
@@ -114,10 +143,13 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
 function sortOperations(operations: SyncableSchemaDrift[]) {
   const weight = (op: SyncableSchemaDrift) => {
     if (op.objectType === "view") return 0;
-    if (op.objectType === "index") return op.diffType === "extra_in_tenant" ? 2 : 1;
-    if (op.objectType === "policy") return op.diffType === "extra_in_tenant" ? 4 : 3;
-    if (op.objectType === "grant") return 5;
-    if (op.objectType === "auth_config") return 6;
+    if (op.objectType === "function") return 1;
+    if (op.objectType === "function_grant") return 2;
+    if (op.objectType === "trigger") return 3;
+    if (op.objectType === "index") return op.diffType === "extra_in_tenant" ? 5 : 4;
+    if (op.objectType === "policy") return op.diffType === "extra_in_tenant" ? 7 : 6;
+    if (op.objectType === "grant") return 8;
+    if (op.objectType === "auth_config") return 9;
     return 99;
   };
 
@@ -245,7 +277,7 @@ export function useObservability() {
     operationsInput:
       | SyncableSchemaDrift[]
       | {
-          objectType: "view" | "index" | "policy" | "grant" | "auth_config";
+          objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger";
           objectName: string;
           schema: string;
           diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

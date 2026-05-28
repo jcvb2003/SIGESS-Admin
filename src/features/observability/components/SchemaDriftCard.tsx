@@ -16,7 +16,15 @@ interface SchemaDriftCardProps {
     operations:
       | SyncableSchemaDrift[]
       | {
-          objectType: "view" | "index" | "policy" | "grant" | "auth_config";
+          objectType:
+            | "view"
+            | "index"
+            | "policy"
+            | "grant"
+            | "auth_config"
+            | "function"
+            | "function_grant"
+            | "trigger";
           objectName: string;
           schema: string;
           diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
@@ -40,11 +48,22 @@ function getSyncHelperText(item: SyncableSchemaDrift) {
   if (item.objectType === "view") {
     return `1 operação alinha ${item.relatedDiffCount} divergência(s) derivada(s).`;
   }
+  if (item.objectType === "function") {
+    return "1 operação recria a função com a definição atual de Oeiras.";
+  }
   if (item.objectType === "grant") {
     return "1 operação revoga e reaplica os privilégios conforme Oeiras.";
   }
+  if (item.objectType === "function_grant") {
+    return "1 operação revoga e reaplica o EXECUTE da função conforme Oeiras.";
+  }
   if (item.objectType === "auth_config") {
     return "1 operação reaplica o campo canônico do template conforme Oeiras.";
+  }
+  if (item.objectType === "trigger") {
+    return item.diffType === "extra_in_tenant"
+      ? "1 operação remove a trigger extra para alinhar com Oeiras."
+      : "1 operação recria a trigger com a definição atual de Oeiras.";
   }
   if (item.diffType === "extra_in_tenant") {
     return "1 operação remove o objeto extra para alinhar com Oeiras.";
@@ -56,11 +75,20 @@ function getPreviewDescription(item: SyncableSchemaDrift) {
   if (item.objectType === "view") {
     return "O SQL abaixo é derivado do estado real do Oeiras e alinha a view com suas colunas e grants relacionados.";
   }
+  if (item.objectType === "function") {
+    return "O SQL abaixo recria a função a partir da definição real do Oeiras.";
+  }
   if (item.objectType === "grant") {
     return "O preview abaixo revoga tudo no tenant e reaplica apenas os privilégios existentes em Oeiras.";
   }
+  if (item.objectType === "function_grant") {
+    return "O preview abaixo revoga o EXECUTE atual e reaplica apenas o que existe em Oeiras para essa função.";
+  }
   if (item.objectType === "auth_config") {
     return "O preview abaixo mostra o campo de auth que será sincronizado a partir da configuração canônica do Oeiras.";
+  }
+  if (item.objectType === "trigger") {
+    return "O SQL abaixo recria a trigger com a definição real do Oeiras.";
   }
   if (item.diffType === "extra_in_tenant") {
     return "O SQL abaixo remove o objeto extra no tenant para alinhá-lo com o Oeiras.";
@@ -81,7 +109,10 @@ export function SchemaDriftCard({
       item.objectType === "index" ||
       item.objectType === "policy" ||
       item.objectType === "grant" ||
-      item.objectType === "auth_config",
+      item.objectType === "auth_config" ||
+      item.objectType === "function" ||
+      item.objectType === "function_grant" ||
+      item.objectType === "trigger",
   );
 
   const syncableByDiffIdentity = new Map<string, SyncableSchemaDrift>();
@@ -93,6 +124,21 @@ export function SchemaDriftCard({
 
     if (item.objectType === "auth_config") {
       syncableByDiffIdentity.set(`auth_config:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "function") {
+      syncableByDiffIdentity.set(`functions:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "function_grant") {
+      syncableByDiffIdentity.set(`function_grants:public.${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "trigger") {
+      syncableByDiffIdentity.set(`triggers:${item.objectName}:${item.diffType}`, item);
       continue;
     }
 
@@ -148,7 +194,7 @@ export function SchemaDriftCard({
                   onPrepareSync([singleTarget], tenantLevelOperations, {
                     title: `Sync do tenant ${status.tenantName}`,
                     description:
-                      "Preview agrupado por tipo: indexes, policies, grants e auth_config em ordem segura de execução.",
+                      "Preview agrupado por tipo: functions, triggers, grants e demais objetos em ordem segura de execução.",
                   })
                 }
               >

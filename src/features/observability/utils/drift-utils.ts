@@ -103,6 +103,60 @@ function buildAuthConfigDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   };
 }
 
+function buildFunctionDrift(diff: SchemaDiff, diffs: SchemaDiff[]): SyncableSchemaDrift | null {
+  if (diff.category !== "functions" || !isSupportedDiffType(diff.type)) return null;
+
+  const source = pickSource(diff) as { name?: string } | null;
+  const functionName = source?.name ?? diff.key.split("(")[0];
+  const relatedDiffCount = diffs.filter((item) => {
+    if (item.category === "function_grants") {
+      return item.key.startsWith(`public.${diff.key}.`);
+    }
+
+    if (item.category === "triggers") {
+      const triggerSource = pickSource(item) as { function_name?: string } | null;
+      return triggerSource?.function_name === functionName;
+    }
+
+    return false;
+  }).length;
+
+  return {
+    objectType: "function",
+    schema: "public",
+    objectName: diff.key,
+    diffType: diff.type,
+    displayName: `public.${diff.key}`,
+    relatedDiffCount: Math.max(1, relatedDiffCount),
+  };
+}
+
+function buildFunctionGrantDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "function_grants" || !isSupportedDiffType(diff.type)) return null;
+
+  return {
+    objectType: "function_grant",
+    schema: "public",
+    objectName: diff.key.replace(/^public\./, ""),
+    diffType: diff.type,
+    displayName: diff.key,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildTriggerDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "triggers" || !isSupportedDiffType(diff.type)) return null;
+
+  return {
+    objectType: "trigger",
+    schema: "public",
+    objectName: diff.key,
+    diffType: diff.type,
+    displayName: `public.${diff.key}`,
+    relatedDiffCount: 1,
+  };
+}
+
 export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrift[] {
   const syncable = new Map<string, SyncableSchemaDrift>();
 
@@ -112,7 +166,10 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
       buildIndexDrift(diff) ??
       buildPolicyDrift(diff) ??
       buildGrantDrift(diff) ??
-      buildAuthConfigDrift(diff);
+      buildAuthConfigDrift(diff) ??
+      buildFunctionDrift(diff, diffs) ??
+      buildFunctionGrantDrift(diff) ??
+      buildTriggerDrift(diff);
 
     if (!drift) continue;
     syncable.set(`${drift.objectType}:${drift.schema}:${drift.objectName}:${drift.diffType}`, drift);

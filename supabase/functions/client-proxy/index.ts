@@ -612,6 +612,32 @@ function splitQualifiedObjectName(objectName: string, fieldName: string) {
   return { head, remainder: tail.join(".") };
 }
 
+function splitFunctionSignature(signature: string, fieldName: string) {
+  const match = signature.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\)$/);
+  if (!match) {
+    throw createHttpError(`${fieldName} invÃ¡lido`, 400);
+  }
+
+  return {
+    functionName: match[1],
+    identityArgs: match[2],
+  };
+}
+
+function splitFunctionGrantObjectName(objectName: string) {
+  const lastDotIndex = objectName.lastIndexOf(".");
+  if (lastDotIndex <= 0) {
+    throw createHttpError("objectName invÃ¡lido", 400);
+  }
+
+  const signature = objectName.slice(0, lastDotIndex);
+  const grantee = objectName.slice(lastDotIndex + 1);
+  const { functionName, identityArgs } = splitFunctionSignature(signature, "objectName");
+  assertSafeIdentifier(grantee, "grantee");
+
+  return { functionName, identityArgs, grantee };
+}
+
 function normalizeRoles(roles: unknown): string[] {
   if (Array.isArray(roles)) return roles.map(String);
   if (typeof roles === "string") {
@@ -786,9 +812,139 @@ async function buildGrantSyncSql(
   return statements.join("\n");
 }
 
+async function buildFunctionSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { functionName, identityArgs } = splitFunctionSignature(objectName, "objectName");
+  assertSafeIdentifier(functionName, "functionName");
+
+  const qualifiedFunction = `${quoteIdentifier(schemaName)}.${quoteIdentifier(functionName)}(${identityArgs})`;
+
+  if (diffType === "extra_in_tenant") {
+    return `DROP FUNCTION IF EXISTS ${qualifiedFunction};`;
+  }
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT pg_get_functiondef(p.oid) AS definition
+     FROM pg_proc p
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND p.proname = '${escapeLiteral(functionName)}'
+       AND pg_get_function_identity_arguments(p.oid) = '${escapeLiteral(identityArgs)}'
+     LIMIT 1`,
+  );
+
+  const definition = rows?.[0]?.definition as string | null | undefined;
+  if (!definition) {
+    throw createHttpError(`Function ${schemaName}.${objectName} nÃ£o encontrada em Oeiras`, 404);
+  }
+
+  return definition.trim().replace(/;$/, ";");
+}
+
+async function buildFunctionGrantSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
+  assertSafeIdentifier(functionName, "functionName");
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT has_function_privilege('${escapeLiteral(grantee)}',
+              format('%I.%I(%s)', '${escapeLiteral(schemaName)}', '${escapeLiteral(functionName)}', '${escapeLiteral(identityArgs)}')::regprocedure,
+              'EXECUTE') AS has_execute`,
+  );
+
+  const hasExecute = Boolean(rows?.[0]?.has_execute);
+  const qualifiedFunction = `${quoteIdentifier(schemaName)}.${quoteIdentifier(functionName)}(${identityArgs})`;
+  const quotedRole = roleToSql(grantee);
+  const statements: string[] = [];
+
+  if (!hasExecute) {
+    statements.push(`REVOKE EXECUTE ON FUNCTION ${qualifiedFunction} FROM PUBLIC;`);
+  }
+
+  statements.push(`REVOKE ALL ON FUNCTION ${qualifiedFunction} FROM ${quotedRole};`);
+
+  if (hasExecute) {
+    statements.push(`GRANT EXECUTE ON FUNCTION ${qualifiedFunction} TO ${quotedRole};`);
+  }
+
+  return statements.join("\n");
+}
+
+async function buildTriggerSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: triggerName } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+  assertSafeIdentifier(triggerName, "triggerName");
+
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+  const dropSql = `DROP TRIGGER IF EXISTS ${quoteIdentifier(triggerName)} ON ${qualifiedTable};`;
+
+  if (diffType === "extra_in_tenant") {
+    return dropSql;
+  }
+
+  const oeiras = await getOeirasConfig(supabaseAdmin);
+  if (!oeiras.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
+  }
+
+  const rows = await runSql(
+    oeiras.supabase_url,
+    oeiras.supabase_access_token,
+    `SELECT pg_get_triggerdef(tg.oid, true) AS definition
+     FROM pg_trigger tg
+     JOIN pg_class cls ON cls.oid = tg.tgrelid
+     JOIN pg_namespace n ON n.oid = cls.relnamespace
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND cls.relname = '${escapeLiteral(tableName)}'
+       AND tg.tgname = '${escapeLiteral(triggerName)}'
+       AND NOT tg.tgisinternal
+     LIMIT 1`,
+  );
+
+  const definition = rows?.[0]?.definition as string | null | undefined;
+  if (!definition) {
+    throw createHttpError(`Trigger ${schemaName}.${tableName}.${triggerName} nÃ£o encontrada em Oeiras`, 404);
+  }
+
+  if (diffType === "different_definition") {
+    return [dropSql, `${definition.trim().replace(/;$/, "")};`].join("\n");
+  }
+
+  return `${definition.trim().replace(/;$/, "")};`;
+}
+
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
-  objectType: "view" | "index" | "policy" | "grant",
+  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger",
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -806,6 +962,18 @@ async function buildSchemaDriftSql(
 
   if (objectType === "grant") {
     return await buildGrantSyncSql(supabaseAdmin, objectName, schemaName);
+  }
+
+  if (objectType === "function") {
+    return await buildFunctionSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  }
+
+  if (objectType === "function_grant") {
+    return await buildFunctionGrantSyncSql(supabaseAdmin, objectName, schemaName);
+  }
+
+  if (objectType === "trigger") {
+    return await buildTriggerSyncSql(supabaseAdmin, objectName, schemaName, diffType);
   }
 
   return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
@@ -827,7 +995,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (!["view", "index", "policy", "grant", "auth_config"].includes(objectType)) {
+  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 
@@ -1333,7 +1501,7 @@ interface ClientConfig {
 }
 
 interface ApplySchemaDriftParams {
-  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config';
+  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger';
   objectName: string;
   schema?: string;
   diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';

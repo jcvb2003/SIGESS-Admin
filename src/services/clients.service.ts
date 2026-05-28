@@ -7,7 +7,6 @@ import type {
   ClientUpdate,
   TenantUser,
   TenantUnit,
-  UserProfile,
   UserUnitMembership,
 } from "@/features/clients/types";
 
@@ -177,16 +176,6 @@ export async function updateSharedTenantUnit(
 export async function deleteSharedTenantUnit(id: string): Promise<void> {
   const { error } = await getSharedSupabase().from("tenant_units").delete().eq("id", id);
   if (error) throw handleSupabaseError(error);
-}
-
-export async function listSharedUserProfiles(): Promise<UserProfile[]> {
-  const { data, error } = await getSharedSupabase()
-    .from("user_profiles")
-    .select("*")
-    .order("nome", { ascending: true });
-
-  if (error) throw handleSupabaseError(error);
-  return (data || []) as UserProfile[];
 }
 
 export async function listSharedTenantUsers(tenantId: string): Promise<TenantUser[]> {

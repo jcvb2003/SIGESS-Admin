@@ -5,13 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,12 +20,7 @@ import {
   deleteSharedMembership,
   listSharedMemberships,
   listSharedUserProfiles,
-  updateSharedMembership,
 } from "@/services/clients.service";
-
-const MEMBERSHIP_ROLE_OPTIONS = [
-  { value: "unit_operator" as const, label: "Operador" },
-];
 
 interface MembershipsTabProps {
   readonly tenantId: string;
@@ -50,10 +38,6 @@ const initialMembershipState: MembershipFormState = {
   unit_id: "",
   role: "unit_operator",
 };
-
-function getRoleLabel(role: UserUnitMembership["role"]) {
-  return role === "unit_operator" ? "Operador" : role;
-}
 
 export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
   const queryClient = useQueryClient();
@@ -102,19 +86,6 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({
-      membershipId,
-      updates,
-    }: {
-      membershipId: string;
-      updates: Partial<Omit<UserUnitMembership, "id" | "created_at" | "updated_at">>;
-    }) => updateSharedMembership(membershipId, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: membershipsQueryKey });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (membershipId: string) => deleteSharedMembership(membershipId),
     onSuccess: () => {
@@ -160,9 +131,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
 
   const isLoading = membershipsLoading || usersLoading;
   const visibleMemberships = memberships.filter(
-    (membership) =>
-      Boolean(membership.unit_id) &&
-      (membership.role === "unit_manager" || membership.role === "unit_operator"),
+    (membership) => Boolean(membership.unit_id) && membership.role === "unit_operator",
   );
 
   return (
@@ -213,26 +182,10 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <Select
-                      value={membership.role}
-                      onValueChange={(value) =>
-                        updateMutation.mutate({
-                          membershipId: membership.id,
-                          updates: { role: value as UserUnitMembership["role"] },
-                        })
-                      }
-                    >
-                    <SelectTrigger className="w-[190px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MEMBERSHIP_ROLE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Badge variant="default">
+                      <Shield className="mr-1 h-3 w-3" />
+                      Operador
+                    </Badge>
 
                     <Button
                       variant="outline"
@@ -297,33 +250,6 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="membership-role">Papel *</Label>
-              <Select
-                value={form.role}
-                onValueChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    role: value as UserUnitMembership["role"],
-                  }))
-                }
-              >
-                <SelectTrigger id="membership-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MEMBERSHIP_ROLE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {getRoleLabel(form.role)}
-              </p>
             </div>
 
             <DialogFooter>

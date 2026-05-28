@@ -21,12 +21,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import type { TenantUnit, UserProfile, UserUnitMembership } from "../types";
+import type { TenantUnit, UserUnitMembership } from "../types";
 import {
   createSharedMembership,
   deleteSharedMembership,
   listSharedMemberships,
-  listSharedUserProfiles,
+  listSharedTenantUsers,
 } from "@/services/clients.service";
 
 interface MembershipsTabProps {
@@ -64,9 +64,10 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
     enabled: Boolean(tenantId),
   });
 
-  const { data: userProfiles = [], isLoading: usersLoading } = useQuery({
+  const { data: tenantUsers = [], isLoading: usersLoading } = useQuery({
     queryKey: usersQueryKey,
-    queryFn: () => listSharedUserProfiles(),
+    queryFn: () => listSharedTenantUsers(tenantId),
+    enabled: Boolean(tenantId),
   });
 
   const createMutation = useMutation({
@@ -109,8 +110,8 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
   });
 
   const usersById = useMemo(
-    () => new Map(userProfiles.map((profile) => [profile.id, profile])),
-    [userProfiles],
+    () => new Map(tenantUsers.map((tu) => [tu.user_id, tu.user_profiles])),
+    [tenantUsers],
   );
   const unitsById = useMemo(
     () => new Map(units.map((unit) => [unit.id, unit])),
@@ -231,9 +232,9 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                   <SelectValue placeholder="Selecione um usuario" />
                 </SelectTrigger>
                 <SelectContent>
-                  {userProfiles.map((profile: UserProfile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.nome || profile.email || profile.id}
+                  {tenantUsers.map((tu) => (
+                    <SelectItem key={tu.user_id} value={tu.user_id}>
+                      {tu.user_profiles?.nome || tu.user_profiles?.email || tu.user_id}
                     </SelectItem>
                   ))}
                 </SelectContent>

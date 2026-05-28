@@ -81,8 +81,8 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
       }),
     onSuccess: async () => {
       toast({
-        title: "Administrador criado",
-        description: "O tenant agora ja possui o administrador inicial para acesso ao Web.",
+        title: "Gestor criado",
+        description: "O tenant agora ja possui o gestor inicial para acesso ao Web.",
       });
       await queryClient.invalidateQueries({ queryKey });
       setOpen(false);
@@ -129,12 +129,12 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
         <div>
           <p className="font-semibold text-primary">{tenantUsers.length} usuario(s) no tenant</p>
           <p className="text-sm text-muted-foreground">
-            Crie o administrador inicial do cliente e acompanhe quem pertence a este pote.
+            Crie o gestor inicial do cliente e acompanhe quem pertence a este tenant.
           </p>
         </div>
         <Button onClick={() => setOpen(true)} className="gap-2">
           <UserPlus className="h-4 w-4" />
-          Novo administrador
+          Novo Gestor
         </Button>
       </div>
 
@@ -169,7 +169,7 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
             <div>
               <p className="text-sm text-muted-foreground">Status</p>
               <p className="text-sm font-medium text-foreground">
-                {ownerCount > 0 ? "Cliente pronto para acessar o Web" : "Administrador inicial pendente"}
+                {ownerCount > 0 ? "Cliente pronto para acessar o Web" : "Gestor inicial pendente"}
               </p>
             </div>
           </div>
@@ -182,7 +182,7 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
         </div>
       ) : tenantUsers.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground">
-          Nenhum usuario foi vinculado a este tenant ainda. Crie o administrador inicial para liberar o acesso ao Web.
+          Nenhum usuario foi vinculado a este tenant ainda. Crie o gestor inicial para liberar o acesso ao Web.
         </Card>
       ) : (
         <div className="grid gap-4">
@@ -232,7 +232,7 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo administrador inicial</DialogTitle>
+            <DialogTitle>Novo Gestor</DialogTitle>
             <DialogDescription>
               Crie a conta que vai entrar no Web e governar o tenant do cliente.
             </DialogDescription>

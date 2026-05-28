@@ -239,32 +239,6 @@ export async function createSharedTenantAdmin(input: {
 
   if (error) throw handleSupabaseError(error);
 
-  const { data: existingMembership, error: membershipLookupError } = await client
-    .from("user_unit_memberships")
-    .select("id")
-    .eq("tenant_id", input.tenantId)
-    .eq("user_id", authUserId)
-    .is("unit_id", null)
-    .eq("role", "tenant_admin")
-    .maybeSingle();
-
-  if (membershipLookupError) throw handleSupabaseError(membershipLookupError);
-
-  if (!existingMembership) {
-    const { error: membershipInsertError } = await client
-      .from("user_unit_memberships")
-      .insert({
-        tenant_id: input.tenantId,
-        user_id: authUserId,
-        unit_id: null,
-        role: "tenant_admin",
-        is_active: true,
-        is_default: false,
-      });
-
-    if (membershipInsertError) throw handleSupabaseError(membershipInsertError);
-  }
-
   return data as TenantUser;
 }
 

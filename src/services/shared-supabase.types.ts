@@ -61,6 +61,35 @@ export type SharedDatabase = {
           updated_at?: string;
         };
       };
+      tenant_users: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          user_id: string;
+          tenant_role: "owner" | "manager" | "member";
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          user_id: string;
+          tenant_role?: "owner" | "manager" | "member";
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          user_id?: string;
+          tenant_role?: "owner" | "manager" | "member";
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       tenant_units: {
         Row: {
           id: string;

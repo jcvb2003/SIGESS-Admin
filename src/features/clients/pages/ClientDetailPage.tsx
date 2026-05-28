@@ -76,6 +76,8 @@ export default function ClientDetailPage() {
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
   const deleteClientMutation = useDeleteClient();
+  const sharedTenantId = client?.shared_tenant_id ?? null;
+  const isSharedClient = client?.deployment_mode === "shared";
 
   const {
     data: buckets = [],
@@ -136,9 +138,9 @@ export default function ClientDetailPage() {
   });
 
   const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
-    queryKey: ["shared-tenant-units", client.shared_tenant_id],
-    enabled: !!client && client.deployment_mode === "shared" && !!client.shared_tenant_id,
-    queryFn: () => listSharedTenantUnits(client.shared_tenant_id!),
+    queryKey: ["shared-tenant-units", sharedTenantId],
+    enabled: Boolean(client) && isSharedClient && Boolean(sharedTenantId),
+    queryFn: () => listSharedTenantUnits(sharedTenantId!),
     staleTime: 1000 * 60 * 5,
   });
 
@@ -151,8 +153,12 @@ export default function ClientDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["client-users-count", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-users", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-tables", id] }),
-        queryClient.invalidateQueries({ queryKey: ["shared-tenant-units", client.shared_tenant_id] }),
-        queryClient.invalidateQueries({ queryKey: ["shared-memberships", client.shared_tenant_id] }),
+        ...(sharedTenantId
+          ? [
+              queryClient.invalidateQueries({ queryKey: ["shared-tenant-units", sharedTenantId] }),
+              queryClient.invalidateQueries({ queryKey: ["shared-memberships", sharedTenantId] }),
+            ]
+          : []),
       ]);
     } finally {
       setIsRefreshing(false);
@@ -532,27 +538,6 @@ export default function ClientDetailPage() {
             </div>
           </Card>
         ) : null}
-
-        <Card className="border-primary/20 bg-primary/5 p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg bg-primary/15 p-2">
-                <Globe2 className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">
-                  Migracoes e importacoes agora ficam na observabilidade global.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Use o centro de comando para acompanhar drift, historico operacional e sincronizacoes manuais deste tenant.
-                </p>
-              </div>
-            </div>
-            <Button variant="outline" onClick={() => navigate("/observability")}>
-              Abrir observabilidade
-            </Button>
-          </div>
-        </Card>
 
         <Tabs defaultValue="configuracoes" className="space-y-4">
           <TabsList className="bg-secondary/50">

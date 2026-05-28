@@ -5,6 +5,7 @@ import type {
   Client,
   ClientCreate,
   ClientUpdate,
+  TenantUser,
   TenantUnit,
   UserProfile,
   UserUnitMembership,
@@ -186,6 +187,112 @@ export async function listSharedUserProfiles(): Promise<UserProfile[]> {
 
   if (error) throw handleSupabaseError(error);
   return (data || []) as UserProfile[];
+}
+
+export async function listSharedTenantUsers(tenantId: string): Promise<TenantUser[]> {
+  const { data, error } = await getSharedSupabase()
+    .from("tenant_users")
+    .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as TenantUser[];
+}
+
+export async function createSharedTenantAdmin(input: {
+  tenantId: string;
+  email: string;
+  nome: string;
+  password: string;
+  autoConfirm?: boolean;
+}): Promise<TenantUser> {
+  const client = getSharedSupabase();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const normalizedName = input.nome.trim();
+
+  const { data: createdUserData, error: createUserError } = await client.auth.admin.createUser({
+    email: normalizedEmail,
+    password: input.password,
+    email_confirm: input.autoConfirm ?? true,
+    user_metadata: { nome: normalizedName },
+    app_metadata: { role: "admin" },
+  });
+
+  if (createUserError) throw handleSupabaseError(createUserError);
+
+  const authUserId = createdUserData.user?.id;
+  if (!authUserId) {
+    throw new Error("Nao foi possivel identificar o usuario criado no projeto shared.");
+  }
+
+  const { data, error } = await client
+    .from("tenant_users")
+    .insert({
+      tenant_id: input.tenantId,
+      user_id: authUserId,
+      tenant_role: "owner",
+      is_active: true,
+    })
+    .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+
+  const { data: existingMembership, error: membershipLookupError } = await client
+    .from("user_unit_memberships")
+    .select("id")
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", authUserId)
+    .is("unit_id", null)
+    .eq("role", "tenant_admin")
+    .maybeSingle();
+
+  if (membershipLookupError) throw handleSupabaseError(membershipLookupError);
+
+  if (!existingMembership) {
+    const { error: membershipInsertError } = await client
+      .from("user_unit_memberships")
+      .insert({
+        tenant_id: input.tenantId,
+        user_id: authUserId,
+        unit_id: null,
+        role: "tenant_admin",
+        is_active: true,
+        is_default: false,
+      });
+
+    if (membershipInsertError) throw handleSupabaseError(membershipInsertError);
+  }
+
+  return data as TenantUser;
+}
+
+export async function deleteSharedTenantUser(input: {
+  tenantId: string;
+  tenantUserId: string;
+  authUserId: string;
+}): Promise<void> {
+  const client = getSharedSupabase();
+
+  const { error: membershipsError } = await client
+    .from("user_unit_memberships")
+    .delete()
+    .eq("tenant_id", input.tenantId)
+    .eq("user_id", input.authUserId);
+
+  if (membershipsError) throw handleSupabaseError(membershipsError);
+
+  const { error: tenantUserError } = await client
+    .from("tenant_users")
+    .delete()
+    .eq("id", input.tenantUserId)
+    .eq("tenant_id", input.tenantId);
+
+  if (tenantUserError) throw handleSupabaseError(tenantUserError);
+
+  const { error: authDeleteError } = await client.auth.admin.deleteUser(input.authUserId);
+  if (authDeleteError) throw handleSupabaseError(authDeleteError);
 }
 
 export async function listSharedMemberships(tenantId: string): Promise<UserUnitMembership[]> {

@@ -45,6 +45,17 @@ export interface UserProfile {
   updated_at: string;
 }
 
+export interface TenantUser {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  tenant_role: "owner" | "manager" | "member";
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  user_profiles?: UserProfile | null;
+}
+
 export interface UserUnitMembership {
   id: string;
   user_id: string;

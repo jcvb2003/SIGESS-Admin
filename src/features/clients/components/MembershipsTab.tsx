@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,11 @@ import {
   updateSharedMembership,
 } from "@/services/clients.service";
 
+const MEMBERSHIP_ROLE_OPTIONS = [
+  { value: "unit_manager" as const, label: "Gestor de apoio" },
+  { value: "unit_operator" as const, label: "Operador" },
+];
+
 interface MembershipsTabProps {
   readonly tenantId: string;
   readonly units: TenantUnit[];
@@ -40,14 +45,12 @@ interface MembershipFormState {
   user_id: string;
   unit_id: string;
   role: UserUnitMembership["role"];
-  is_default: boolean;
 }
 
 const initialMembershipState: MembershipFormState = {
   user_id: "",
   unit_id: "",
   role: "unit_manager",
-  is_default: false,
 };
 
 function getRoleLabel(role: UserUnitMembership["role"]) {
@@ -55,7 +58,7 @@ function getRoleLabel(role: UserUnitMembership["role"]) {
     case "tenant_admin":
       return "Tenant admin";
     case "unit_manager":
-      return "Gestor do polo";
+      return "Gestor de apoio";
     case "unit_operator":
       return "Operador";
     case "unit_viewer":
@@ -96,7 +99,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
         unit_id: payload.unit_id,
         role: payload.role,
         is_active: true,
-        is_default: payload.is_default,
+        is_default: false,
       }),
     onSuccess: () => {
       toast({ title: "Membership criada", description: "O usuario foi vinculado ao polo." });
@@ -176,7 +179,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
         <div>
           <p className="font-semibold text-primary">{memberships.length} membership(s) cadastradas</p>
           <p className="text-sm text-muted-foreground">
-            Controle quais usuarios acessam cada polo e qual e o polo padrao.
+            Controle quais usuarios acessam cada polo.
           </p>
         </div>
         <Button onClick={() => setOpen(true)} className="gap-2" disabled={units.length === 0}>
@@ -208,9 +211,6 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                       <p className="font-semibold text-foreground">
                         {user?.nome || user?.email || membership.user_id}
                       </p>
-                      {membership.is_default && (
-                        <Badge variant="default">Padrao</Badge>
-                      )}
                       {!membership.is_active && <Badge variant="secondary">Inativo</Badge>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -230,30 +230,17 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                         })
                       }
                     >
-                      <SelectTrigger className="w-[190px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tenant_admin">Tenant admin</SelectItem>
-                        <SelectItem value="unit_manager">Gestor do polo</SelectItem>
-                        <SelectItem value="unit_operator">Operador</SelectItem>
-                        <SelectItem value="unit_viewer">Leitor</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant={membership.is_default ? "default" : "outline"}
-                      size="sm"
-                      onClick={() =>
-                        updateMutation.mutate({
-                          membershipId: membership.id,
-                          updates: { is_default: !membership.is_default },
-                        })
-                      }
-                    >
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      {membership.is_default ? "Padrao" : "Definir padrao"}
-                    </Button>
+                    <SelectTrigger className="w-[190px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MEMBERSHIP_ROLE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                     <Button
                       variant="outline"
@@ -277,7 +264,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
           <DialogHeader>
             <DialogTitle>Nova membership</DialogTitle>
             <DialogDescription>
-              Vincule um usuario existente a um polo e defina o papel dele no tenant shared.
+              Vincule um usuario existente a um polo e defina o papel dele.
             </DialogDescription>
           </DialogHeader>
 
@@ -335,28 +322,16 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tenant_admin">Tenant admin</SelectItem>
-                  <SelectItem value="unit_manager">Gestor do polo</SelectItem>
-                  <SelectItem value="unit_operator">Operador</SelectItem>
-                  <SelectItem value="unit_viewer">Leitor</SelectItem>
+                  {MEMBERSHIP_ROLE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {getRoleLabel(form.role)}
               </p>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-md border border-border/60 p-3">
-              <Checkbox
-                id="membership-default"
-                checked={form.is_default}
-                onCheckedChange={(checked) =>
-                  setForm((prev) => ({ ...prev, is_default: checked === true }))
-                }
-              />
-              <Label htmlFor="membership-default" className="cursor-pointer">
-                Definir este polo como padrao para o usuario
-              </Label>
             </div>
 
             <DialogFooter>

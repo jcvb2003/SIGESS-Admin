@@ -36,12 +36,13 @@ import {
   SubscriptionModal,
   TablesTab,
   UsersTab,
+  SharedUsersTab,
   UnitsTab,
   MembershipsTab,
   useClientDetail,
   useDeleteClient,
 } from "@/features/clients";
-import { listSharedTenantUnits, proxyAction } from "@/services/clients.service";
+import { listSharedTenantUnits, listSharedTenantUsers, proxyAction } from "@/services/clients.service";
 
 interface StorageBucket {
   id: string;
@@ -93,7 +94,7 @@ export default function ClientDetailPage() {
 
   const { data: users = [] } = useQuery({
     queryKey: ["client-users-count", id],
-    enabled: !!client,
+    enabled: !!client && client.deployment_mode === "isolated",
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       const data = await proxyAction(id!, "list-client-members");
@@ -106,6 +107,13 @@ export default function ClientDetailPage() {
         max_socios: (u.max_socios as number) || null,
       })) as ClientMember[];
     },
+  });
+
+  const { data: sharedTenantUsers = [], isLoading: isLoadingSharedUsers } = useQuery({
+    queryKey: ["shared-tenant-users", sharedTenantId],
+    enabled: Boolean(client) && isSharedClient && Boolean(sharedTenantId),
+    queryFn: () => listSharedTenantUsers(sharedTenantId!),
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: tables = [] } = useQuery({
@@ -157,6 +165,7 @@ export default function ClientDetailPage() {
           ? [
               queryClient.invalidateQueries({ queryKey: ["shared-tenant-units", sharedTenantId] }),
               queryClient.invalidateQueries({ queryKey: ["shared-memberships", sharedTenantId] }),
+              queryClient.invalidateQueries({ queryKey: ["shared-tenant-users", sharedTenantId] }),
             ]
           : []),
       ]);
@@ -497,7 +506,9 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Usuarios</p>
-                <p className="text-xl font-bold text-foreground">{users.length}</p>
+                <p className="text-xl font-bold text-foreground">
+                  {client.deployment_mode === "shared" ? sharedTenantUsers.length : users.length}
+                </p>
               </div>
             </div>
           </Card>
@@ -562,6 +573,10 @@ export default function ClientDetailPage() {
               </>
             ) : (
               <>
+                <TabsTrigger value="shared-users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Usuarios ({isLoadingSharedUsers ? "..." : sharedTenantUsers.length})
+                </TabsTrigger>
                 <TabsTrigger value="units" className="gap-2">
                   <Building2 className="h-4 w-4" />
                   Polos ({isLoadingSharedUnits ? "..." : sharedUnits.length})
@@ -595,6 +610,15 @@ export default function ClientDetailPage() {
             </>
           ) : (
             <>
+              <TabsContent value="shared-users">
+                {client.shared_tenant_id ? (
+                  <SharedUsersTab tenantId={client.shared_tenant_id} />
+                ) : (
+                  <Card className="p-8 text-center text-muted-foreground">
+                    Defina o shared_tenant_id deste cliente para habilitar a criacao do administrador inicial.
+                  </Card>
+                )}
+              </TabsContent>
               <TabsContent value="units">
                 {client.shared_tenant_id ? (
                   <UnitsTab tenantId={client.shared_tenant_id} />

@@ -14,5 +14,6 @@ export * from "./components/TablesTab";
 export * from "./components/UsersTab";
 export * from "./components/UnitsTab";
 export * from "./components/MembershipsTab";
+export * from "./components/SharedUsersTab";
 export * from "./components/DeleteClientDialog";
 export * from "./components/SubscriptionModal";

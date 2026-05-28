@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
+  Building2,
   CreditCard,
   Eye,
   EyeOff,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Rocket,
   Settings2,
+  Shield,
   Table,
   Trash2,
   Users,
@@ -34,10 +36,12 @@ import {
   SubscriptionModal,
   TablesTab,
   UsersTab,
+  UnitsTab,
+  MembershipsTab,
   useClientDetail,
   useDeleteClient,
 } from "@/features/clients";
-import { proxyAction } from "@/services/clients.service";
+import { listSharedTenantUnits, proxyAction } from "@/services/clients.service";
 
 interface StorageBucket {
   id: string;
@@ -131,6 +135,13 @@ export default function ClientDetailPage() {
     },
   });
 
+  const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
+    queryKey: ["shared-tenant-units", client.shared_tenant_id],
+    enabled: !!client && client.deployment_mode === "shared" && !!client.shared_tenant_id,
+    queryFn: () => listSharedTenantUnits(client.shared_tenant_id!),
+    staleTime: 1000 * 60 * 5,
+  });
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -140,6 +151,8 @@ export default function ClientDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["client-users-count", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-users", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-tables", id] }),
+        queryClient.invalidateQueries({ queryKey: ["shared-tenant-units", client.shared_tenant_id] }),
+        queryClient.invalidateQueries({ queryKey: ["shared-memberships", client.shared_tenant_id] }),
       ]);
     } finally {
       setIsRefreshing(false);
@@ -252,6 +265,14 @@ export default function ClientDetailPage() {
               <span className="col-span-2 text-sm">{client.email || "Nao informado"}</span>
             </div>
             <div className="grid grid-cols-3 items-center gap-4">
+              <span className="text-sm font-medium text-muted-foreground">Modo</span>
+              <span className="col-span-2 text-sm">
+                <Badge variant={client.deployment_mode === "shared" ? "default" : "secondary"}>
+                  {client.deployment_mode}
+                </Badge>
+              </span>
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4">
               <span className="text-sm font-medium text-muted-foreground">Telefone</span>
               <span className="col-span-2 text-sm">{client.telefone || "Nao informado"}</span>
             </div>
@@ -292,9 +313,22 @@ export default function ClientDetailPage() {
                 {client.max_socios ? client.max_socios : "Ilimitado"}
               </span>
             </div>
+            {client.deployment_mode === "shared" ? (
+              <>
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <span className="text-sm font-medium text-muted-foreground">Shared ref</span>
+                  <span className="col-span-2 text-sm">{client.shared_project_ref || "Nao definido"}</span>
+                </div>
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <span className="text-sm font-medium text-muted-foreground">Shared tenant</span>
+                  <span className="col-span-2 text-sm">{client.shared_tenant_id || "Nao vinculado"}</span>
+                </div>
+              </>
+            ) : null}
           </div>
         </Card>
 
+        {client.deployment_mode === "isolated" ? (
         <Card className="relative space-y-4 overflow-hidden p-6 md:col-span-2">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-lg font-semibold">
@@ -353,6 +387,30 @@ export default function ClientDetailPage() {
             ) : null}
           </div>
         </Card>
+        ) : (
+          <Card className="space-y-4 p-6 md:col-span-2">
+            <h3 className="flex items-center gap-2 text-lg font-semibold">
+              <Shield className="h-5 w-5 text-primary" />
+              Ambiente Shared
+            </h3>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Este tenant opera no novo modelo shared. A configuracao de acesso e estrutura
+                acontece por polos e memberships, em vez de buckets e tabelas dedicadas por cliente.
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-border/50 bg-secondary/20 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Project ref</p>
+                  <p className="font-medium text-foreground">{client.shared_project_ref || "Nao definido"}</p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-secondary/20 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Tenant id</p>
+                  <p className="font-medium text-foreground">{client.shared_tenant_id || "Nao vinculado"}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -417,8 +475,12 @@ export default function ClientDetailPage() {
                 <HardDrive className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Buckets</p>
-                <p className="text-xl font-bold text-foreground">{buckets.length}</p>
+                <p className="text-sm text-muted-foreground">
+                  {client.deployment_mode === "shared" ? "Polos" : "Buckets"}
+                </p>
+                <p className="text-xl font-bold text-foreground">
+                  {client.deployment_mode === "shared" ? sharedUnits.length : buckets.length}
+                </p>
               </div>
             </div>
           </Card>
@@ -436,11 +498,19 @@ export default function ClientDetailPage() {
           <Card className="border-primary/10 bg-primary/5 p-4">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2">
-                <Table className="h-5 w-5 text-primary" />
+                {client.deployment_mode === "shared" ? (
+                  <Shield className="h-5 w-5 text-primary" />
+                ) : (
+                  <Table className="h-5 w-5 text-primary" />
+                )}
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Tabelas</p>
-                <p className="text-xl font-bold text-foreground">{tables.length}</p>
+                <p className="text-sm text-muted-foreground">
+                  {client.deployment_mode === "shared" ? "Memberships" : "Tabelas"}
+                </p>
+                <p className="text-xl font-bold text-foreground">
+                  {client.deployment_mode === "shared" ? "Shared" : tables.length}
+                </p>
               </div>
             </div>
           </Card>
@@ -452,7 +522,7 @@ export default function ClientDetailPage() {
           </Card>
         </div>
 
-        {connectionError ? (
+        {client.deployment_mode === "isolated" && connectionError ? (
           <Card className="border-destructive/50 bg-destructive/10 p-4">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-destructive" />
@@ -490,36 +560,76 @@ export default function ClientDetailPage() {
               <Settings2 className="h-4 w-4" />
               Configuracoes
             </TabsTrigger>
-            <TabsTrigger value="storage" className="gap-2">
-              <HardDrive className="h-4 w-4" />
-              Storage ({buckets.length})
-            </TabsTrigger>
-            <TabsTrigger value="users" className="gap-2">
-              <Users className="h-4 w-4" />
-              Usuarios ({users.length})
-            </TabsTrigger>
-            <TabsTrigger value="tables" className="gap-2">
-              <Table className="h-4 w-4" />
-              Tabelas ({tables.length})
-            </TabsTrigger>
+            {client.deployment_mode === "isolated" ? (
+              <>
+                <TabsTrigger value="storage" className="gap-2">
+                  <HardDrive className="h-4 w-4" />
+                  Storage ({buckets.length})
+                </TabsTrigger>
+                <TabsTrigger value="users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Usuarios ({users.length})
+                </TabsTrigger>
+                <TabsTrigger value="tables" className="gap-2">
+                  <Table className="h-4 w-4" />
+                  Tabelas ({tables.length})
+                </TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="units" className="gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Polos ({isLoadingSharedUnits ? "..." : sharedUnits.length})
+                </TabsTrigger>
+                <TabsTrigger value="memberships" className="gap-2">
+                  <Shield className="h-4 w-4" />
+                  Memberships
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <TabsContent value="configuracoes">{renderDetailsContent()}</TabsContent>
-          <TabsContent value="storage">{renderStorageContent()}</TabsContent>
-          <TabsContent value="users">
-            <UsersTab
-              clientId={client.id}
-              connectionError={connectionError}
-              onUsersLoaded={() => {}}
-            />
-          </TabsContent>
-          <TabsContent value="tables">
-            <TablesTab
-              clientId={client.id}
-              connectionError={connectionError}
-              onTablesLoaded={() => {}}
-            />
-          </TabsContent>
+          {client.deployment_mode === "isolated" ? (
+            <>
+              <TabsContent value="storage">{renderStorageContent()}</TabsContent>
+              <TabsContent value="users">
+                <UsersTab
+                  clientId={client.id}
+                  connectionError={connectionError}
+                  onUsersLoaded={() => {}}
+                />
+              </TabsContent>
+              <TabsContent value="tables">
+                <TablesTab
+                  clientId={client.id}
+                  connectionError={connectionError}
+                  onTablesLoaded={() => {}}
+                />
+              </TabsContent>
+            </>
+          ) : (
+            <>
+              <TabsContent value="units">
+                {client.shared_tenant_id ? (
+                  <UnitsTab tenantId={client.shared_tenant_id} />
+                ) : (
+                  <Card className="p-8 text-center text-muted-foreground">
+                    Defina o shared_tenant_id deste cliente para habilitar o gerenciamento de polos.
+                  </Card>
+                )}
+              </TabsContent>
+              <TabsContent value="memberships">
+                {client.shared_tenant_id ? (
+                  <MembershipsTab tenantId={client.shared_tenant_id} units={sharedUnits} />
+                ) : (
+                  <Card className="p-8 text-center text-muted-foreground">
+                    Defina o shared_tenant_id deste cliente para habilitar o gerenciamento de memberships.
+                  </Card>
+                )}
+              </TabsContent>
+            </>
+          )}
         </Tabs>
 
         <EditClientModal

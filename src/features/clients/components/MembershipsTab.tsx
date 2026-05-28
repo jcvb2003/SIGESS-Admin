@@ -19,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import type { TenantUnit, UserProfile, UserUnitMembership } from "../types";
@@ -55,14 +54,10 @@ const initialMembershipState: MembershipFormState = {
 
 function getRoleLabel(role: UserUnitMembership["role"]) {
   switch (role) {
-    case "tenant_admin":
-      return "Tenant admin";
     case "unit_manager":
       return "Gestor de apoio";
     case "unit_operator":
       return "Operador";
-    case "unit_viewer":
-      return "Leitor";
     default:
       return role;
   }
@@ -172,12 +167,17 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
   };
 
   const isLoading = membershipsLoading || usersLoading;
+  const visibleMemberships = memberships.filter(
+    (membership) =>
+      Boolean(membership.unit_id) &&
+      (membership.role === "unit_manager" || membership.role === "unit_operator"),
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-primary/5 p-4">
         <div>
-          <p className="font-semibold text-primary">{memberships.length} membership(s) cadastradas</p>
+          <p className="font-semibold text-primary">{visibleMemberships.length} membership(s) cadastradas</p>
           <p className="text-sm text-muted-foreground">
             Controle quais usuarios acessam cada polo.
           </p>
@@ -198,7 +198,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
         </div>
       ) : (
         <div className="grid gap-4">
-          {memberships.map((membership) => {
+          {visibleMemberships.map((membership) => {
             const user = usersById.get(membership.user_id);
             const unit = membership.unit_id ? unitsById.get(membership.unit_id) : null;
 
@@ -216,7 +216,7 @@ export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {
                     <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                       <span>{user?.email || "Sem email"}</span>
                       <span>•</span>
-                      <span>{unit?.name || "Tenant admin sem polo"}</span>
+                      <span>{unit?.name || "Sem polo"}</span>
                     </div>
                   </div>
 

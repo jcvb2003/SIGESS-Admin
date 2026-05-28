@@ -54,11 +54,11 @@ const initialFormState: CreateAdminFormState = {
 function getTenantRoleLabel(role: TenantUser["tenant_role"]) {
   switch (role) {
     case "owner":
-      return "Owner";
+      return "Gestor";
     case "manager":
-      return "Manager";
+      return "Gestor de apoio";
     case "member":
-      return "Member";
+      return "Operador";
     default:
       return role;
   }
@@ -165,7 +165,7 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
               <Shield className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Owners</p>
+              <p className="text-sm text-muted-foreground">Gestores</p>
               <p className="text-xl font-bold text-foreground">{ownerCount}</p>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { getSharedSupabase } from "@/lib/shared-supabase";
+import { getSharedSupabase, getSharedSupabaseAdmin } from "@/lib/shared-supabase";
 import { handleSupabaseError } from "@/services/error.handler";
 import type {
   Client,
@@ -197,10 +197,11 @@ export async function createSharedTenantAdmin(input: {
   autoConfirm?: boolean;
 }): Promise<TenantUser> {
   const client = getSharedSupabase();
+  const adminClient = getSharedSupabaseAdmin();
   const normalizedEmail = input.email.trim().toLowerCase();
   const normalizedName = input.nome.trim();
 
-  const { data: createdUserData, error: createUserError } = await client.auth.admin.createUser({
+  const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
     email: normalizedEmail,
     password: input.password,
     email_confirm: input.autoConfirm ?? true,
@@ -237,6 +238,7 @@ export async function deleteSharedTenantUser(input: {
   authUserId: string;
 }): Promise<void> {
   const client = getSharedSupabase();
+  const adminClient = getSharedSupabaseAdmin();
 
   const { error: membershipsError } = await client
     .from("user_unit_memberships")
@@ -254,7 +256,7 @@ export async function deleteSharedTenantUser(input: {
 
   if (tenantUserError) throw handleSupabaseError(tenantUserError);
 
-  const { error: authDeleteError } = await client.auth.admin.deleteUser(input.authUserId);
+  const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(input.authUserId);
   if (authDeleteError) throw handleSupabaseError(authDeleteError);
 }
 

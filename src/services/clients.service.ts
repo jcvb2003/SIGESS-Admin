@@ -1,13 +1,21 @@
 import { supabase } from "@/lib/supabase";
+import { getSharedSupabase } from "@/lib/shared-supabase";
 import { handleSupabaseError } from "@/services/error.handler";
-import type { Client, ClientCreate, ClientUpdate } from "@/features/clients/types";
+import type {
+  Client,
+  ClientCreate,
+  ClientUpdate,
+  TenantUnit,
+  UserProfile,
+  UserUnitMembership,
+} from "@/features/clients/types";
 
 // Service é puro: sem React, sem queryClient, sem side-effects de UI.
 
 export async function listClients(): Promise<Client[]> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, deployment_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .order("data_cadastro", { ascending: false });
 
   if (error) throw handleSupabaseError(error);
@@ -21,7 +29,7 @@ export async function listClients(): Promise<Client[]> {
 export async function getClient(id: string): Promise<Client> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, deployment_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .eq("id", id)
     .single();
 
@@ -123,6 +131,108 @@ export async function updateClient(id: string, input: ClientUpdate): Promise<Cli
 
 export async function deleteClient(id: string): Promise<void> {
   const { error } = await supabase.from("entidades").delete().eq("id", id);
+  if (error) throw handleSupabaseError(error);
+}
+
+export async function listSharedTenantUnits(tenantId: string): Promise<TenantUnit[]> {
+  const { data, error } = await getSharedSupabase()
+    .from("tenant_units")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("name", { ascending: true });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as TenantUnit[];
+}
+
+export async function createSharedTenantUnit(
+  input: Omit<TenantUnit, "id" | "created_at" | "updated_at">,
+): Promise<TenantUnit> {
+  const { data, error } = await getSharedSupabase()
+    .from("tenant_units")
+    .insert(input)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data as TenantUnit;
+}
+
+export async function updateSharedTenantUnit(
+  id: string,
+  input: Partial<Omit<TenantUnit, "id" | "created_at" | "updated_at">>,
+): Promise<TenantUnit> {
+  const { data, error } = await getSharedSupabase()
+    .from("tenant_units")
+    .update(input)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data as TenantUnit;
+}
+
+export async function deleteSharedTenantUnit(id: string): Promise<void> {
+  const { error } = await getSharedSupabase().from("tenant_units").delete().eq("id", id);
+  if (error) throw handleSupabaseError(error);
+}
+
+export async function listSharedUserProfiles(): Promise<UserProfile[]> {
+  const { data, error } = await getSharedSupabase()
+    .from("user_profiles")
+    .select("*")
+    .order("nome", { ascending: true });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as UserProfile[];
+}
+
+export async function listSharedMemberships(tenantId: string): Promise<UserUnitMembership[]> {
+  const { data, error } = await getSharedSupabase()
+    .from("user_unit_memberships")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as UserUnitMembership[];
+}
+
+export async function createSharedMembership(
+  input: Omit<UserUnitMembership, "id" | "created_at" | "updated_at">,
+): Promise<UserUnitMembership> {
+  const { data, error } = await getSharedSupabase()
+    .from("user_unit_memberships")
+    .insert(input)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data as UserUnitMembership;
+}
+
+export async function updateSharedMembership(
+  id: string,
+  input: Partial<Omit<UserUnitMembership, "id" | "created_at" | "updated_at">>,
+): Promise<UserUnitMembership> {
+  const { data, error } = await getSharedSupabase()
+    .from("user_unit_memberships")
+    .update(input)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data as UserUnitMembership;
+}
+
+export async function deleteSharedMembership(id: string): Promise<void> {
+  const { error } = await getSharedSupabase()
+    .from("user_unit_memberships")
+    .delete()
+    .eq("id", id);
+
   if (error) throw handleSupabaseError(error);
 }
 

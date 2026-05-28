@@ -1,10 +1,17 @@
-import { useState, useEffect } from "react";
-import type { Client } from "../types";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import type { Client } from "../types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useUpdateClient } from "../hooks/index";
 
 interface EditClientModalProps {
@@ -14,10 +21,18 @@ interface EditClientModalProps {
   readonly onUpdated?: (updated: Client) => void;
 }
 
-export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditClientModalProps) {
+export function EditClientModal({
+  client,
+  open,
+  onOpenChange,
+  onUpdated,
+}: EditClientModalProps) {
   const [form, setForm] = useState({
     nome_entidade: client.nome_entidade,
     tenant_code: client.tenant_code,
+    deployment_mode: client.deployment_mode,
+    shared_project_ref: client.shared_project_ref || "",
+    shared_tenant_id: client.shared_tenant_id || "",
     email: client.email || "",
     telefone: client.telefone || "",
     supabase_url: client.supabase_url,
@@ -26,7 +41,7 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
     supabase_access_token: "",
     logo_url: client.logo_url || "",
   });
-  
+
   const updateClientMutation = useUpdateClient();
 
   useEffect(() => {
@@ -34,6 +49,9 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
       setForm({
         nome_entidade: client.nome_entidade,
         tenant_code: client.tenant_code,
+        deployment_mode: client.deployment_mode,
+        shared_project_ref: client.shared_project_ref || "",
+        shared_tenant_id: client.shared_tenant_id || "",
         email: client.email || "",
         telefone: client.telefone || "",
         supabase_url: client.supabase_url,
@@ -50,6 +68,9 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
       const updatePayload: Record<string, unknown> = {
         nome_entidade: form.nome_entidade,
         tenant_code: form.tenant_code.trim().toLowerCase(),
+        deployment_mode: form.deployment_mode,
+        shared_project_ref: form.shared_project_ref.trim() || null,
+        shared_tenant_id: form.shared_tenant_id.trim() || null,
         email: form.email || null,
         telefone: form.telefone || null,
         supabase_url: form.supabase_url,
@@ -68,17 +89,20 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
         id: client.id,
         input: updatePayload,
       });
-      
+
       toast.success("Cliente atualizado com sucesso");
 
       if (onUpdated) onUpdated(result);
       onOpenChange(false);
     } catch (error) {
-      toast.error(`Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
+      toast.error(
+        `Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+      );
     }
   };
 
-  const update = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const update = (field: string, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,66 +113,109 @@ export function EditClientModal({ client, open, onOpenChange, onUpdated }: EditC
         <div className="space-y-4">
           <div>
             <Label>Nome da Entidade *</Label>
-            <Input value={form.nome_entidade} onChange={e => update("nome_entidade", e.target.value)} />
+            <Input value={form.nome_entidade} onChange={(e) => update("nome_entidade", e.target.value)} />
           </div>
           <div>
             <Label>Tenant Code *</Label>
             <Input
               value={form.tenant_code}
-              onChange={e => update("tenant_code", e.target.value)}
+              onChange={(e) => update("tenant_code", e.target.value)}
               placeholder="ex: z2, sinpesca-breves"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Identificador publico e critico para resolucao dinamica no Web. Use apenas letras minusculas, numeros e hifen.
+              Identificador publico e critico para resolucao dinamica no Web. Use apenas
+              letras minusculas, numeros e hifen.
             </p>
+          </div>
+          <div>
+            <Label>Modo de Implantacao</Label>
+            <Select value={form.deployment_mode} onValueChange={(value) => update("deployment_mode", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o modo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="isolated">Isolated</SelectItem>
+                <SelectItem value="shared">Shared</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Email</Label>
-              <Input value={form.email} onChange={e => update("email", e.target.value)} />
+              <Input value={form.email} onChange={(e) => update("email", e.target.value)} />
             </div>
             <div>
               <Label>Telefone</Label>
-              <Input value={form.telefone} onChange={e => update("telefone", e.target.value)} />
+              <Input value={form.telefone} onChange={(e) => update("telefone", e.target.value)} />
             </div>
           </div>
           <div>
             <Label>URL do Supabase *</Label>
-            <Input value={form.supabase_url} onChange={e => update("supabase_url", e.target.value)} />
+            <Input value={form.supabase_url} onChange={(e) => update("supabase_url", e.target.value)} />
           </div>
           <div>
-            <Label>Chave Pública (Publishable)</Label>
-            <Input value={form.supabase_publishable_key} onChange={e => update("supabase_publishable_key", e.target.value)} />
+            <Label>Chave Publica (Publishable)</Label>
+            <Input
+              value={form.supabase_publishable_key}
+              onChange={(e) => update("supabase_publishable_key", e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Shared Project Ref</Label>
+            <Input
+              value={form.shared_project_ref}
+              onChange={(e) => update("shared_project_ref", e.target.value)}
+              placeholder="Ex: jmahgvgtjstklabwkkit"
+            />
+          </div>
+          <div>
+            <Label>Shared Tenant ID</Label>
+            <Input
+              value={form.shared_tenant_id}
+              onChange={(e) => update("shared_tenant_id", e.target.value)}
+              placeholder="UUID do tenant no banco shared"
+            />
           </div>
           <div>
             <Label>Chave Secreta (Service Role)</Label>
-            <Input type="password" value={form.supabase_secret_keys} placeholder="Deixe em branco para não alterar" onChange={e => update("supabase_secret_keys", e.target.value)} />
+            <Input
+              type="password"
+              value={form.supabase_secret_keys}
+              placeholder="Deixe em branco para nao alterar"
+              onChange={(e) => update("supabase_secret_keys", e.target.value)}
+            />
           </div>
           <div>
             <Label className="flex items-center gap-2">
-              Supabase Access Token (PAT) <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold uppercase">Acesso Conta Completa</span>
+              Supabase Access Token (PAT)
+              <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                Acesso Conta Completa
+              </span>
             </Label>
-            <Input 
-              type="password" 
-              placeholder="sbp_... (Deixe em branco para não alterar)" 
-              value={form.supabase_access_token} 
-              onChange={e => update("supabase_access_token", e.target.value)} 
+            <Input
+              type="password"
+              placeholder="sbp_... (Deixe em branco para nao alterar)"
+              value={form.supabase_access_token}
+              onChange={(e) => update("supabase_access_token", e.target.value)}
             />
           </div>
           <div>
             <Label>URL do Logo</Label>
-            <Input value={form.logo_url} onChange={e => update("logo_url", e.target.value)} />
+            <Input value={form.logo_url} onChange={(e) => update("logo_url", e.target.value)} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button 
-              onClick={handleSave} 
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
               disabled={
                 updateClientMutation.isPending ||
                 !form.nome_entidade ||
                 !form.tenant_code.trim() ||
                 !form.supabase_url ||
-                !form.supabase_publishable_key.trim()
+                !form.supabase_publishable_key.trim() ||
+                (form.deployment_mode === "shared" && !form.shared_project_ref.trim())
               }
             >
               {updateClientMutation.isPending ? "Salvando..." : "Salvar"}

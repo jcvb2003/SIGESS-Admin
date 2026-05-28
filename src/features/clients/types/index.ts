@@ -2,6 +2,9 @@ export interface Client {
   id: string;
   nome_entidade: string;
   tenant_code: string;
+  deployment_mode: "isolated" | "shared";
+  shared_project_ref: string | null;
+  shared_tenant_id: string | null;
   email: string | null;
   telefone: string | null;
   supabase_url: string;
@@ -20,3 +23,36 @@ export interface Client {
 
 export type ClientCreate = Omit<Client, "id" | "data_cadastro">;
 export type ClientUpdate = Partial<ClientCreate>;
+
+export interface TenantUnit {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string | null;
+  nome: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserUnitMembership {
+  id: string;
+  user_id: string;
+  tenant_id: string;
+  unit_id: string | null;
+  role: "tenant_admin" | "unit_manager" | "unit_operator" | "unit_viewer";
+  is_active: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}

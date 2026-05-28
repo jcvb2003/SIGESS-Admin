@@ -110,6 +110,7 @@ export type Database = {
           acesso_expira_em: string | null
           assinatura: string
           data_cadastro: string
+          deployment_mode: string | null
           email: string | null
           health_error_detail: string | null
           id: string
@@ -118,6 +119,8 @@ export type Database = {
           logo_url: string | null
           max_socios: number | null
           nome_entidade: string
+          shared_project_ref: string | null
+          shared_tenant_id: string | null
           supabase_access_token: string | null
           supabase_publishable_key: string
           supabase_secret_keys: string | null
@@ -129,6 +132,7 @@ export type Database = {
           acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
+          deployment_mode?: string | null
           email?: string | null
           health_error_detail?: string | null
           id?: string
@@ -137,6 +141,8 @@ export type Database = {
           logo_url?: string | null
           max_socios?: number | null
           nome_entidade: string
+          shared_project_ref?: string | null
+          shared_tenant_id?: string | null
           supabase_access_token?: string | null
           supabase_publishable_key: string
           supabase_secret_keys?: string | null
@@ -148,6 +154,7 @@ export type Database = {
           acesso_expira_em?: string | null
           assinatura?: string
           data_cadastro?: string
+          deployment_mode?: string | null
           email?: string | null
           health_error_detail?: string | null
           id?: string
@@ -156,6 +163,8 @@ export type Database = {
           logo_url?: string | null
           max_socios?: number | null
           nome_entidade?: string
+          shared_project_ref?: string | null
+          shared_tenant_id?: string | null
           supabase_access_token?: string | null
           supabase_publishable_key?: string
           supabase_secret_keys?: string | null

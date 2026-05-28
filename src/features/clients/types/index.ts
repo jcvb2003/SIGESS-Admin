@@ -49,7 +49,7 @@ export interface TenantUser {
   id: string;
   tenant_id: string;
   user_id: string;
-  tenant_role: "owner" | "manager" | "member";
+  tenant_role: "owner" | "member";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -61,7 +61,7 @@ export interface UserUnitMembership {
   user_id: string;
   tenant_id: string;
   unit_id: string | null;
-  role: "tenant_admin" | "unit_manager" | "unit_operator" | "unit_viewer";
+  role: "unit_operator";
   is_active: boolean;
   is_default: boolean;
   created_at: string;

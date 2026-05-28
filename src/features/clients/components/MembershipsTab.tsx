@@ -31,7 +31,6 @@ import {
 } from "@/services/clients.service";
 
 const MEMBERSHIP_ROLE_OPTIONS = [
-  { value: "unit_manager" as const, label: "Gestor de apoio" },
   { value: "unit_operator" as const, label: "Operador" },
 ];
 
@@ -49,18 +48,11 @@ interface MembershipFormState {
 const initialMembershipState: MembershipFormState = {
   user_id: "",
   unit_id: "",
-  role: "unit_manager",
+  role: "unit_operator",
 };
 
 function getRoleLabel(role: UserUnitMembership["role"]) {
-  switch (role) {
-    case "unit_manager":
-      return "Gestor de apoio";
-    case "unit_operator":
-      return "Operador";
-    default:
-      return role;
-  }
+  return role === "unit_operator" ? "Operador" : role;
 }
 
 export function MembershipsTab({ tenantId, units }: MembershipsTabProps) {

@@ -52,16 +52,7 @@ const initialFormState: CreateAdminFormState = {
 };
 
 function getTenantRoleLabel(role: TenantUser["tenant_role"]) {
-  switch (role) {
-    case "owner":
-      return "Gestor";
-    case "manager":
-      return "Gestor de apoio";
-    case "member":
-      return "Operador";
-    default:
-      return role;
-  }
+  return role === "owner" ? "Gestor" : "Operador";
 }
 
 export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {

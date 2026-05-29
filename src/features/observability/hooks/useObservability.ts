@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useClients } from "@/features/clients";
 import { proxyAction } from "@/services/clients.service";
 import { getSchemaSyncStatus, runSchemaAudit } from "../services/schema-sync.service";
+import { buildSchemaSyncActionKey } from "../utils/drift-utils";
 import type {
   ExportRun,
   ImportRecord,
@@ -140,16 +141,35 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
   return sections.join("\n\n");
 }
 
+function buildPreviewSqlFromSegments(operations: SchemaDriftOperation[], segments: string[]) {
+  const summary = buildOperationsSummary(operations);
+  const content = segments.filter((segment) => segment.trim().length > 0);
+
+  return [...summary, ...content].join("\n\n");
+}
+
 function sortOperations(operations: SyncableSchemaDrift[]) {
   const weight = (op: SyncableSchemaDrift) => {
+    if (op.diffType === "extra_in_tenant") {
+      if (op.objectType === "trigger") return 0;
+      if (op.objectType === "function_grant") return 1;
+      if (op.objectType === "function") return 2;
+      if (op.objectType === "policy") return 3;
+      if (op.objectType === "index") return 4;
+      if (op.objectType === "grant") return 5;
+      if (op.objectType === "auth_config") return 6;
+      if (op.objectType === "view") return 7;
+      return 99;
+    }
+
     if (op.objectType === "view") return 0;
     if (op.objectType === "function") return 1;
     if (op.objectType === "function_grant") return 2;
     if (op.objectType === "trigger") return 3;
-    if (op.objectType === "index") return op.diffType === "extra_in_tenant" ? 5 : 4;
-    if (op.objectType === "policy") return op.diffType === "extra_in_tenant" ? 7 : 6;
-    if (op.objectType === "grant") return 8;
-    if (op.objectType === "auth_config") return 9;
+    if (op.objectType === "index") return 4;
+    if (op.objectType === "policy") return 5;
+    if (op.objectType === "grant") return 6;
+    if (op.objectType === "auth_config") return 7;
     return 99;
   };
 
@@ -301,16 +321,46 @@ export function useObservability() {
           },
         ]);
 
-    const actionKey = `${targets.map((t) => t.clientId).join(",")}:${operationsToPrepare
-      .map((op) => `${op.objectType}:${op.schema}.${op.objectName}:${op.diffType}`)
-      .join("|")}`;
+    const actionKey = buildSchemaSyncActionKey(targets, operationsToPrepare);
     setIsPreparingDrift(actionKey);
     try {
       const primaryTarget = targets[0];
       if (!primaryTarget) throw new Error("Nenhum tenant selecionado para sync.");
 
       const operations: SchemaDriftOperation[] = [];
-      for (const operation of operationsToPrepare) {
+      const previewSegments: string[] = [];
+      const batchOps = operationsToPrepare.filter((operation) => operation.objectType !== "auth_config");
+      const authConfigOps = operationsToPrepare.filter((operation) => operation.objectType === "auth_config");
+
+      if (batchOps.length > 0) {
+        const data = await proxyAction(primaryTarget.clientId, "apply-schema-drift", {
+          operations: batchOps.map((operation) => ({
+            objectType: operation.objectType,
+            objectName: operation.objectName,
+            schema: operation.schema,
+            diffType: operation.diffType,
+          })),
+          mode: "dry-run",
+        });
+
+        if (!data?.sql) {
+          throw new Error("Dry-run batch nao retornou SQL para revisao.");
+        }
+
+        operations.push(
+          ...batchOps.map((operation) => ({
+            objectType: operation.objectType,
+            objectName: operation.objectName,
+            schema: operation.schema,
+            diffType: operation.diffType,
+            displayName: operation.displayName,
+            sql: "",
+          })),
+        );
+        previewSegments.push(data.sql);
+      }
+
+      for (const operation of authConfigOps) {
         const data = await proxyAction(primaryTarget.clientId, "apply-schema-drift", {
           objectType: operation.objectType,
           objectName: operation.objectName,
@@ -331,6 +381,7 @@ export function useObservability() {
           displayName: operation.displayName,
           sql: data.sql,
         });
+        previewSegments.push(data.sql);
       }
 
       const defaultTitle =
@@ -347,7 +398,7 @@ export function useObservability() {
             ? `1 operação ${operations[0].diffType === "extra_in_tenant" ? "remove o objeto extra" : "alinha o objeto com Oeiras"}.`
             : "Lote preparado a partir do estado real do Oeiras, separado por tipo de objeto."),
         operations,
-        sql: buildPreviewSql(operations),
+        sql: buildPreviewSqlFromSegments(operations, previewSegments),
       });
       setDriftApplyResults([]);
     } catch (err) {
@@ -366,7 +417,28 @@ export function useObservability() {
     for (const target of driftPreview.targets) {
       const failures: string[] = [];
 
-      for (const operation of driftPreview.operations) {
+      const batchOps = driftPreview.operations.filter((operation) => operation.objectType !== "auth_config");
+      const authConfigOps = driftPreview.operations.filter((operation) => operation.objectType === "auth_config");
+
+      if (batchOps.length > 0) {
+        try {
+          await proxyAction(target.clientId, "apply-schema-drift", {
+            operations: batchOps.map((operation) => ({
+              objectType: operation.objectType,
+              objectName: operation.objectName,
+              schema: operation.schema,
+              diffType: operation.diffType,
+            })),
+            mode: "apply",
+          });
+        } catch (err) {
+          failures.push(
+            `Lote de ${batchOps.length} operaÃ§Ãµes: ${err instanceof Error ? err.message : "Erro desconhecido"}`,
+          );
+        }
+      }
+
+      for (const operation of authConfigOps) {
         try {
           await proxyAction(target.clientId, "apply-schema-drift", {
             objectType: operation.objectType,

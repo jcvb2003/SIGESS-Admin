@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { TenantSchemaStatus } from '../model/schema-comparator';
 
+export const IGNORED_SCHEMA_TENANT_CODES = ['sinpesca'] as const;
+
 export async function runSchemaAudit(): Promise<{ success: boolean, results?: any[], error?: string }> {
   const { data, error } = await supabase.functions.invoke('schema-audit', {
     method: 'POST',
@@ -35,7 +37,12 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
     throw new Error(`Erro ao carregar status de sync: ${error.message}`);
   }
 
-  return (data || []).map(row => ({
+  return (data || [])
+    .filter((row) => {
+      const tenantCode = row.entidades?.tenant_code;
+      return !tenantCode || !IGNORED_SCHEMA_TENANT_CODES.includes(tenantCode as (typeof IGNORED_SCHEMA_TENANT_CODES)[number]);
+    })
+    .map(row => ({
     tenantId: row.tenant_id,
     tenantName: row.entidades?.nome_entidade || row.entidades?.tenant_code || 'Unknown',
     checkedAt: row.checked_at,

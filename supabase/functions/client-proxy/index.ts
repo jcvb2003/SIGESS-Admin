@@ -814,6 +814,7 @@ async function buildGrantSyncSql(
 
 async function buildFunctionSyncSql(
   supabaseAdmin: SupabaseClient,
+  client: ClientConfig,
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -825,7 +826,15 @@ async function buildFunctionSyncSql(
   const qualifiedFunction = `${quoteIdentifier(schemaName)}.${quoteIdentifier(functionName)}(${identityArgs})`;
 
   if (diffType === "extra_in_tenant") {
-    return `DROP FUNCTION IF EXISTS ${qualifiedFunction};`;
+    if (!client.supabase_access_token) {
+      throw createHttpError("PAT do tenant alvo ausente", 400);
+    }
+    return await buildExtraFunctionRemovalSql(
+      client.supabase_url,
+      client.supabase_access_token,
+      schemaName,
+      objectName,
+    );
   }
 
   const oeiras = await getOeirasConfig(supabaseAdmin);
@@ -850,7 +859,7 @@ async function buildFunctionSyncSql(
     throw createHttpError(`Function ${schemaName}.${objectName} nÃ£o encontrada em Oeiras`, 404);
   }
 
-  return definition.trim().replace(/;$/, ";");
+  return ensureSqlTerminator(definition);
 }
 
 async function buildFunctionGrantSyncSql(
@@ -891,6 +900,29 @@ async function buildFunctionGrantSyncSql(
   }
 
   return statements.join("\n");
+}
+
+async function buildFunctionGrantSyncSqlSafe(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
+  assertSafeIdentifier(functionName, "functionName");
+
+  const qualifiedFunction = `${quoteIdentifier(schemaName)}.${quoteIdentifier(functionName)}(${identityArgs})`;
+  const quotedRole = roleToSql(grantee);
+
+  if (diffType === "extra_in_tenant") {
+    return [
+      `REVOKE EXECUTE ON FUNCTION ${qualifiedFunction} FROM PUBLIC;`,
+      `REVOKE ALL ON FUNCTION ${qualifiedFunction} FROM ${quotedRole};`,
+    ].join("\n");
+  }
+
+  return await buildFunctionGrantSyncSql(supabaseAdmin, objectName, schemaName);
 }
 
 async function buildTriggerSyncSql(
@@ -944,6 +976,7 @@ async function buildTriggerSyncSql(
 
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
+  client: ClientConfig,
   objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger",
   objectName: string,
   schemaName: string,
@@ -965,11 +998,11 @@ async function buildSchemaDriftSql(
   }
 
   if (objectType === "function") {
-    return await buildFunctionSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildFunctionSyncSql(supabaseAdmin, client, objectName, schemaName, diffType);
   }
 
   if (objectType === "function_grant") {
-    return await buildFunctionGrantSyncSql(supabaseAdmin, objectName, schemaName);
+    return await buildFunctionGrantSyncSqlSafe(supabaseAdmin, objectName, schemaName, diffType);
   }
 
   if (objectType === "trigger") {
@@ -979,12 +1012,125 @@ async function buildSchemaDriftSql(
   return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
 }
 
+async function applySchemaDriftBatch(
+  clientId: string,
+  client: ClientConfig,
+  supabaseAdmin: SupabaseClient,
+  params: ApplySchemaDriftBatchParams,
+) {
+  const { operations, mode } = params;
+
+  if (client.tenant_code === "sinpesca-oeiras") {
+    throw createHttpError("O tenant de referÃªncia nÃ£o pode ser sincronizado contra ele mesmo", 400);
+  }
+
+  if (!client.supabase_access_token) {
+    throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
+  }
+
+  if (!Array.isArray(operations) || operations.length === 0) {
+    throw createHttpError("operations nÃ£o pode ser vazio", 400);
+  }
+
+  if (mode !== "dry-run" && mode !== "apply") {
+    throw createHttpError("Modo invÃ¡lido", 400);
+  }
+
+  const sqlParts: string[] = [];
+  const seenPublicFunctionRevokes = new Set<string>();
+
+  for (const operation of operations) {
+    const { objectType, objectName, schema = "public", diffType } = operation;
+
+    if (objectType === "auth_config") {
+      throw createHttpError("auth_config ainda nÃ£o pode ser processado em lote", 400);
+    }
+
+    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger"].includes(objectType)) {
+      throw createHttpError(`Tipo de objeto ainda nÃ£o suportado em lote: ${objectType}`, 400);
+    }
+
+    if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
+      throw createHttpError("Tipo de divergÃªncia invÃ¡lido", 400);
+    }
+
+    const sql = await buildSchemaDriftSql(
+      supabaseAdmin,
+      client,
+      objectType,
+      objectName,
+      schema,
+      diffType,
+    );
+
+    const normalizedSql = ensureSqlTerminator(sql)
+      .trim()
+      .split("\n")
+      .filter((line) => {
+        const trimmedLine = line.trim();
+        const isPublicFunctionRevoke =
+          /^REVOKE EXECUTE ON FUNCTION .+ FROM PUBLIC;$/i.test(trimmedLine);
+
+        if (!isPublicFunctionRevoke) {
+          return true;
+        }
+
+        if (seenPublicFunctionRevokes.has(trimmedLine)) {
+          return false;
+        }
+
+        seenPublicFunctionRevokes.add(trimmedLine);
+        return true;
+      })
+      .join("\n")
+      .trim();
+
+    if (normalizedSql.length > 0) {
+      sqlParts.push(normalizedSql);
+    }
+  }
+
+  const combinedSql = sqlParts.join("\n\n");
+
+  if (mode === "dry-run") {
+    return {
+      success: true,
+      mode,
+      operationCount: operations.length,
+      sql: combinedSql,
+    };
+  }
+
+  try {
+    await runSql(client.supabase_url, client.supabase_access_token, combinedSql);
+    return {
+      success: true,
+      mode,
+      operationCount: operations.length,
+      sql: combinedSql,
+      appliedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw createHttpError(`Falha ao sincronizar lote de ${operations.length} operaÃ§Ãµes: ${message}`, 400);
+  }
+}
+
 async function applySchemaDrift(
   clientId: string,
   client: ClientConfig,
   supabaseAdmin: SupabaseClient,
   params: Record<string, unknown>,
 ) {
+  if (Array.isArray(params.operations)) {
+    return await applySchemaDriftBatch(
+      clientId,
+      client,
+      supabaseAdmin,
+      params as unknown as ApplySchemaDriftBatchParams,
+    );
+  }
+
   const { objectType, objectName, schema = "public", mode, diffType } = params as ApplySchemaDriftParams;
 
   if (client.tenant_code === "sinpesca-oeiras") {
@@ -1034,6 +1180,7 @@ async function applySchemaDrift(
 
   const sql = await buildSchemaDriftSql(
     supabaseAdmin,
+    client,
     objectType,
     objectName,
     schema,
@@ -1508,6 +1655,18 @@ interface ApplySchemaDriftParams {
   mode: 'dry-run' | 'apply';
 }
 
+interface ApplySchemaDriftOperation {
+  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger';
+  objectName: string;
+  schema?: string;
+  diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';
+}
+
+interface ApplySchemaDriftBatchParams {
+  operations: ApplySchemaDriftOperation[];
+  mode: 'dry-run' | 'apply';
+}
+
 function assertSafeIdentifier(value: string, fieldName: string) {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
     throw createHttpError(`${fieldName} inválido`, 400);
@@ -1516,6 +1675,42 @@ function assertSafeIdentifier(value: string, fieldName: string) {
 
 function quoteIdentifier(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function ensureSqlTerminator(sql: string) {
+  const trimmed = sql.trimEnd();
+  return trimmed.endsWith(";") ? trimmed : `${trimmed};`;
+}
+
+async function buildExtraFunctionRemovalSql(
+  projectUrl: string,
+  accessToken: string,
+  schemaName: string,
+  objectName: string,
+) {
+  const { functionName, identityArgs } = splitFunctionSignature(objectName, "objectName");
+  assertSafeIdentifier(schemaName, "schema");
+  assertSafeIdentifier(functionName, "functionName");
+
+  const qualifiedFunction = `${quoteIdentifier(schemaName)}.${quoteIdentifier(functionName)}(${identityArgs})`;
+  const rows = await runSql(
+    projectUrl,
+    accessToken,
+    `SELECT e.evtname
+     FROM pg_event_trigger e
+     JOIN pg_proc p ON p.oid = e.evtfoid
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND p.proname = '${escapeLiteral(functionName)}'
+       AND pg_get_function_identity_arguments(p.oid) = '${escapeLiteral(identityArgs)}'
+     ORDER BY e.evtname`,
+  );
+
+  const eventTriggerDrops = (rows ?? []).map((row: { evtname?: string }) =>
+    `DROP EVENT TRIGGER IF EXISTS ${quoteIdentifier(String(row.evtname ?? ""))};`,
+  );
+
+  return [...eventTriggerDrops, `DROP FUNCTION IF EXISTS ${qualifiedFunction};`].join("\n");
 }
 
 async function handleMigrationActions(action: string, clientId: string, client: ClientConfig, supabaseAdmin: SupabaseClient, params: Record<string, unknown>) {

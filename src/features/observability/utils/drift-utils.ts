@@ -197,3 +197,16 @@ export function getTenantsWithSameSchemaDrift(
       tenantName: status.tenantName,
     }));
 }
+
+export function buildSchemaSyncActionKey(
+  targets: Array<{ clientId: string; tenantName: string }>,
+  operations: Array<Pick<SyncableSchemaDrift, "objectType" | "schema" | "objectName" | "diffType">>,
+) {
+  const normalizedTargets = [...targets].map((target) => target.clientId).sort().join(",");
+  const normalizedOperations = [...operations]
+    .map((operation) => `${operation.objectType}:${operation.schema}.${operation.objectName}:${operation.diffType}`)
+    .sort()
+    .join("|");
+
+  return `${normalizedTargets}:${normalizedOperations}`;
+}

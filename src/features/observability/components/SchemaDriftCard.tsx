@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import type { TenantSchemaStatus } from "../model/schema-comparator";
 import type { SyncableSchemaDrift } from "../types";
 import { formatDateTime } from "../utils/format-utils";
-import { getSyncableSchemaDrifts } from "../utils/drift-utils";
+import { buildSchemaSyncActionKey, getSyncableSchemaDrifts } from "../utils/drift-utils";
 
 interface SchemaDriftCardProps {
   readonly status: TenantSchemaStatus;
@@ -39,9 +39,7 @@ function buildSingleActionKey(
   target: { clientId: string; tenantName: string },
   operations: SyncableSchemaDrift[],
 ) {
-  return `${target.clientId}:${operations
-    .map((op) => `${op.objectType}:${op.schema}.${op.objectName}:${op.diffType}`)
-    .join("|")}`;
+  return buildSchemaSyncActionKey([target], operations);
 }
 
 function getSyncHelperText(item: SyncableSchemaDrift) {

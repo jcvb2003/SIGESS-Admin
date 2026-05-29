@@ -86,7 +86,7 @@ export default function ClientDetailPage() {
     error: bucketError,
   } = useQuery({
     queryKey: ["client-buckets", id],
-    enabled: !!client,
+    enabled: !!client && !isSharedClient,
     queryFn: () => proxyAction(id!, "list-buckets"),
     retry: false,
     staleTime: 1000 * 60 * 10,
@@ -118,7 +118,7 @@ export default function ClientDetailPage() {
 
   const { data: tables = [] } = useQuery({
     queryKey: ["client-tables", id],
-    enabled: !!client,
+    enabled: !!client && !isSharedClient,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       const data = await proxyAction(id!, "list-tables");

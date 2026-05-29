@@ -2,8 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { TenantSchemaStatus } from '../model/schema-comparator';
 
-export const IGNORED_SCHEMA_TENANT_CODES = ['sinpesca'] as const;
-
 export async function runSchemaAudit(): Promise<{ success: boolean, results?: any[], error?: string }> {
   const { data, error } = await supabase.functions.invoke('schema-audit', {
     method: 'POST',
@@ -29,7 +27,7 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
       total_diffs,
       diffs,
       summary,
-      entidades ( nome_entidade, tenant_code )
+      entidades ( nome_entidade, tenant_code, deployment_mode )
     `)
     .order('checked_at', { ascending: false });
 
@@ -38,10 +36,7 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
   }
 
   return (data || [])
-    .filter((row) => {
-      const tenantCode = row.entidades?.tenant_code;
-      return !tenantCode || !IGNORED_SCHEMA_TENANT_CODES.includes(tenantCode as (typeof IGNORED_SCHEMA_TENANT_CODES)[number]);
-    })
+    .filter((row) => row.entidades?.deployment_mode === 'isolated')
     .map(row => ({
     tenantId: row.tenant_id,
     tenantName: row.entidades?.nome_entidade || row.entidades?.tenant_code || 'Unknown',

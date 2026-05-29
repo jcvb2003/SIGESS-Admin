@@ -30,7 +30,6 @@ import { SchemaDriftCard } from "../components/SchemaDriftCard";
 import { ImportHistoryCard } from "../components/ImportHistoryCard";
 import { buildSchemaSyncActionKey, getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
 import type { SyncableSchemaDrift } from "../types";
-import { IGNORED_SCHEMA_TENANT_CODES } from "../services/schema-sync.service";
 
 export default function ObservabilityPage() {
   const {
@@ -210,11 +209,9 @@ export default function ObservabilityPage() {
                   <p className="text-sm text-muted-foreground">
                     As ações antes espalhadas por cliente agora ficam concentradas aqui: leitura de drift, sincronização manual e histórico operacional por tenant.
                   </p>
-                  {IGNORED_SCHEMA_TENANT_CODES.length > 0 ? (
-                    <p className="mt-2 text-xs text-amber-700">
-                      Ignorados temporariamente no drift: {IGNORED_SCHEMA_TENANT_CODES.join(", ")}.
-                    </p>
-                  ) : null}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Apenas projetos isolated são comparados. Projetos shared têm modelo de schema próprio.
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="border-border/60 bg-background">
@@ -223,11 +220,6 @@ export default function ObservabilityPage() {
                   <Badge variant="outline" className="border-border/60 bg-background">
                     {allImports.length} evento(s) de importação
                   </Badge>
-                  {IGNORED_SCHEMA_TENANT_CODES.length > 0 ? (
-                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                      {IGNORED_SCHEMA_TENANT_CODES.length} tenant(s) ignorado(s) no drift
-                    </Badge>
-                  ) : null}
                   <Badge
                     variant="outline"
                     className={`border-border/60 ${
@@ -294,11 +286,6 @@ export default function ObservabilityPage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     Compara fisicamente as tabelas, funções, policies, auth e triggers com a referência (Oeiras).
                   </p>
-                  {IGNORED_SCHEMA_TENANT_CODES.length > 0 ? (
-                    <p className="mt-2 text-xs text-amber-700">
-                      Ignorados temporariamente no drift: {IGNORED_SCHEMA_TENANT_CODES.join(", ")}.
-                    </p>
-                  ) : null}
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   {batchSyncCandidate ? (

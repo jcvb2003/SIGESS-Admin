@@ -21,6 +21,7 @@ export async function auditAllEdgeFunctions(
   const { data: entidades, error: eErr } = await adminClient
     .from('entidades')
     .select('id, tenant_code, supabase_url, supabase_access_token')
+    .eq('deployment_mode', 'isolated')
     .not('supabase_access_token', 'is', null);
 
   if (eErr) throw eErr;

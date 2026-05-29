@@ -54,7 +54,7 @@ serve(async (req: Request) => {
     // SELECT explícito — nunca expor supabase_secret_keys nem supabase_access_token
     const { data, error } = await supabase
       .from("entidades")
-      .select("nome_entidade, supabase_url, supabase_publishable_key")
+      .select("nome_entidade, supabase_url, supabase_publishable_key, deployment_mode")
       .eq("tenant_code", code)
       .single();
 
@@ -70,6 +70,7 @@ serve(async (req: Request) => {
         label: data.nome_entidade,
         supabaseUrl: data.supabase_url,
         anonKey: data.supabase_publishable_key,
+        deploymentMode: data.deployment_mode === "shared" ? "shared" : "isolated",
       }),
       {
         headers: {

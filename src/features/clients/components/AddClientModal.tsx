@@ -33,6 +33,7 @@ const initialState: ClientFormState = {
   nome_entidade: "",
   tenant_code: "",
   deployment_mode: "isolated",
+  shared_mode: null,
   shared_project_ref: "",
   shared_tenant_id: "",
   email: "",
@@ -126,6 +127,11 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
       return;
     }
 
+    if (formData.deployment_mode === "shared" && !formData.shared_mode) {
+      toast.error("Selecione o modo shared (polo, multi, multi_polo ou hybrid)");
+      return;
+    }
+
     try {
       let acessoExpiraEm: string | null = null;
       if (
@@ -205,6 +211,26 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {formData.deployment_mode === "shared" && (
+            <div className="space-y-2">
+              <Label htmlFor="shared_mode">Modo Shared *</Label>
+              <Select
+                value={formData.shared_mode ?? ""}
+                onValueChange={(value) => handleChange("shared_mode", value)}
+              >
+                <SelectTrigger id="shared_mode">
+                  <SelectValue placeholder="Selecione o modo shared" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
+                  <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
+                  <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
+                  <SelectItem value="hybrid">hybrid — N tenants, modo misto (suporte inicial)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

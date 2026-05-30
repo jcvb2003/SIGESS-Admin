@@ -1,8 +1,17 @@
+export type SharedMode = "polo" | "multi" | "multi_polo" | "hybrid";
+
+export interface SharedTenant {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface Client {
   id: string;
   nome_entidade: string;
   tenant_code: string;
   deployment_mode: "isolated" | "shared";
+  shared_mode: SharedMode | null;
   shared_project_ref: string | null;
   shared_tenant_id: string | null;
   email: string | null;

@@ -5,6 +5,7 @@ import type {
   Client,
   ClientCreate,
   ClientUpdate,
+  SharedTenant,
   TenantUser,
   TenantUnit,
   UserUnitMembership,
@@ -15,7 +16,7 @@ import type {
 export async function listClients(): Promise<Client[]> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, deployment_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .order("data_cadastro", { ascending: false });
 
   if (error) throw handleSupabaseError(error);
@@ -29,7 +30,7 @@ export async function listClients(): Promise<Client[]> {
 export async function getClient(id: string): Promise<Client> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, deployment_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .eq("id", id)
     .single();
 
@@ -44,10 +45,16 @@ export async function getClient(id: string): Promise<Client> {
 }
 
 export async function proxyAction(
-  clientId: string, 
-  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member" | "process-data-import" | "apply-schema-drift", 
+  clientId: string,
+  action: "list-users" | "list-tables" | "health-check" | "list-buckets" | "list-client-members" | "create-client-member" | "update-client-member" | "execute-migration" | "sync-trial-limits" | "get-migrations-status" | "repair-user-sync" | "delete-client-member" | "ban-client-member" | "process-data-import" | "apply-schema-drift",
   params?: Record<string, unknown>
 ) {
+  // Verify client is isolated before proxying — shared clients must never use this path
+  const clientCheck = await supabase.from("entidades").select("deployment_mode").eq("id", clientId).single();
+  if (clientCheck.data?.deployment_mode === "shared") {
+    throw new Error("Operacoes proxy nao sao permitidas em clientes shared. Use as operacoes shared diretamente.");
+  }
+
   const { data, error } = await supabase.functions.invoke("client-proxy", {
     body: { clientId, action, params }
   });
@@ -91,6 +98,7 @@ export async function startTenantOnboarding(payload: {
   projectRef: string;
   supabaseAccountId: string;
   adminEmail?: string;
+  sharedMode?: string;
 }) {
   const { data, error } = await supabase.functions.invoke("tenant-onboarding", {
     body: payload
@@ -132,6 +140,16 @@ export async function updateClient(id: string, input: ClientUpdate): Promise<Cli
 export async function deleteClient(id: string): Promise<void> {
   const { error } = await supabase.from("entidades").delete().eq("id", id);
   if (error) throw handleSupabaseError(error);
+}
+
+export async function listSharedTenants(): Promise<SharedTenant[]> {
+  const { data, error } = await getSharedSupabaseAdmin()
+    .from("tenants")
+    .select("id, code, name")
+    .order("name", { ascending: true });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as SharedTenant[];
 }
 
 export async function listSharedTenantUnits(tenantId: string): Promise<TenantUnit[]> {

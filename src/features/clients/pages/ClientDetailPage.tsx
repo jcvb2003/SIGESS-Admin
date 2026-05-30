@@ -42,7 +42,15 @@ import {
   useClientDetail,
   useDeleteClient,
 } from "@/features/clients";
-import { listSharedTenantUnits, listSharedTenantUsers, proxyAction } from "@/services/clients.service";
+import { listSharedTenantUnits, listSharedTenantUsers, listSharedTenants, proxyAction } from "@/services/clients.service";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { SharedTenant } from "@/features/clients/types";
 
 interface StorageBucket {
   id: string;
@@ -77,8 +85,27 @@ export default function ClientDetailPage() {
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
   const deleteClientMutation = useDeleteClient();
-  const sharedTenantId = client?.shared_tenant_id ?? null;
   const isSharedClient = client?.deployment_mode === "shared";
+  const sharedMode = client?.shared_mode ?? null;
+  // Para "polo": tenant único, usa shared_tenant_id diretamente.
+  // Para "multi/multi_polo/hybrid": seletor de tenant; inicia null até seleção.
+  const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
+  const effectiveTenantId = sharedMode === "polo"
+    ? (client?.shared_tenant_id ?? null)
+    : activeTenantId;
+  // Mantém compatibilidade com código legado que usava sharedTenantId
+  const sharedTenantId = effectiveTenantId;
+
+  const needsTenantSelector = isSharedClient && sharedMode !== null && sharedMode !== "polo";
+  const showUnitsTab = isSharedClient && (sharedMode === "polo" || sharedMode === "multi_polo" || sharedMode === "hybrid");
+  const showMembershipsTab = showUnitsTab;
+
+  const { data: sharedTenants = [], isLoading: isLoadingTenants } = useQuery<SharedTenant[]>({
+    queryKey: ["shared-tenants-list"],
+    enabled: needsTenantSelector,
+    queryFn: listSharedTenants,
+    staleTime: 1000 * 60 * 10,
+  });
 
   const {
     data: buckets = [],
@@ -110,9 +137,9 @@ export default function ClientDetailPage() {
   });
 
   const { data: sharedTenantUsers = [], isLoading: isLoadingSharedUsers } = useQuery({
-    queryKey: ["shared-tenant-users", sharedTenantId],
-    enabled: Boolean(client) && isSharedClient && Boolean(sharedTenantId),
-    queryFn: () => listSharedTenantUsers(sharedTenantId!),
+    queryKey: ["shared-tenant-users", effectiveTenantId],
+    enabled: Boolean(client) && isSharedClient && Boolean(effectiveTenantId),
+    queryFn: () => listSharedTenantUsers(effectiveTenantId!),
     staleTime: 1000 * 60 * 5,
   });
 
@@ -146,9 +173,9 @@ export default function ClientDetailPage() {
   });
 
   const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
-    queryKey: ["shared-tenant-units", sharedTenantId],
-    enabled: Boolean(client) && isSharedClient && Boolean(sharedTenantId),
-    queryFn: () => listSharedTenantUnits(sharedTenantId!),
+    queryKey: ["shared-tenant-units", effectiveTenantId],
+    enabled: Boolean(client) && isSharedClient && showUnitsTab && Boolean(effectiveTenantId),
+    queryFn: () => listSharedTenantUnits(effectiveTenantId!),
     staleTime: 1000 * 60 * 5,
   });
 
@@ -281,10 +308,15 @@ export default function ClientDetailPage() {
             </div>
             <div className="grid grid-cols-3 items-center gap-4">
               <span className="text-sm font-medium text-muted-foreground">Modo</span>
-              <span className="col-span-2 text-sm">
+              <span className="col-span-2 text-sm flex items-center gap-2">
                 <Badge variant={client.deployment_mode === "shared" ? "default" : "secondary"}>
                   {client.deployment_mode}
                 </Badge>
+                {client.shared_mode && (
+                  <Badge variant="outline" className="text-xs">
+                    {client.shared_mode}
+                  </Badge>
+                )}
               </span>
             </div>
             <div className="grid grid-cols-3 items-center gap-4">
@@ -550,6 +582,36 @@ export default function ClientDetailPage() {
           </Card>
         ) : null}
 
+        {needsTenantSelector && (
+          <Card className="p-4">
+            <div className="flex items-center gap-3">
+              <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wide">Tenant ativo</p>
+                {isLoadingTenants ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Carregando tenants...
+                  </div>
+                ) : (
+                  <Select value={activeTenantId ?? ""} onValueChange={setActiveTenantId}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Selecione um tenant para operar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sharedTenants.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name} <span className="text-muted-foreground ml-1 text-xs">({t.code})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
+
         <Tabs defaultValue="configuracoes" className="space-y-4">
           <TabsList className="bg-secondary/50">
             <TabsTrigger value="configuracoes" className="gap-2">
@@ -577,14 +639,18 @@ export default function ClientDetailPage() {
                   <Users className="h-4 w-4" />
                   Usuarios ({isLoadingSharedUsers ? "..." : sharedTenantUsers.length})
                 </TabsTrigger>
-                <TabsTrigger value="units" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Polos ({isLoadingSharedUnits ? "..." : sharedUnits.length})
-                </TabsTrigger>
-                <TabsTrigger value="memberships" className="gap-2">
-                  <Shield className="h-4 w-4" />
-                  Memberships
-                </TabsTrigger>
+                {showUnitsTab && (
+                  <TabsTrigger value="units" className="gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Polos ({isLoadingSharedUnits ? "..." : sharedUnits.length})
+                  </TabsTrigger>
+                )}
+                {showMembershipsTab && (
+                  <TabsTrigger value="memberships" className="gap-2">
+                    <Shield className="h-4 w-4" />
+                    Memberships
+                  </TabsTrigger>
+                )}
               </>
             )}
           </TabsList>
@@ -611,32 +677,38 @@ export default function ClientDetailPage() {
           ) : (
             <>
               <TabsContent value="shared-users">
-                {client.shared_tenant_id ? (
-                  <SharedUsersTab tenantId={client.shared_tenant_id} />
+                {effectiveTenantId ? (
+                  <SharedUsersTab tenantId={effectiveTenantId} />
                 ) : (
                   <Card className="p-8 text-center text-muted-foreground">
-                    Defina o shared_tenant_id deste cliente para habilitar a criacao do administrador inicial.
+                    {needsTenantSelector
+                      ? "Selecione um tenant no seletor acima para gerenciar usuarios."
+                      : "Defina o shared_tenant_id deste cliente para habilitar a criacao do administrador inicial."}
                   </Card>
                 )}
               </TabsContent>
-              <TabsContent value="units">
-                {client.shared_tenant_id ? (
-                  <UnitsTab tenantId={client.shared_tenant_id} />
-                ) : (
-                  <Card className="p-8 text-center text-muted-foreground">
-                    Defina o shared_tenant_id deste cliente para habilitar o gerenciamento de polos.
-                  </Card>
-                )}
-              </TabsContent>
-              <TabsContent value="memberships">
-                {client.shared_tenant_id ? (
-                  <MembershipsTab tenantId={client.shared_tenant_id} units={sharedUnits} />
-                ) : (
-                  <Card className="p-8 text-center text-muted-foreground">
-                    Defina o shared_tenant_id deste cliente para habilitar o gerenciamento de memberships.
-                  </Card>
-                )}
-              </TabsContent>
+              {showUnitsTab && (
+                <TabsContent value="units">
+                  {effectiveTenantId ? (
+                    <UnitsTab tenantId={effectiveTenantId} />
+                  ) : (
+                    <Card className="p-8 text-center text-muted-foreground">
+                      Selecione um tenant no seletor acima para gerenciar polos.
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
+              {showMembershipsTab && (
+                <TabsContent value="memberships">
+                  {effectiveTenantId ? (
+                    <MembershipsTab tenantId={effectiveTenantId} units={sharedUnits} />
+                  ) : (
+                    <Card className="p-8 text-center text-muted-foreground">
+                      Selecione um tenant no seletor acima para gerenciar memberships.
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
             </>
           )}
         </Tabs>

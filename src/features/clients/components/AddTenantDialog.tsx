@@ -36,6 +36,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
   const [projectRef, setProjectRef] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [supabaseAccountId, setSupabaseAccountId] = useState("");
+  const [sharedMode, setSharedMode] = useState<string>("");
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -70,6 +71,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
         projectRef,
         supabaseAccountId,
         adminEmail: adminEmail || undefined,
+        sharedMode: sharedMode || undefined,
       });
       setJobId(response.jobId);
     } catch (error) {
@@ -200,6 +202,24 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Modo Shared (Opcional)</Label>
+              <Select value={sharedMode} onValueChange={setSharedMode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o modo (pode definir depois)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
+                  <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
+                  <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
+                  <SelectItem value="hybrid">hybrid — N tenants, modo misto</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Se nao selecionado, defina via Editar Cliente apos o onboarding.
+              </p>
             </div>
 
             <div className="pt-4 flex justify-end gap-2">

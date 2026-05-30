@@ -31,6 +31,7 @@ export function EditClientModal({
     nome_entidade: client.nome_entidade,
     tenant_code: client.tenant_code,
     deployment_mode: client.deployment_mode,
+    shared_mode: client.shared_mode ?? "",
     shared_project_ref: client.shared_project_ref || "",
     shared_tenant_id: client.shared_tenant_id || "",
     email: client.email || "",
@@ -50,6 +51,7 @@ export function EditClientModal({
         nome_entidade: client.nome_entidade,
         tenant_code: client.tenant_code,
         deployment_mode: client.deployment_mode,
+        shared_mode: client.shared_mode ?? "",
         shared_project_ref: client.shared_project_ref || "",
         shared_tenant_id: client.shared_tenant_id || "",
         email: client.email || "",
@@ -69,6 +71,7 @@ export function EditClientModal({
         nome_entidade: form.nome_entidade,
         tenant_code: form.tenant_code.trim().toLowerCase(),
         deployment_mode: form.deployment_mode,
+        shared_mode: form.shared_mode || null,
         shared_project_ref: form.shared_project_ref.trim() || null,
         shared_tenant_id: form.shared_tenant_id.trim() || null,
         email: form.email || null,
@@ -139,6 +142,22 @@ export function EditClientModal({
               </SelectContent>
             </Select>
           </div>
+          {form.deployment_mode === "shared" && (
+            <div>
+              <Label>Modo Shared</Label>
+              <Select value={form.shared_mode} onValueChange={(value) => update("shared_mode", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o modo shared" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
+                  <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
+                  <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
+                  <SelectItem value="hybrid">hybrid — N tenants, modo misto (suporte inicial)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Email</Label>

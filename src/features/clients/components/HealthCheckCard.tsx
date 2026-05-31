@@ -13,6 +13,7 @@ interface HealthStatus {
 
 interface HealthCheckCardProps {
   readonly clientId: string;
+  readonly client?: import("@/features/clients/types").Client;
 }
 
 export function HealthCheckCard({ clientId }: HealthCheckCardProps) {

@@ -7,6 +7,8 @@ import {
   Building2,
   CalendarClock,
   CreditCard,
+  ExternalLink,
+  Layers,
   Loader2,
   Pencil,
   Shield,
@@ -59,6 +61,48 @@ function extractProjectRef(client: Client): string {
   } catch {
     return "—";
   }
+}
+
+const DEPLOYMENT_LABEL: Record<string, string> = {
+  isolated: "Isolado",
+  shared:   "Compartilhado",
+};
+
+function InfraCard({ client }: { client: Client }) {
+  const projectRef = extractProjectRef(client);
+  const deployLabel = DEPLOYMENT_LABEL[client.deployment_mode] ?? client.deployment_mode;
+
+  return (
+    <Card className="p-5">
+      <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Infraestrutura
+      </p>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2">
+          <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="text-[10px] text-muted-foreground">Supabase URL</p>
+            <p className="break-all font-mono text-xs text-foreground">{client.supabase_url || "—"}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Project Ref</p>
+            <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs text-foreground">
+              {projectRef}
+            </code>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Modo</p>
+            <div className="flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">{deployLabel}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function ContaCard({ client }: { client: Client }) {
@@ -205,8 +249,6 @@ export default function ClientDetailPage() {
     );
   }
 
-  const projectRef = extractProjectRef(client);
-
   const usersCount = isSharedClient ? sharedTenantUsers.length : users.length;
 
   return (
@@ -242,9 +284,6 @@ export default function ClientDetailPage() {
                 <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                   {client.tenant_code}
                 </span>
-                <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                  {projectRef}
-                </span>
               </div>
             </div>
           </div>
@@ -262,9 +301,10 @@ export default function ClientDetailPage() {
         </div>
 
         {/* ── Inline cards ── */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <HealthCheckCard clientId={client.id} />
+        <div className="grid gap-4 md:grid-cols-3">
+          <HealthCheckCard clientId={client.id} client={client} />
           <ContaCard client={client} />
+          <InfraCard client={client} />
         </div>
 
         {/* ── Tabs ── */}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Shield, Trash2, UserCog, UserPlus, Users } from "lucide-react";
+import { Loader2, Shield, Trash2, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,21 +25,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { OperatorType, TenantUser } from "../types";
+import type { TenantUser } from "../types";
 import {
   createSharedTenantAdmin,
-  createSharedTenantOperator,
   deleteSharedTenantUser,
   listSharedTenantUsers,
-  updateSharedTenantUser,
 } from "@/services/clients.service";
 
 interface SharedUsersTabProps {
@@ -53,14 +44,6 @@ interface CreateAdminFormState {
   autoConfirm: boolean;
 }
 
-interface CreateOperatorFormState {
-  email: string;
-  nome: string;
-  password: string;
-  operatorType: OperatorType;
-  autoConfirm: boolean;
-}
-
 const initialAdminForm: CreateAdminFormState = {
   email: "",
   nome: "",
@@ -68,35 +51,12 @@ const initialAdminForm: CreateAdminFormState = {
   autoConfirm: true,
 };
 
-const initialOperatorForm: CreateOperatorFormState = {
-  email: "",
-  nome: "",
-  password: "",
-  operatorType: "auxiliar",
-  autoConfirm: true,
-};
-
-const OPERATOR_TYPE_LABEL: Record<OperatorType, string> = {
-  presidente: "Presidente",
-  auxiliar:   "Auxiliar",
-};
-
-function getTenantRoleLabel(user: TenantUser): string {
-  if (user.tenant_role === "owner") return "Gestor";
-  if (user.operator_type) return OPERATOR_TYPE_LABEL[user.operator_type];
-  return "Operador";
-}
-
 export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [adminOpen, setAdminOpen] = useState(false);
-  const [operatorOpen, setOperatorOpen] = useState(false);
   const [adminForm, setAdminForm] = useState<CreateAdminFormState>(initialAdminForm);
-  const [operatorForm, setOperatorForm] = useState<CreateOperatorFormState>(initialOperatorForm);
   const [pendingDelete, setPendingDelete] = useState<TenantUser | null>(null);
-  const [pendingEdit, setPendingEdit] = useState<TenantUser | null>(null);
-  const [editOperatorType, setEditOperatorType] = useState<OperatorType>("auxiliar");
 
   const queryKey = useMemo(() => ["shared-tenant-users", tenantId], [tenantId]);
 
@@ -105,6 +65,8 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
     queryFn: () => listSharedTenantUsers(tenantId),
     enabled: Boolean(tenantId),
   });
+
+  const gestores = tenantUsers.filter((u) => u.tenant_role === "owner");
 
   const createAdminMutation = useMutation({
     mutationFn: () =>
@@ -130,31 +92,6 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
     },
   });
 
-  const createOperatorMutation = useMutation({
-    mutationFn: () =>
-      createSharedTenantOperator({
-        tenantId,
-        email: operatorForm.email,
-        nome: operatorForm.nome,
-        password: operatorForm.password,
-        operatorType: operatorForm.operatorType,
-        autoConfirm: operatorForm.autoConfirm,
-      }),
-    onSuccess: async () => {
-      toast({ title: "Operador criado", description: `${OPERATOR_TYPE_LABEL[operatorForm.operatorType]} adicionado ao tenant.` });
-      await queryClient.invalidateQueries({ queryKey });
-      setOperatorOpen(false);
-      setOperatorForm(initialOperatorForm);
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro ao criar operador",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (tenantUser: TenantUser) =>
       deleteSharedTenantUser({
@@ -163,85 +100,49 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
         authUserId: tenantUser.user_id,
       }),
     onSuccess: async () => {
-      toast({ title: "Usuário removido", description: "O usuário foi removido do tenant com sucesso." });
+      toast({ title: "Gestor removido", description: "O usuário foi removido do tenant com sucesso." });
       await queryClient.invalidateQueries({ queryKey });
       setPendingDelete(null);
     },
     onError: (error) => {
       toast({
-        title: "Erro ao remover usuário",
+        title: "Erro ao remover gestor",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
     },
   });
-
-  const updateOperatorMutation = useMutation({
-    mutationFn: async ({ tenantUserId, operatorType }: { tenantUserId: string; operatorType: OperatorType }) =>
-      updateSharedTenantUser(tenantUserId, { operator_type: operatorType }),
-    onSuccess: async (_, variables) => {
-      toast({
-        title: "Nível de acesso atualizado",
-        description: `Operador atualizado para ${OPERATOR_TYPE_LABEL[variables.operatorType]}.`,
-      });
-      await queryClient.invalidateQueries({ queryKey });
-      setPendingEdit(null);
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro ao atualizar operador",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const ownerCount     = tenantUsers.filter((u) => u.tenant_role === "owner").length;
-  const presidentCount = tenantUsers.filter((u) => u.tenant_role === "member" && u.operator_type === "presidente").length;
-  const auxiliarCount  = tenantUsers.filter((u) => u.tenant_role === "member" && u.operator_type === "auxiliar").length;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 divide-x divide-border/40">
-        {[
-          { icon: Users,   label: "Usuários",    value: String(tenantUsers.length), color: "text-primary",    bg: "bg-primary/10" },
-          { icon: Shield,  label: "Gestores",    value: String(ownerCount),         color: "text-primary",    bg: "bg-primary/10" },
-          { icon: UserCog, label: "Presidentes", value: String(presidentCount),     color: "text-violet-500", bg: "bg-violet-500/10" },
-          { icon: UserCog, label: "Auxiliares",  value: String(auxiliarCount),      color: "text-sky-500",    bg: "bg-sky-500/10" },
-        ].map(({ icon: Icon, label, value, color, bg }) => (
-          <div key={label} className="flex flex-1 items-center gap-3 px-5 py-4">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${bg}`}>
-              <Icon className={`h-4 w-4 ${color}`} />
-            </div>
-            <div>
-              <p className={`text-lg font-bold leading-none ${color}`}>{value}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
-            </div>
+      {/* Strip */}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <Shield className="h-4 w-4 text-primary" />
           </div>
-        ))}
-        <div className="flex items-center gap-2 px-5 py-4">
-          <Button onClick={() => setAdminOpen(true)} className="gap-2" size="sm">
-            <UserPlus className="h-4 w-4" />
-            Novo Gestor
-          </Button>
-          <Button onClick={() => setOperatorOpen(true)} variant="outline" className="gap-2" size="sm">
-            <UserCog className="h-4 w-4" />
-            Novo Operador
-          </Button>
+          <div>
+            <p className="text-lg font-bold leading-none text-primary">{gestores.length}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Gestores</p>
+          </div>
         </div>
+        <Button onClick={() => setAdminOpen(true)} className="gap-2" size="sm">
+          <UserPlus className="h-4 w-4" />
+          Novo Gestor
+        </Button>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : tenantUsers.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          Nenhum usuario foi vinculado a este tenant ainda. Crie o gestor inicial para liberar o acesso ao Web.
+      ) : gestores.length === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground text-sm">
+          Nenhum gestor cadastrado. Crie o gestor inicial para liberar o acesso ao Web.
         </Card>
       ) : (
         <div className="grid gap-4">
-          {tenantUsers.map((tenantUser) => (
+          {gestores.map((tenantUser) => (
             <Card key={tenantUser.id} className="p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
@@ -253,27 +154,10 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={tenantUser.tenant_role === "owner" ? "default" : "secondary"}>
-                    {getTenantRoleLabel(tenantUser)}
-                  </Badge>
+                  <Badge variant="default">Gestor</Badge>
                   <Badge variant={tenantUser.is_active ? "default" : "secondary"}>
                     {tenantUser.is_active ? "Ativo" : "Inativo"}
                   </Badge>
-                  {tenantUser.tenant_role === "member" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => {
-                        setPendingEdit(tenantUser);
-                        setEditOperatorType(tenantUser.operator_type ?? "auxiliar");
-                      }}
-                    >
-                      <UserCog className="h-4 w-4" />
-                      Alterar nível
-                    </Button>
-                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -334,142 +218,21 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={Boolean(pendingEdit)}
-        onOpenChange={(openState) => {
-          if (!openState) {
-            setPendingEdit(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Alterar nível de acesso</DialogTitle>
-            <DialogDescription>
-              Defina se o operador atua como Presidente ou Auxiliar neste tenant.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <p className="font-medium text-foreground">
-                {pendingEdit?.user_profiles?.nome || pendingEdit?.user_profiles?.email || pendingEdit?.user_id}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {pendingEdit?.user_profiles?.email || "Sem email"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-op-tipo">Tipo de operador</Label>
-              <Select value={editOperatorType} onValueChange={(v) => setEditOperatorType(v as OperatorType)}>
-                <SelectTrigger id="edit-op-tipo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="presidente">Presidente</SelectItem>
-                  <SelectItem value="auxiliar">Auxiliar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingEdit(null)}>Cancelar</Button>
-            <Button
-              disabled={updateOperatorMutation.isPending || !pendingEdit}
-              onClick={() => {
-                if (pendingEdit) {
-                  updateOperatorMutation.mutate({
-                    tenantUserId: pendingEdit.id,
-                    operatorType: editOperatorType,
-                  });
-                }
-              }}
-            >
-              {updateOperatorMutation.isPending ? "Salvando..." : "Salvar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Novo Operador */}
-      <Dialog open={operatorOpen} onOpenChange={(o) => { setOperatorOpen(o); if (!o) setOperatorForm(initialOperatorForm); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Novo Operador</DialogTitle>
-            <DialogDescription>
-              Adicione um operador ao tenant e defina seu tipo de acesso.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="op-tipo">Tipo de operador</Label>
-              <Select value={operatorForm.operatorType} onValueChange={(v) => setOperatorForm((p) => ({ ...p, operatorType: v as OperatorType }))}>
-                <SelectTrigger id="op-tipo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="presidente">Presidente</SelectItem>
-                  <SelectItem value="auxiliar">Auxiliar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="op-nome">Nome</Label>
-              <Input id="op-nome" value={operatorForm.nome} placeholder="Nome do operador"
-                onChange={(e) => setOperatorForm((p) => ({ ...p, nome: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="op-email">Email</Label>
-              <Input id="op-email" type="email" value={operatorForm.email} placeholder="operador@cliente.com"
-                onChange={(e) => setOperatorForm((p) => ({ ...p, email: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="op-password">Senha temporária</Label>
-              <Input id="op-password" type="text" value={operatorForm.password} placeholder="Senha inicial"
-                onChange={(e) => setOperatorForm((p) => ({ ...p, password: e.target.value }))} />
-            </div>
-            <div className="flex items-center gap-3 rounded-md border border-border/60 p-3">
-              <Checkbox id="op-confirm" checked={operatorForm.autoConfirm}
-                onCheckedChange={(c) => setOperatorForm((p) => ({ ...p, autoConfirm: c === true }))} />
-              <Label htmlFor="op-confirm" className="cursor-pointer">Confirmar automaticamente</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOperatorOpen(false)}>Cancelar</Button>
-            <Button
-              disabled={createOperatorMutation.isPending || !operatorForm.nome.trim() || !operatorForm.email.trim() || !operatorForm.password.trim()}
-              onClick={() => createOperatorMutation.mutate()}
-            >
-              {createOperatorMutation.isPending ? "Criando..." : "Criar Operador"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={Boolean(pendingDelete)}
-        onOpenChange={(openState) => {
-          if (!openState) {
-            setPendingDelete(null);
-          }
-        }}
-      >
+      {/* Confirm delete */}
+      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(o) => { if (!o) setPendingDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir gestor?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete
-                ? `O usuario ${pendingDelete.user_profiles?.nome || pendingDelete.user_profiles?.email || pendingDelete.user_id} sera removido do tenant shared e perdera o acesso ao Web.`
-                : "Esta acao removera o usuario do tenant shared."}
+                ? `O gestor ${pendingDelete.user_profiles?.nome || pendingDelete.user_profiles?.email || pendingDelete.user_id} será removido do tenant e perderá o acesso ao Web.`
+                : "Esta ação removerá o gestor do tenant."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                if (pendingDelete) {
-                  deleteMutation.mutate(pendingDelete);
-                }
-              }}
+              onClick={() => { if (pendingDelete) deleteMutation.mutate(pendingDelete); }}
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? "Excluindo..." : "Excluir"}

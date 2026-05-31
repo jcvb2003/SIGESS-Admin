@@ -10,7 +10,6 @@ import {
   Layers,
   Loader2,
   Pencil,
-  Shield,
   Users,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
@@ -32,14 +31,11 @@ import {
   HealthCheckCard,
   SubscriptionModal,
   UsersTab,
-  SharedUsersTab,
   UnitsTab,
-  MembershipsTab,
   useClientDetail,
 } from "@/features/clients";
 import {
   listSharedTenantUnits,
-  listSharedTenantUsers,
   listSharedTenants,
   proxyAction,
 } from "@/services/clients.service";
@@ -205,7 +201,6 @@ export default function ClientDetailPage() {
 
   const needsTenantSelector = isSharedClient && sharedMode !== null && sharedMode !== "polo";
   const showUnitsTab        = isSharedClient && (sharedMode === "polo" || sharedMode === "multi_polo" || sharedMode === "hybrid");
-  const showMembershipsTab  = showUnitsTab;
 
   const { data: sharedTenants = [], isLoading: isLoadingTenants } = useQuery<SharedTenant[]>({
     queryKey:  ["shared-tenants-list"],
@@ -231,12 +226,6 @@ export default function ClientDetailPage() {
     },
   });
 
-  const { data: sharedTenantUsers = [], isLoading: isLoadingSharedUsers } = useQuery({
-    queryKey:  ["shared-tenant-users", effectiveTenantId],
-    enabled:   Boolean(client) && isSharedClient && Boolean(effectiveTenantId),
-    queryFn:   () => listSharedTenantUsers(effectiveTenantId!),
-    staleTime: 1000 * 60 * 5,
-  });
 
   const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
     queryKey:  ["shared-tenant-units", effectiveTenantId],
@@ -269,7 +258,6 @@ export default function ClientDetailPage() {
     );
   }
 
-  const usersCount = isSharedClient ? sharedTenantUsers.length : users.length;
 
   return (
     <MainLayout>
@@ -348,7 +336,7 @@ export default function ClientDetailPage() {
         )}
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue={isSharedClient ? "shared-users" : "users"} className="space-y-4">
+        <Tabs defaultValue={isSharedClient ? "units" : "users"} className="space-y-4">
           <TabsList className="bg-secondary/50">
             {client.deployment_mode === "isolated" ? (
               <TabsTrigger value="users" className="gap-2">
@@ -356,24 +344,12 @@ export default function ClientDetailPage() {
                 Usuários ({users.length})
               </TabsTrigger>
             ) : (
-              <>
-                <TabsTrigger value="shared-users" className="gap-2">
-                  <Users className="h-4 w-4" />
-                  Usuários ({isLoadingSharedUsers ? "…" : usersCount})
+              showUnitsTab && (
+                <TabsTrigger value="units" className="gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
                 </TabsTrigger>
-                {showUnitsTab && (
-                  <TabsTrigger value="units" className="gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
-                  </TabsTrigger>
-                )}
-                {showMembershipsTab && (
-                  <TabsTrigger value="memberships" className="gap-2">
-                    <Shield className="h-4 w-4" />
-                    Memberships
-                  </TabsTrigger>
-                )}
-              </>
+              )
             )}
           </TabsList>
 
@@ -383,10 +359,10 @@ export default function ClientDetailPage() {
               <UsersTab clientId={client.id} connectionError={null} onUsersLoaded={() => {}} />
             </TabsContent>
           ) : (
-            <>
-              <TabsContent value="shared-users">
+            showUnitsTab && (
+              <TabsContent value="units">
                 {effectiveTenantId ? (
-                  <SharedUsersTab tenantId={effectiveTenantId} />
+                  <UnitsTab tenantId={effectiveTenantId} />
                 ) : (
                   <Card className="p-8 text-center text-muted-foreground text-sm">
                     {needsTenantSelector
@@ -395,29 +371,7 @@ export default function ClientDetailPage() {
                   </Card>
                 )}
               </TabsContent>
-              {showUnitsTab && (
-                <TabsContent value="units">
-                  {effectiveTenantId ? (
-                    <UnitsTab tenantId={effectiveTenantId} />
-                  ) : (
-                    <Card className="p-8 text-center text-muted-foreground text-sm">
-                      Selecione um tenant no seletor ao lado das tabs.
-                    </Card>
-                  )}
-                </TabsContent>
-              )}
-              {showMembershipsTab && (
-                <TabsContent value="memberships">
-                  {effectiveTenantId ? (
-                    <MembershipsTab tenantId={effectiveTenantId} units={sharedUnits} />
-                  ) : (
-                    <Card className="p-8 text-center text-muted-foreground text-sm">
-                      Selecione um tenant no seletor ao lado das tabs.
-                    </Card>
-                  )}
-                </TabsContent>
-              )}
-            </>
+            )
           )}
         </Tabs>
 

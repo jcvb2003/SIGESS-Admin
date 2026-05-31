@@ -20,6 +20,7 @@ export interface Client {
   supabase_publishable_key: string;
   supabase_secret_keys: string | null;
   supabase_access_token: string | null;
+  nome_abreviado: string | null;
   logo_url: string | null;
   assinatura: "mensal" | "anual" | "trial";
   acesso_expira_em: string | null;

@@ -53,6 +53,7 @@ export function EditClientModal({
 }: EditClientModalProps) {
   const [form, setForm] = useState({
     nome_entidade: client.nome_entidade,
+    nome_abreviado: client.nome_abreviado || "",
     tenant_code: client.tenant_code,
     deployment_mode: client.deployment_mode,
     shared_mode: client.shared_mode ?? "",
@@ -75,6 +76,7 @@ export function EditClientModal({
     if (open) {
       setForm({
         nome_entidade: client.nome_entidade,
+        nome_abreviado: client.nome_abreviado || "",
         tenant_code: client.tenant_code,
         deployment_mode: client.deployment_mode,
         shared_mode: client.shared_mode ?? "",
@@ -100,6 +102,7 @@ export function EditClientModal({
 
       const updatePayload: Record<string, unknown> = {
         nome_entidade: form.nome_entidade,
+        nome_abreviado: form.nome_abreviado.trim() || null,
         tenant_code: form.tenant_code.trim().toLowerCase(),
         deployment_mode: form.deployment_mode,
         shared_mode: form.shared_mode || null,
@@ -154,6 +157,17 @@ export function EditClientModal({
                 <Input
                   value={form.nome_entidade}
                   onChange={(e) => update("nome_entidade", e.target.value)}
+                />
+              </FieldRow>
+
+              <FieldRow
+                label="Nome Abreviado"
+                hint="Exibido no header do Portal do Gestor quando não há polo ativo."
+              >
+                <Input
+                  value={form.nome_abreviado}
+                  onChange={(e) => update("nome_abreviado", e.target.value)}
+                  placeholder="ex: SINPESCA"
                 />
               </FieldRow>
 

@@ -16,7 +16,7 @@ import type {
 export async function listClients(): Promise<Client[]> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, nome_abreviado, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .order("data_cadastro", { ascending: false });
 
   if (error) throw handleSupabaseError(error);
@@ -30,7 +30,7 @@ export async function listClients(): Promise<Client[]> {
 export async function getClient(id: string): Promise<Client> {
   const { data, error } = await supabase
     .from("entidades")
-    .select("id, nome_entidade, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
+    .select("id, nome_entidade, nome_abreviado, tenant_code, deployment_mode, shared_mode, shared_project_ref, shared_tenant_id, email, telefone, supabase_url, supabase_publishable_key, supabase_secret_keys, logo_url, assinatura, data_cadastro, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, health_error_detail")
     .eq("id", id)
     .single();
 
@@ -199,7 +199,7 @@ export async function deleteSharedTenantUnit(id: string): Promise<void> {
 export async function listSharedTenantUsers(tenantId: string): Promise<TenantUser[]> {
   const { data, error } = await getSharedSupabaseAdmin()
     .from("tenant_users")
-    .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true });
 
@@ -293,6 +293,36 @@ export async function createSharedTenantOperator(input: {
   if (error) throw handleSupabaseError(error);
 
   return data as TenantUser;
+}
+
+export async function createSharedTenantOperatorWithMembership(input: {
+  tenantId: string;
+  unitId: string;
+  email: string;
+  nome: string;
+  password: string;
+  operatorType: import("@/features/clients/types").OperatorType;
+  autoConfirm?: boolean;
+}): Promise<TenantUser> {
+  const tenantUser = await createSharedTenantOperator({
+    tenantId: input.tenantId,
+    email: input.email,
+    nome: input.nome,
+    password: input.password,
+    operatorType: input.operatorType,
+    autoConfirm: input.autoConfirm,
+  });
+
+  await createSharedMembership({
+    tenant_id: input.tenantId,
+    unit_id: input.unitId,
+    user_id: tenantUser.user_id,
+    role: "unit_operator",
+    is_active: true,
+    is_default: true,
+  });
+
+  return tenantUser;
 }
 
 export async function deleteSharedTenantUser(input: {

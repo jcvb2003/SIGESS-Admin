@@ -153,7 +153,7 @@ export async function listSharedTenants(): Promise<SharedTenant[]> {
 }
 
 export async function listSharedTenantUnits(tenantId: string): Promise<TenantUnit[]> {
-  const { data, error } = await getSharedSupabase()
+  const { data, error } = await getSharedSupabaseAdmin()
     .from("tenant_units")
     .select("*")
     .eq("tenant_id", tenantId)
@@ -197,7 +197,7 @@ export async function deleteSharedTenantUnit(id: string): Promise<void> {
 }
 
 export async function listSharedTenantUsers(tenantId: string): Promise<TenantUser[]> {
-  const { data, error } = await getSharedSupabase()
+  const { data, error } = await getSharedSupabaseAdmin()
     .from("tenant_users")
     .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
     .eq("tenant_id", tenantId)

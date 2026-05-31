@@ -1,4 +1,4 @@
-import { MoreVertical, Trash2, ExternalLink, CreditCard } from "lucide-react";
+import { MoreVertical, Trash2, ExternalLink, CreditCard, CheckCircle2, XCircle, HelpCircle, CalendarClock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,10 +6,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Client } from "../types";
-import { format } from "date-fns";
+import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface ClientCardProps {
@@ -19,89 +20,144 @@ interface ClientCardProps {
   onClick: (client: Client) => void;
 }
 
-export function ClientCard({ client, onDelete, onClick }: ClientCardProps) {
-  const subscriptionLabel = client.assinatura === "anual" ? "Anual" : "Mensal";
+function KeyStatusBadge({ status }: { status: Client["key_status"] }) {
+  if (status === "valid") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-500">
+        <CheckCircle2 className="h-3 w-3" />
+        Chave válida
+      </span>
+    );
+  }
+  if (status === "broken") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+        <XCircle className="h-3 w-3" />
+        Chave inválida
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+      <HelpCircle className="h-3 w-3" />
+      Status desconhecido
+    </span>
+  );
+}
+
+function ExpiryInfo({ expiresAt }: { expiresAt: string | null }) {
+  if (!expiresAt) {
+    return <span className="text-xs text-muted-foreground">Sem expiração</span>;
+  }
+
+  const date = new Date(expiresAt);
+  const daysLeft = differenceInDays(date, new Date());
+  const expired = isPast(date);
+
+  if (expired) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+        <CalendarClock className="h-3 w-3" />
+        Expirado em {format(date, "dd/MM/yyyy")}
+      </span>
+    );
+  }
+
+  if (daysLeft <= 30) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
+        <CalendarClock className="h-3 w-3" />
+        Expira em {daysLeft}d ({format(date, "dd/MM")})
+      </span>
+    );
+  }
 
   return (
-    <Card 
-      className="p-5 hover:border-primary/30 transition-all duration-300 cursor-pointer group"
+    <span className="text-xs text-muted-foreground">
+      Expira {format(date, "dd/MM/yyyy", { locale: ptBR })}
+    </span>
+  );
+}
+
+export function ClientCard({ client, onDelete, onSubscription, onClick }: ClientCardProps) {
+  const planLabel =
+    client.assinatura === "anual" ? "Anual" :
+    client.assinatura === "trial" ? "Trial" : "Mensal";
+
+  const planVariant =
+    client.assinatura === "trial" ? "secondary" : "outline";
+
+  return (
+    <Card
+      className="group cursor-pointer p-5 transition-all duration-200 hover:border-primary/40 hover:bg-card/80"
       onClick={() => onClick(client)}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {client.logo_url ? (
-            <img 
-              src={client.logo_url} 
-              alt={client.nome_entidade} 
-              className="h-10 w-10 rounded-lg object-cover"
+            <img
+              src={client.logo_url}
+              alt={client.nome_entidade}
+              className="h-10 w-10 shrink-0 rounded-lg object-cover"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20">
               <span className="text-sm font-bold text-primary">
                 {client.nome_entidade.charAt(0).toUpperCase()}
               </span>
             </div>
           )}
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
-                {client.nome_entidade}
-                <span 
-                  className={`h-2 w-2 rounded-full shrink-0 ${
-                    client.key_status === 'valid' ? 'bg-emerald-500' : 
-                    client.key_status === 'broken' ? 'bg-destructive' : 
-                    'bg-slate-300'
-                  }`} 
-                  title={
-                    client.key_status === 'valid' ? 'Chave Válida' : 
-                    client.key_status === 'broken' ? `Chave Inválida: ${client.health_error_detail || 'Erro desconhecido'}` : 
-                    'Status Desconhecido'
-                  }
-                />
-                <span
-                  className={`h-2 w-2 rounded-full shrink-0 ${
-                    client.tenant_code && client.supabase_publishable_key
-                      ? 'bg-sky-400'
-                      : 'bg-slate-200'
-                  }`}
-                  title={
-                    client.tenant_code && client.supabase_publishable_key
-                      ? 'Config publica OK'
-                      : !client.tenant_code
-                        ? 'Config publica: tenant_code ausente'
-                        : 'Config publica: anon key ausente'
-                  }
-                />
-              </h3>
-              <Badge 
-                variant="default"
-                className="text-xs bg-primary/20 text-primary border-primary/30"
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+              {client.nome_entidade}
+            </p>
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+              {client.tenant_code && (
+                <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                  {client.tenant_code}
+                </span>
+              )}
+              <Badge
+                variant={client.deployment_mode === "isolated" ? "outline" : "secondary"}
+                className="h-4 px-1.5 text-[10px]"
               >
-                {subscriptionLabel}
+                {client.deployment_mode}
+                {client.shared_mode ? ` · ${client.shared_mode}` : ""}
+              </Badge>
+              <Badge variant={planVariant} className="h-4 px-1.5 text-[10px]">
+                {planLabel}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-              {client.supabase_url}
-            </p>
           </div>
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(client.supabase_url, '_blank'); }}>
+            <DropdownMenuItem
+              onClick={(e) => { e.stopPropagation(); window.open(client.supabase_url, "_blank"); }}
+            >
               <ExternalLink className="mr-2 h-4 w-4" />
               Abrir Supabase
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSubscription(client); }}>
+            <DropdownMenuItem
+              onClick={(e) => { e.stopPropagation(); onSubscription(client); }}
+            >
               <CreditCard className="mr-2 h-4 w-4" />
               Assinatura
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               onClick={(e) => { e.stopPropagation(); onDelete(client); }}
               className="text-destructive focus:text-destructive"
             >
@@ -112,13 +168,17 @@ export function ClientCard({ client, onDelete, onClick }: ClientCardProps) {
         </DropdownMenu>
       </div>
 
-      <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-        <span>{client.email || "Sem email"}</span>
-        <span>{client.telefone}</span>
-      </div>
-
-      <div className="mt-2 text-xs text-muted-foreground">
-        Cadastrado em {format(new Date(client.data_cadastro), "dd/MM/yyyy", { locale: ptBR })}
+      {/* Footer */}
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <KeyStatusBadge status={client.key_status} />
+          <ExpiryInfo expiresAt={client.acesso_expira_em} />
+        </div>
+        {client.email && (
+          <span className="shrink-0 text-xs text-muted-foreground truncate max-w-[160px]">
+            {client.email}
+          </span>
+        )}
       </div>
     </Card>
   );

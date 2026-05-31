@@ -68,7 +68,7 @@ const DEPLOYMENT_LABEL: Record<string, string> = {
 };
 
 const SHARED_MODE_LABEL: Record<string, string> = {
-  polo:       "Polo",
+  polo:       "Single Tenant Polo",
   multi:      "Multi-tenant Isolated",
   multi_polo: "Multi-tenant Polo",
   hybrid:     "Híbrido",

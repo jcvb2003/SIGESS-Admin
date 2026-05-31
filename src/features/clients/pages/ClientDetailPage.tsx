@@ -67,9 +67,17 @@ const DEPLOYMENT_LABEL: Record<string, string> = {
   shared:   "Compartilhado",
 };
 
+const SHARED_MODE_LABEL: Record<string, string> = {
+  polo:       "Polo único",
+  multi:      "Multi-tenant",
+  multi_polo: "Multi-polo",
+  hybrid:     "Híbrido",
+};
+
 function InfraCard({ client }: { client: Client }) {
-  const projectRef = extractProjectRef(client);
+  const projectRef  = extractProjectRef(client);
   const deployLabel = DEPLOYMENT_LABEL[client.deployment_mode] ?? client.deployment_mode;
+  const isShared    = client.deployment_mode === "shared";
 
   return (
     <Card className="p-5">
@@ -89,13 +97,29 @@ function InfraCard({ client }: { client: Client }) {
             {projectRef}
           </code>
         </div>
-        <div className="space-y-1 col-span-2">
+        <div className="space-y-1">
           <p className="text-[10px] text-muted-foreground">Modo</p>
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-foreground">{deployLabel}</span>
           </div>
         </div>
+        {isShared && client.shared_mode && (
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground">Sub-modo</p>
+            <span className="text-xs font-medium text-foreground">
+              {SHARED_MODE_LABEL[client.shared_mode] ?? client.shared_mode}
+            </span>
+          </div>
+        )}
+        {isShared && client.shared_tenant_id && (
+          <div className="space-y-1 col-span-2">
+            <p className="text-[10px] text-muted-foreground">Tenant ID (shared)</p>
+            <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs text-foreground break-all">
+              {client.shared_tenant_id}
+            </code>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -273,9 +297,21 @@ export default function ClientDetailPage() {
             )}
 
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold text-foreground">
-                {client.nome_entidade}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-xl font-bold text-foreground">
+                  {client.nome_entidade}
+                </h1>
+                <Badge
+                  variant="outline"
+                  className={
+                    client.deployment_mode === "shared"
+                      ? "shrink-0 border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
+                      : "shrink-0 border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
+                  }
+                >
+                  {DEPLOYMENT_LABEL[client.deployment_mode] ?? client.deployment_mode}
+                </Badge>
+              </div>
             </div>
           </div>
 
@@ -298,61 +334,60 @@ export default function ClientDetailPage() {
           <InfraCard client={client} />
         </div>
 
-        {/* ── Tabs ── */}
-        <Tabs defaultValue={isSharedClient ? "shared-users" : "users"} className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <TabsList className="bg-secondary/50">
-              {client.deployment_mode === "isolated" ? (
-                <TabsTrigger value="users" className="gap-2">
-                  <Users className="h-4 w-4" />
-                  Usuários ({users.length})
-                </TabsTrigger>
-              ) : (
-                <>
-                  <TabsTrigger value="shared-users" className="gap-2">
-                    <Users className="h-4 w-4" />
-                    Usuários ({isLoadingSharedUsers ? "…" : usersCount})
-                  </TabsTrigger>
-                  {showUnitsTab && (
-                    <TabsTrigger value="units" className="gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
-                    </TabsTrigger>
-                  )}
-                  {showMembershipsTab && (
-                    <TabsTrigger value="memberships" className="gap-2">
-                      <Shield className="h-4 w-4" />
-                      Memberships
-                    </TabsTrigger>
-                  )}
-                </>
-              )}
-            </TabsList>
-
-            {/* Tenant selector — integrado à linha das tabs */}
-            {needsTenantSelector && (
-              <div className="flex items-center gap-2 min-w-0">
-                <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                {isLoadingTenants ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Select value={activeTenantId ?? ""} onValueChange={setActiveTenantId}>
-                    <SelectTrigger className="h-8 w-48 text-sm">
-                      <SelectValue placeholder="Selecione um tenant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sharedTenants.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}{" "}
-                          <span className="ml-1 text-xs text-muted-foreground">({t.code})</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+        {/* ── Tenant selector banner (shared multi) ── */}
+        {needsTenantSelector && (
+          <div className="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 dark:border-violet-800/50 dark:bg-violet-950/20">
+            <Building2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+            <span className="text-sm font-medium text-violet-700 dark:text-violet-300">Tenant ativo</span>
+            {isLoadingTenants ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Select value={activeTenantId ?? ""} onValueChange={setActiveTenantId}>
+                <SelectTrigger className="h-8 w-56 text-sm">
+                  <SelectValue placeholder="Selecione um tenant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sharedTenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}{" "}
+                      <span className="ml-1 text-xs text-muted-foreground">({t.code})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
+        )}
+
+        {/* ── Tabs ── */}
+        <Tabs defaultValue={isSharedClient ? "shared-users" : "users"} className="space-y-4">
+          <TabsList className="bg-secondary/50">
+            {client.deployment_mode === "isolated" ? (
+              <TabsTrigger value="users" className="gap-2">
+                <Users className="h-4 w-4" />
+                Usuários ({users.length})
+              </TabsTrigger>
+            ) : (
+              <>
+                <TabsTrigger value="shared-users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Usuários ({isLoadingSharedUsers ? "…" : usersCount})
+                </TabsTrigger>
+                {showUnitsTab && (
+                  <TabsTrigger value="units" className="gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
+                  </TabsTrigger>
+                )}
+                {showMembershipsTab && (
+                  <TabsTrigger value="memberships" className="gap-2">
+                    <Shield className="h-4 w-4" />
+                    Memberships
+                  </TabsTrigger>
+                )}
+              </>
+            )}
+          </TabsList>
 
           {/* Tab contents */}
           {client.deployment_mode === "isolated" ? (

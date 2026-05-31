@@ -117,7 +117,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[460px]">
+      <DialogContent className="sm:max-w-[460px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="h-5 w-5 text-primary" />
@@ -130,7 +130,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
 
         {/* ── FORMULÁRIO ── */}
         {!isRunning && (
-          <form onSubmit={handleStart} className="space-y-5 pt-2">
+          <form onSubmit={handleStart} className="space-y-5 pt-2 overflow-y-auto flex-1 pr-1">
 
             {/* Conta destino */}
             <div className="space-y-1.5">
@@ -258,7 +258,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
 
         {/* ── PROGRESSO ── */}
         {isRunning && (
-          <div className="space-y-6 pt-2">
+          <div className="space-y-6 pt-2 overflow-y-auto flex-1">
 
             {/* Estado: carregando primeiro retorno */}
             {!job && !isJobError && (

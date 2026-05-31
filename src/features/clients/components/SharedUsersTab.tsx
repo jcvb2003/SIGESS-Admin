@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock, Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -123,21 +123,12 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
 
   const ownerCount = tenantUsers.filter((user) => user.tenant_role === "owner").length;
 
-  const isReady = ownerCount > 0;
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 divide-x divide-border/40">
         {[
           { icon: Users, label: "Usuários", value: String(tenantUsers.length), color: "text-primary", bg: "bg-primary/10" },
           { icon: Shield, label: "Gestores", value: String(ownerCount), color: "text-primary", bg: "bg-primary/10" },
-          {
-            icon: isReady ? CheckCircle2 : Clock,
-            label: "Status",
-            value: isReady ? "Pronto" : "Pendente",
-            color: isReady ? "text-emerald-500" : "text-amber-500",
-            bg: isReady ? "bg-emerald-500/10" : "bg-amber-500/10",
-          },
         ].map(({ icon: Icon, label, value, color, bg }) => (
           <div key={label} className="flex flex-1 items-center gap-3 px-5 py-4">
             <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${bg}`}>

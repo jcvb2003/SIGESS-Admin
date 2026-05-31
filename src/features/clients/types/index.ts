@@ -54,11 +54,14 @@ export interface UserProfile {
   updated_at: string;
 }
 
+export type OperatorType = "presidente" | "auxiliar";
+
 export interface TenantUser {
   id: string;
   tenant_id: string;
   user_id: string;
   tenant_role: "owner" | "member";
+  operator_type?: OperatorType | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

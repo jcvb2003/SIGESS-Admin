@@ -250,6 +250,18 @@ export async function createSharedTenantAdmin(input: {
   return data as TenantUser;
 }
 
+// TODO(codex): implementar quando operator_type for adicionado à tabela tenant_users
+export async function createSharedTenantOperator(_input: {
+  tenantId: string;
+  email: string;
+  nome: string;
+  password: string;
+  operatorType: import("@/features/clients/types").OperatorType;
+  autoConfirm?: boolean;
+}): Promise<TenantUser> {
+  throw new Error("createSharedTenantOperator: aguardando migração do backend (operator_type)");
+}
+
 export async function deleteSharedTenantUser(input: {
   tenantId: string;
   tenantUserId: string;

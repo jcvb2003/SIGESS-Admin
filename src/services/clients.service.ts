@@ -250,8 +250,7 @@ export async function createSharedTenantAdmin(input: {
   return data as TenantUser;
 }
 
-// TODO(codex): implementar quando operator_type for adicionado à tabela tenant_users
-export async function createSharedTenantOperator(_input: {
+export async function createSharedTenantOperator(input: {
   tenantId: string;
   email: string;
   nome: string;
@@ -259,7 +258,41 @@ export async function createSharedTenantOperator(_input: {
   operatorType: import("@/features/clients/types").OperatorType;
   autoConfirm?: boolean;
 }): Promise<TenantUser> {
-  throw new Error("createSharedTenantOperator: aguardando migração do backend (operator_type)");
+  const client = getSharedSupabase();
+  const adminClient = getSharedSupabaseAdmin();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const normalizedName = input.nome.trim();
+
+  const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
+    email: normalizedEmail,
+    password: input.password,
+    email_confirm: input.autoConfirm ?? true,
+    user_metadata: { nome: normalizedName },
+    app_metadata: { role: "member" },
+  });
+
+  if (createUserError) throw handleSupabaseError(createUserError);
+
+  const authUserId = createdUserData.user?.id;
+  if (!authUserId) {
+    throw new Error("Nao foi possivel identificar o usuario criado no projeto shared.");
+  }
+
+  const { data, error } = await client
+    .from("tenant_users")
+    .insert({
+      tenant_id: input.tenantId,
+      user_id: authUserId,
+      tenant_role: "member",
+      operator_type: input.operatorType,
+      is_active: true,
+    })
+    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+
+  return data as TenantUser;
 }
 
 export async function deleteSharedTenantUser(input: {

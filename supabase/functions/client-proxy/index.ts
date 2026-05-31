@@ -34,6 +34,22 @@ const BLOCKED = [
   /DELETE\s+FROM\s+\w+\s*($|;|\s+WHERE\s+true)/i,
 ];
 
+const SHARED_GOVERNANCE_TABLES = new Set([
+  "tenants",
+  "tenant_units",
+  "tenant_users",
+  "user_profiles",
+  "user_unit_memberships",
+]);
+
+const ISOLATED_ANON_TABLE_GRANT_ALLOWLIST = new Set([
+  "foto_upload_tokens",
+]);
+
+const ISOLATED_ANON_FUNCTION_GRANT_ALLOWLIST = new Set([
+  "confirmar_upload_foto(uuid, text)",
+]);
+
 function isSafe(sql: string) {
   return !BLOCKED.some((r) => r.test(sql));
 }
@@ -442,9 +458,37 @@ async function runSql(projectUrl: string, accessToken: string, sql: string) {
   return await res.json();
 }
 
-async function healthCheck(clientUrl: string, clientKey?: string) {
-  if (!clientKey) {
-    // Legacy/Basic check if key not provided
+async function testAnonKey(clientUrl: string, anonKey: string): Promise<"ok" | "invalid"> {
+  try {
+    const res = await fetch(`${clientUrl}/rest/v1/`, {
+      method: "GET",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` }
+    });
+    return res.status < 500 ? "ok" : "invalid";
+  } catch {
+    return "invalid";
+  }
+}
+
+async function testPAT(clientUrl: string, pat: string): Promise<"ok" | "invalid"> {
+  try {
+    const ref = new URL(clientUrl).hostname.split(".")[0];
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    return res.ok ? "ok" : "invalid";
+  } catch {
+    return "invalid";
+  }
+}
+
+async function healthCheck(
+  clientUrl: string,
+  serviceRoleKey?: string,
+  anonKey?: string,
+  pat?: string,
+) {
+  if (!serviceRoleKey) {
     try {
       const res = await fetch(clientUrl, { method: "OPTIONS" });
       return { status: res.status < 500 ? "online" : "offline", code: res.status };
@@ -453,12 +497,23 @@ async function healthCheck(clientUrl: string, clientKey?: string) {
     }
   }
 
-  // Full validation check
-  const health = await testClientConnection(clientUrl, clientKey);
+  const health = await testClientConnection(clientUrl, serviceRoleKey);
+  const online = health.status === "valid";
+
+  const [anonStatus, patStatus] = await Promise.all([
+    anonKey ? testAnonKey(clientUrl, anonKey) : Promise.resolve("unknown" as const),
+    pat      ? testPAT(clientUrl, pat)        : Promise.resolve("unknown" as const),
+  ]);
+
   return {
-    status: health.status === 'valid' ? 'online' : 'offline',
+    status: online ? "online" : "offline",
     latency: health.latency,
-    error: health.error
+    error: health.error,
+    keys: {
+      anon:         anonStatus,
+      service_role: online ? "ok" : "invalid",
+      pat:          patStatus,
+    },
   };
 }
 
@@ -588,15 +643,17 @@ async function buildViewSyncSql(
     throw createHttpError(`View ${schemaName}.${objectName} não encontrada em Oeiras`, 404);
   }
   const securityInvoker = Boolean(viewRows?.[0]?.security_invoker);
+  const grantStatements = [
+    `REVOKE ALL ON TABLE ${qualified} FROM ${quoteIdentifier("anon")}, ${quoteIdentifier("authenticated")}, ${quoteIdentifier("service_role")};`,
+    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("authenticated")};`,
+    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("service_role")};`,
+  ];
 
   return [
     `CREATE OR REPLACE VIEW ${qualified}${securityInvoker ? " WITH (security_invoker = true)" : ""} AS`,
     definition.trim().replace(/;$/, ""),
     ";",
-    `REVOKE ALL ON TABLE ${qualified} FROM ${quoteIdentifier("anon")}, ${quoteIdentifier("authenticated")}, ${quoteIdentifier("service_role")};`,
-    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("anon")};`,
-    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("authenticated")};`,
-    `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("service_role")};`,
+    ...grantStatements,
   ].join("\n");
 }
 
@@ -656,6 +713,85 @@ function normalizeRoles(roles: unknown): string[] {
 
 function roleToSql(role: string) {
   return role.toLowerCase() === "public" ? "PUBLIC" : quoteIdentifier(role);
+}
+
+async function rewriteTenantSpecificFunctionDefinition(
+  client: ClientConfig,
+  functionName: string,
+  definition: string,
+) {
+  if (functionName === "get_payments_by_period_paginated") {
+    return definition.replace(
+      /\(p_unit_id\s+IS\s+NULL\s+OR\s+s\.unit_id\s*=\s*p_unit_id\)/g,
+      "(p_unit_id IS NULL OR fl.unit_id = p_unit_id)",
+    );
+  }
+
+  if (functionName === "update_extension_license") {
+    return definition.replace(
+      /COALESCE\s*\(\s*p_unit_id\s*,\s*'[^']+'\s*::uuid\s*\)/g,
+      `COALESCE(
+        p_unit_id,
+        (SELECT unit_id FROM public.configuracao_entidade WHERE unit_id IS NOT NULL ORDER BY updated_at DESC NULLS LAST, id ASC LIMIT 1),
+        (SELECT unit_id FROM public.entidade WHERE unit_id IS NOT NULL ORDER BY id ASC LIMIT 1),
+        (SELECT id FROM public.tenant_units WHERE COALESCE(is_active, true) = true ORDER BY created_at ASC NULLS LAST, id ASC LIMIT 1)
+      )`,
+    );
+  }
+
+  return definition;
+}
+
+function isAllowedIsolatedTableGrant(tableName: string, grantee: string) {
+  if (SHARED_GOVERNANCE_TABLES.has(tableName)) {
+    return false;
+  }
+
+  if (grantee === "anon" && !ISOLATED_ANON_TABLE_GRANT_ALLOWLIST.has(tableName)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isAllowedIsolatedFunctionGrant(functionSignature: string, grantee: string) {
+  if (grantee === "anon" && !ISOLATED_ANON_FUNCTION_GRANT_ALLOWLIST.has(functionSignature)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getUnsafeIsolatedSyncReason(
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger",
+  objectName: string,
+) {
+  if (objectType === "grant") {
+    const lastDotIndex = objectName.lastIndexOf(".");
+    if (lastDotIndex <= 0) return null;
+
+    const tableName = objectName.slice(0, lastDotIndex);
+    const grantee = objectName.slice(lastDotIndex + 1);
+
+    if (!isAllowedIsolatedTableGrant(tableName, grantee)) {
+      return `Grant bloqueado pelo baseline de segurança para tenants isolated: ${objectName}`;
+    }
+
+    return null;
+  }
+
+  if (objectType === "function_grant") {
+    const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
+    const functionSignature = `${functionName}(${identityArgs})`;
+
+    if (!isAllowedIsolatedFunctionGrant(functionSignature, grantee)) {
+      return `EXECUTE bloqueado pelo baseline de segurança para tenants isolated: ${functionSignature}.${grantee}`;
+    }
+
+    return null;
+  }
+
+  return null;
 }
 
 async function buildIndexSyncSql(
@@ -793,17 +929,35 @@ async function buildGrantSyncSql(
   const rows = await runSql(
     oeiras.supabase_url,
     oeiras.supabase_access_token,
-    `SELECT string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privileges
-     FROM information_schema.role_table_grants
-     WHERE table_schema = '${escapeLiteral(schemaName)}'
-       AND table_name = '${escapeLiteral(tableName)}'
-       AND grantee = '${escapeLiteral(grantee)}'`,
+    `SELECT
+        c.relkind,
+        (
+          SELECT string_agg(rtg.privilege_type, ', ' ORDER BY rtg.privilege_type)
+          FROM information_schema.role_table_grants rtg
+          WHERE rtg.table_schema = '${escapeLiteral(schemaName)}'
+            AND rtg.table_name = '${escapeLiteral(tableName)}'
+            AND rtg.grantee = '${escapeLiteral(grantee)}'
+        ) AS privileges
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = '${escapeLiteral(schemaName)}'
+        AND c.relname = '${escapeLiteral(tableName)}'
+        AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      LIMIT 1`,
   );
 
+  const relkind = rows?.[0]?.relkind as string | null | undefined;
   const privileges = rows?.[0]?.privileges as string | null | undefined;
   const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
   const quotedRole = roleToSql(grantee);
   const statements = [`REVOKE ALL ON TABLE ${qualifiedTable} FROM ${quotedRole};`];
+
+  if (relkind === "v" || relkind === "m") {
+    if (grantee !== "anon") {
+      statements.push(`GRANT SELECT ON TABLE ${qualifiedTable} TO ${quotedRole};`);
+    }
+    return statements.join("\n");
+  }
 
   if (privileges && privileges.trim().length > 0) {
     statements.push(`GRANT ${privileges} ON TABLE ${qualifiedTable} TO ${quotedRole};`);
@@ -859,7 +1013,7 @@ async function buildFunctionSyncSql(
     throw createHttpError(`Function ${schemaName}.${objectName} nÃ£o encontrada em Oeiras`, 404);
   }
 
-  return ensureSqlTerminator(definition);
+  return ensureSqlTerminator(await rewriteTenantSpecificFunctionDefinition(client, functionName, definition));
 }
 
 async function buildFunctionGrantSyncSql(
@@ -879,9 +1033,17 @@ async function buildFunctionGrantSyncSql(
   const rows = await runSql(
     oeiras.supabase_url,
     oeiras.supabase_access_token,
-    `SELECT has_function_privilege('${escapeLiteral(grantee)}',
-              format('%I.%I(%s)', '${escapeLiteral(schemaName)}', '${escapeLiteral(functionName)}', '${escapeLiteral(identityArgs)}')::regprocedure,
-              'EXECUTE') AS has_execute`,
+    `SELECT has_function_privilege(
+              '${escapeLiteral(grantee)}',
+              p.oid,
+              'EXECUTE'
+            ) AS has_execute
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = '${escapeLiteral(schemaName)}'
+        AND p.proname = '${escapeLiteral(functionName)}'
+        AND pg_get_function_identity_arguments(p.oid) = '${escapeLiteral(identityArgs)}'
+      LIMIT 1`,
   );
 
   const hasExecute = Boolean(rows?.[0]?.has_execute);
@@ -971,7 +1133,7 @@ async function buildTriggerSyncSql(
     return [dropSql, `${definition.trim().replace(/;$/, "")};`].join("\n");
   }
 
-  return `${definition.trim().replace(/;$/, "")};`;
+  return [dropSql, `${definition.trim().replace(/;$/, "")};`].join("\n");
 }
 
 async function buildSchemaDriftSql(
@@ -1052,6 +1214,11 @@ async function applySchemaDriftBatch(
 
     if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
       throw createHttpError("Tipo de divergÃªncia invÃ¡lido", 400);
+    }
+
+    const unsafeReason = getUnsafeIsolatedSyncReason(objectType, objectName);
+    if (unsafeReason) {
+      throw createHttpError(unsafeReason, 400);
     }
 
     const sql = await buildSchemaDriftSql(
@@ -1151,6 +1318,11 @@ async function applySchemaDrift(
 
   if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
     throw createHttpError("Tipo de divergÃªncia invÃ¡lido", 400);
+  }
+
+  const unsafeReason = getUnsafeIsolatedSyncReason(objectType, objectName);
+  if (unsafeReason) {
+    throw createHttpError(unsafeReason, 400);
   }
 
   if (objectType === "auth_config") {
@@ -1620,7 +1792,7 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
     case "update-client-member": return await updateClientMember(clientUrl, clientKey, params);
     case "list-tables": return await listTables(clientUrl, clientKey);
     case "list-buckets": return await listBuckets(clientUrl, clientKey);
-    case "health-check": return await healthCheck(clientUrl, clientKey);
+    case "health-check": throw new Error("health-check must be handled in handleAction");
     case "delete-client-member": 
       return await deleteClientUser(clientUrl, clientKey, params?.userId as string);
     case "ban-client-member":
@@ -1640,6 +1812,7 @@ interface ClientConfig {
   supabase_url: string;
   supabase_secret_keys?: string;
   supabase_access_token?: string;
+  supabase_publishable_key?: string;
   acesso_expira_em?: string | null;
   max_socios?: number | null;
   key_status?: string;
@@ -1789,6 +1962,15 @@ async function handleAction(clientId: string, action: string, params: Record<str
     }
   }
 
+  if (action === "health-check") {
+    return await healthCheck(
+      client.supabase_url,
+      client.supabase_secret_keys,
+      client.supabase_publishable_key,
+      client.supabase_access_token,
+    );
+  }
+
   const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);
   if (migrationResult) return migrationResult;
 
@@ -1886,7 +2068,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
   console.log(`DEBUG: Fetching config for client ${clientId}...`);
   const { data: client, error } = await supabase
     .from("entidades")
-    .select("supabase_url, supabase_secret_keys, supabase_access_token, acesso_expira_em, max_socios, key_status, last_health_check_at, tenant_code")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, acesso_expira_em, max_socios, key_status, last_health_check_at, tenant_code")
     .eq("id", clientId)
     .single();
 

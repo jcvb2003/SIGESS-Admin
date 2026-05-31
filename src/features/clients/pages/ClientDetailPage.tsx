@@ -322,60 +322,60 @@ export default function ClientDetailPage() {
           <InfraCard client={client} />
         </div>
 
-        {/* ── Tabs ── */}
-        <Tabs defaultValue={isSharedClient ? "shared-users" : "users"} className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <TabsList className="bg-secondary/50">
-              {client.deployment_mode === "isolated" ? (
-                <TabsTrigger value="users" className="gap-2">
-                  <Users className="h-4 w-4" />
-                  Usuários ({users.length})
-                </TabsTrigger>
-              ) : (
-                <>
-                  <TabsTrigger value="shared-users" className="gap-2">
-                    <Users className="h-4 w-4" />
-                    Usuários ({isLoadingSharedUsers ? "…" : usersCount})
-                  </TabsTrigger>
-                  {showUnitsTab && (
-                    <TabsTrigger value="units" className="gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
-                    </TabsTrigger>
-                  )}
-                  {showMembershipsTab && (
-                    <TabsTrigger value="memberships" className="gap-2">
-                      <Shield className="h-4 w-4" />
-                      Memberships
-                    </TabsTrigger>
-                  )}
-                </>
-              )}
-            </TabsList>
-
-            {needsTenantSelector && (
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                {isLoadingTenants ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Select value={activeTenantId ?? ""} onValueChange={setActiveTenantId}>
-                    <SelectTrigger className="h-8 w-56 text-sm">
-                      <SelectValue placeholder="Selecione um tenant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sharedTenants.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}{" "}
-                          <span className="ml-1 text-xs text-muted-foreground">({t.code})</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+        {/* ── Tenant selector banner (shared multi) ── */}
+        {needsTenantSelector && (
+          <div className="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 dark:border-violet-800/50 dark:bg-violet-950/20">
+            <Building2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+            <span className="text-sm font-medium text-violet-700 dark:text-violet-300">Tenant ativo</span>
+            {isLoadingTenants ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Select value={activeTenantId ?? ""} onValueChange={setActiveTenantId}>
+                <SelectTrigger className="h-8 w-56 text-sm">
+                  <SelectValue placeholder="Selecione um tenant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sharedTenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}{" "}
+                      <span className="ml-1 text-xs text-muted-foreground">({t.code})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
+        )}
+
+        {/* ── Tabs ── */}
+        <Tabs defaultValue={isSharedClient ? "shared-users" : "users"} className="space-y-4">
+          <TabsList className="bg-secondary/50">
+            {client.deployment_mode === "isolated" ? (
+              <TabsTrigger value="users" className="gap-2">
+                <Users className="h-4 w-4" />
+                Usuários ({users.length})
+              </TabsTrigger>
+            ) : (
+              <>
+                <TabsTrigger value="shared-users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Usuários ({isLoadingSharedUsers ? "…" : usersCount})
+                </TabsTrigger>
+                {showUnitsTab && (
+                  <TabsTrigger value="units" className="gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
+                  </TabsTrigger>
+                )}
+                {showMembershipsTab && (
+                  <TabsTrigger value="memberships" className="gap-2">
+                    <Shield className="h-4 w-4" />
+                    Memberships
+                  </TabsTrigger>
+                )}
+              </>
+            )}
+          </TabsList>
 
           {/* Tab contents */}
           {client.deployment_mode === "isolated" ? (

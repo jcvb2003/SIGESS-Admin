@@ -68,7 +68,7 @@ const DEPLOYMENT_LABEL: Record<string, string> = {
 };
 
 const SHARED_MODE_LABEL: Record<string, string> = {
-  polo:       "Polo único",
+  polo:       "Polo",
   multi:      "Multi-tenant",
   multi_polo: "Multi-polo",
   hybrid:     "Híbrido",
@@ -297,21 +297,9 @@ export default function ClientDetailPage() {
             )}
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate text-xl font-bold text-foreground">
-                  {client.nome_entidade}
-                </h1>
-                <Badge
-                  variant="outline"
-                  className={
-                    client.deployment_mode === "shared"
-                      ? "shrink-0 border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
-                      : "shrink-0 border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
-                  }
-                >
-                  {DEPLOYMENT_LABEL[client.deployment_mode] ?? client.deployment_mode}
-                </Badge>
-              </div>
+              <h1 className="truncate text-xl font-bold text-foreground">
+                {client.nome_entidade}
+              </h1>
             </div>
           </div>
 

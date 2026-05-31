@@ -440,11 +440,7 @@ export default function ClientDetailPage() {
           <Card className="border-primary/10 bg-primary/5 p-4">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2">
-                {client.deployment_mode === "shared" ? (
-                  <Shield className="h-5 w-5 text-primary" />
-                ) : (
-                  <Table className="h-5 w-5 text-primary" />
-                )}
+                <Shield className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Memberships</p>

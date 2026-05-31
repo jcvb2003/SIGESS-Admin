@@ -8,6 +8,7 @@ import {
   CreditCard,
   Eye,
   EyeOff,
+  Database,
   Info,
   Loader2,
   Pencil,
@@ -226,7 +227,7 @@ export default function ClientDetailPage() {
 
         <Card className="space-y-4 p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold">
-            <HardDrive className="h-5 w-5 text-primary" />
+            <Database className="h-5 w-5 text-primary" />
             Detalhes da Conta
           </h3>
           <div className="space-y-3">
@@ -411,7 +412,7 @@ export default function ClientDetailPage() {
           <Card className="border-primary/10 bg-primary/5 p-4">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/20 p-2">
-                <HardDrive className="h-5 w-5 text-primary" />
+                <Database className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">

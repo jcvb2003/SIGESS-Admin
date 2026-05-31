@@ -14,53 +14,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      data_imports: {
-        Row: {
-          arquivo: string | null
-          backup_path: string | null
-          created_at: string | null
-          erro_detalhe: string | null
-          executado_por: string | null
-          id: string
-          status: string | null
-          tabela: string | null
-          tenant_id: string | null
-          total_registros: number | null
-        }
-        Insert: {
-          arquivo?: string | null
-          backup_path?: string | null
-          created_at?: string | null
-          erro_detalhe?: string | null
-          executado_por?: string | null
-          id?: string
-          status?: string | null
-          tabela?: string | null
-          tenant_id?: string | null
-          total_registros?: number | null
-        }
-        Update: {
-          arquivo?: string | null
-          backup_path?: string | null
-          created_at?: string | null
-          erro_detalhe?: string | null
-          executado_por?: string | null
-          id?: string
-          status?: string | null
-          tabela?: string | null
-          tenant_id?: string | null
-          total_registros?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "data_imports_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "entidades"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+
       edge_function_audits: {
         Row: {
           current_version: number | null

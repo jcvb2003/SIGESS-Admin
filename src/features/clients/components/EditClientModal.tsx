@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, ImageIcon, KeyRound, Trash2 } from "lucide-react";
 import { useUpdateClient, useDeleteClient } from "../hooks/index";
 import { DeleteClientDialog } from "./DeleteClientDialog";
 
@@ -23,6 +23,25 @@ interface EditClientModalProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onUpdated?: (updated: Client) => void;
   readonly onDeleted?: () => void;
+}
+
+function SectionBox({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3 rounded-lg border border-border/50 bg-secondary/20 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
 }
 
 export function EditClientModal({
@@ -37,7 +56,6 @@ export function EditClientModal({
     tenant_code: client.tenant_code,
     deployment_mode: client.deployment_mode,
     shared_mode: client.shared_mode ?? "",
-    shared_project_ref: client.shared_project_ref || "",
     shared_tenant_id: client.shared_tenant_id || "",
     email: client.email || "",
     telefone: client.telefone || "",
@@ -48,6 +66,7 @@ export function EditClientModal({
     logo_url: client.logo_url || "",
   });
 
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const updateClientMutation = useUpdateClient();
   const deleteClientMutation = useDeleteClient();
@@ -59,7 +78,6 @@ export function EditClientModal({
         tenant_code: client.tenant_code,
         deployment_mode: client.deployment_mode,
         shared_mode: client.shared_mode ?? "",
-        shared_project_ref: client.shared_project_ref || "",
         shared_tenant_id: client.shared_tenant_id || "",
         email: client.email || "",
         telefone: client.telefone || "",
@@ -69,17 +87,23 @@ export function EditClientModal({
         supabase_access_token: "",
         logo_url: client.logo_url || "",
       });
+      setCredentialsOpen(false);
     }
   }, [open, client]);
 
   const handleSave = async () => {
     try {
+      let derivedProjectRef: string | null = null;
+      try {
+        derivedProjectRef = new URL(form.supabase_url).hostname.split(".")[0] || null;
+      } catch { /* invalid URL — leave null */ }
+
       const updatePayload: Record<string, unknown> = {
         nome_entidade: form.nome_entidade,
         tenant_code: form.tenant_code.trim().toLowerCase(),
         deployment_mode: form.deployment_mode,
         shared_mode: form.shared_mode || null,
-        shared_project_ref: form.shared_project_ref.trim() || null,
+        shared_project_ref: derivedProjectRef,
         shared_tenant_id: form.shared_tenant_id.trim() || null,
         email: form.email || null,
         telefone: form.telefone || null,
@@ -88,25 +112,15 @@ export function EditClientModal({
         logo_url: form.logo_url || null,
       };
 
-      if (form.supabase_secret_keys) {
-        updatePayload.supabase_secret_keys = form.supabase_secret_keys;
-      }
-      if (form.supabase_access_token) {
-        updatePayload.supabase_access_token = form.supabase_access_token;
-      }
+      if (form.supabase_secret_keys) updatePayload.supabase_secret_keys = form.supabase_secret_keys;
+      if (form.supabase_access_token) updatePayload.supabase_access_token = form.supabase_access_token;
 
-      const result = await updateClientMutation.mutateAsync({
-        id: client.id,
-        input: updatePayload,
-      });
-
+      const result = await updateClientMutation.mutateAsync({ id: client.id, input: updatePayload });
       toast.success("Cliente atualizado com sucesso");
       if (onUpdated) onUpdated(result);
       onOpenChange(false);
     } catch (error) {
-      toast.error(
-        `Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
-      );
+      toast.error(`Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     }
   };
 
@@ -119,6 +133,8 @@ export function EditClientModal({
   const update = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const isShared = form.deployment_mode === "shared";
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,91 +144,186 @@ export function EditClientModal({
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto flex-1 pr-1">
-            <div>
-              <Label>Nome da Entidade *</Label>
-              <Input value={form.nome_entidade} onChange={(e) => update("nome_entidade", e.target.value)} />
-            </div>
-            <div>
-              <Label>Tenant Code *</Label>
-              <Input
-                value={form.tenant_code}
-                onChange={(e) => update("tenant_code", e.target.value)}
-                placeholder="ex: z2, sinpesca-breves"
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Identificador público e crítico para resolução dinâmica no Web. Use apenas letras minúsculas, números e hífen.
-              </p>
-            </div>
-            <div>
-              <Label>Modo de Implantação</Label>
-              <Select value={form.deployment_mode} onValueChange={(v) => update("deployment_mode", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="isolated">Isolated</SelectItem>
-                  <SelectItem value="shared">Shared</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {form.deployment_mode === "shared" && (
-              <div>
-                <Label>Modo Shared</Label>
-                <Select value={form.shared_mode} onValueChange={(v) => update("shared_mode", v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o modo shared" /></SelectTrigger>
+
+            {/* ── Identidade ── */}
+            <SectionBox title="Identidade">
+              <FieldRow
+                label="Nome da Entidade"
+                hint={undefined}
+              >
+                <Input
+                  value={form.nome_entidade}
+                  onChange={(e) => update("nome_entidade", e.target.value)}
+                />
+              </FieldRow>
+
+              <FieldRow
+                label="Código do Tenant"
+                hint="Identificador público crítico para resolução dinâmica no Web. Apenas letras minúsculas, números e hífen."
+              >
+                <Input
+                  value={form.tenant_code}
+                  onChange={(e) => update("tenant_code", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                  placeholder="ex: sinpesca-oeiras"
+                  className="font-mono"
+                />
+              </FieldRow>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FieldRow label="Email">
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    placeholder="contato@entidade.com"
+                  />
+                </FieldRow>
+                <FieldRow label="Telefone">
+                  <Input
+                    value={form.telefone}
+                    onChange={(e) => update("telefone", e.target.value)}
+                    placeholder="(xx) xxxxx-xxxx"
+                  />
+                </FieldRow>
+              </div>
+
+              <FieldRow label="URL do Logo">
+                <Input
+                  value={form.logo_url}
+                  onChange={(e) => update("logo_url", e.target.value)}
+                  placeholder="https://..."
+                />
+                {form.logo_url ? (
+                  <div className="mt-2 flex items-center gap-3">
+                    <img
+                      src={form.logo_url}
+                      alt="preview"
+                      className="h-10 w-10 rounded-lg object-cover border border-border/50"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                    <span className="text-[11px] text-muted-foreground">Preview</span>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border/50">
+                    <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                  </div>
+                )}
+              </FieldRow>
+            </SectionBox>
+
+            {/* ── Infraestrutura ── */}
+            <SectionBox title="Infraestrutura">
+              <FieldRow label="Modo de Implantação">
+                <Select value={form.deployment_mode} onValueChange={(v) => update("deployment_mode", v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
-                    <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
-                    <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
-                    <SelectItem value="hybrid">hybrid — N tenants, modo misto</SelectItem>
+                    <SelectItem value="isolated">Isolated — projeto Supabase próprio</SelectItem>
+                    <SelectItem value="shared">Shared — projeto Supabase compartilhado</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Email</Label>
-                <Input value={form.email} onChange={(e) => update("email", e.target.value)} />
-              </div>
-              <div>
-                <Label>Telefone</Label>
-                <Input value={form.telefone} onChange={(e) => update("telefone", e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <Label>URL do Supabase *</Label>
-              <Input value={form.supabase_url} onChange={(e) => update("supabase_url", e.target.value)} />
-            </div>
-            <div>
-              <Label>Chave Pública (Publishable)</Label>
-              <Input value={form.supabase_publishable_key} onChange={(e) => update("supabase_publishable_key", e.target.value)} />
-            </div>
-            <div>
-              <Label>Shared Project Ref</Label>
-              <Input value={form.shared_project_ref} onChange={(e) => update("shared_project_ref", e.target.value)} placeholder="Ex: jmahgvgtjstklabwkkit" />
-            </div>
-            <div>
-              <Label>Shared Tenant ID</Label>
-              <Input value={form.shared_tenant_id} onChange={(e) => update("shared_tenant_id", e.target.value)} placeholder="UUID do tenant no banco shared" />
-            </div>
-            <div>
-              <Label>Chave Secreta (Service Role)</Label>
-              <Input type="password" value={form.supabase_secret_keys} placeholder="Deixe em branco para não alterar" onChange={(e) => update("supabase_secret_keys", e.target.value)} />
-            </div>
-            <div>
-              <Label className="flex items-center gap-2">
-                Supabase Access Token (PAT)
-                <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-bold uppercase">
-                  Acesso Conta Completa
-                </span>
-              </Label>
-              <Input type="password" placeholder="sbp_... (Deixe em branco para não alterar)" value={form.supabase_access_token} onChange={(e) => update("supabase_access_token", e.target.value)} />
-            </div>
-            <div>
-              <Label>URL do Logo</Label>
-              <Input value={form.logo_url} onChange={(e) => update("logo_url", e.target.value)} />
+              </FieldRow>
+
+              {isShared && (
+                <>
+                  <FieldRow label="Modo Shared">
+                    <Select value={form.shared_mode} onValueChange={(v) => update("shared_mode", v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o modo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
+                        <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
+                        <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
+                        <SelectItem value="hybrid">hybrid — N tenants, modo misto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldRow>
+
+                  <FieldRow
+                    label="Shared Tenant ID"
+                    hint="UUID do tenant na tabela do banco compartilhado."
+                  >
+                    <Input
+                      value={form.shared_tenant_id}
+                      onChange={(e) => update("shared_tenant_id", e.target.value.trim())}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      className="font-mono text-sm"
+                    />
+                  </FieldRow>
+                </>
+              )}
+
+              <FieldRow label="URL do Supabase">
+                <Input
+                  value={form.supabase_url}
+                  onChange={(e) => update("supabase_url", e.target.value)}
+                  placeholder="https://xxx.supabase.co"
+                  className="font-mono text-sm"
+                />
+              </FieldRow>
+
+              <FieldRow label="Chave Pública (anon)">
+                <Input
+                  value={form.supabase_publishable_key}
+                  onChange={(e) => update("supabase_publishable_key", e.target.value)}
+                  className="font-mono text-sm"
+                />
+              </FieldRow>
+            </SectionBox>
+
+            {/* ── Credenciais ── */}
+            <div className="rounded-lg border border-border/50">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left"
+                onClick={() => setCredentialsOpen((v) => !v)}
+              >
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Credenciais Sensíveis
+                  </span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    Deixe em branco para manter o valor atual
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${credentialsOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {credentialsOpen && (
+                <div className="space-y-3 border-t border-border/50 bg-secondary/20 px-4 pb-4 pt-3">
+                  <FieldRow label="Chave Secreta (service_role)">
+                    <Input
+                      type="password"
+                      value={form.supabase_secret_keys}
+                      onChange={(e) => update("supabase_secret_keys", e.target.value)}
+                      placeholder="eyJ... (em branco = mantém o valor atual)"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Access Token (PAT)">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-500">
+                        Acesso Total à Conta
+                      </span>
+                    </div>
+                    <Input
+                      type="password"
+                      value={form.supabase_access_token}
+                      onChange={(e) => update("supabase_access_token", e.target.value)}
+                      placeholder="sbp_... (em branco = mantém o valor atual)"
+                    />
+                  </FieldRow>
+                </div>
+              )}
             </div>
 
-            {/* Zona de perigo */}
-            <div className="space-y-3 pt-2">
+            {/* ── Zona de perigo ── */}
+            <div className="space-y-3 pt-1">
               <Separator />
               <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
                 <div>
@@ -245,7 +356,7 @@ export function EditClientModal({
                 !form.tenant_code.trim() ||
                 !form.supabase_url ||
                 !form.supabase_publishable_key.trim() ||
-                (form.deployment_mode === "shared" && !form.shared_project_ref.trim())
+                false
               }
             >
               {updateClientMutation.isPending ? "Salvando..." : "Salvar"}

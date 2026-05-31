@@ -2,10 +2,9 @@ import {
   CheckCircle2,
   Database,
   Globe2,
-  Loader2, 
-  RefreshCw, 
+  Loader2,
+  RefreshCw,
   Rocket,
-  ServerCrash
 } from "lucide-react";
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -27,20 +26,17 @@ import { useObservability } from "../hooks/useObservability";
 import { TenantCard } from "../components/TenantCard";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
-import { ImportHistoryCard } from "../components/ImportHistoryCard";
 import { buildSchemaSyncActionKey, getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
 import type { SyncableSchemaDrift } from "../types";
 
 export default function ObservabilityPage() {
   const {
     clients,
-    allImports,
     exportRuns,
     schemaStatus,
     snapshots,
     overview,
     isLoadingClients,
-    isLoadingImports,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,
@@ -176,21 +172,6 @@ export default function ObservabilityPage() {
             </div>
           </Card>
 
-          <Card className="group relative overflow-hidden border-rose-500/20 bg-gradient-to-br from-rose-500/10 to-transparent p-5 shadow-sm transition-all hover:border-rose-500/40 hover:shadow-md">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-rose-500/5 transition-transform group-hover:scale-150" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-rose-600 dark:text-rose-400">Importações críticas</p>
-                <p className="mt-2 text-3xl font-bold tracking-tight text-rose-700 dark:text-rose-300">{overview.failedImports}</p>
-                <p className="mt-1 text-xs font-medium text-rose-600/80 dark:text-rose-400/80">
-                  {overview.processingImports} em fila/processando
-                </p>
-              </div>
-              <div className="rounded-full bg-rose-500/10 p-2 text-rose-600 transition-colors group-hover:bg-rose-500/20 dark:text-rose-400">
-                <ServerCrash className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
@@ -198,7 +179,6 @@ export default function ObservabilityPage() {
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="exports">Exportação (JSONL)</TabsTrigger>
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
-            <TabsTrigger value="imports">Histórico de Cargas</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -216,9 +196,6 @@ export default function ObservabilityPage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline" className="border-border/60 bg-background">
                     {isLoadingSchema ? "Carregando schema..." : `${schemaStatus.filter(s => (s.totalDiffs ?? 0) > 0).length} tenant(s) divergentes`}
-                  </Badge>
-                  <Badge variant="outline" className="border-border/60 bg-background">
-                    {allImports.length} evento(s) de importação
                   </Badge>
                   <Badge
                     variant="outline"
@@ -340,20 +317,6 @@ export default function ObservabilityPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="imports" className="space-y-4">
-            <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
-              <h2 className="text-lg font-semibold text-foreground">Histórico consolidado de importações</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Use esta visão para detectar cargas quebradas, filas presas e tenants com necessidade de intervenção operacional.
-              </p>
-            </Card>
-
-            <ImportHistoryCard 
-              allImports={allImports} 
-              clients={clients} 
-              isLoadingImports={isLoadingImports} 
-            />
-          </TabsContent>
         </Tabs>
 
         <Dialog

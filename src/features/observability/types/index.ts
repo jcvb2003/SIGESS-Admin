@@ -13,19 +13,8 @@ export type ExportRun = {
   executed_at: string | null;
 };
 
-export type ImportRecord = {
-  id: string;
-  tenant_id: string | null;
-  tabela: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  total_registros: number;
-  created_at: string;
-  erro_detalhe: string | null;
-};
-
 export type TenantSnapshot = {
   client: Client;
-  imports: ImportRecord[];
 };
 
 export type SyncableSchemaDrift = {

@@ -16,7 +16,6 @@ interface TenantCardProps {
 
 export function TenantCard({ snapshot, schemaStatus }: TenantCardProps) {
   const navigate = useNavigate();
-  const latestImport = snapshot.imports[0];
   const currentSchema = schemaStatus.find(x => x.tenantId === snapshot.client.id);
 
   return (
@@ -72,15 +71,6 @@ export function TenantCard({ snapshot, schemaStatus }: TenantCardProps) {
             </p>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Importações</p>
-            <p className="mt-2 text-lg font-semibold text-foreground">{snapshot.imports.length}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {latestImport
-                ? `${latestImport.tabela} · ${formatDateTime(latestImport.created_at)}`
-                : "Sem histórico"}
-            </p>
-          </div>
         </div>
 
         <Button

@@ -9,7 +9,6 @@ export * from "./components/EditClientModal";
 export * from "./components/HealthCheckCard";
 export * from "./components/PublicConfigCard";
 export * from "./components/MigrationsTab";
-export * from "./components/DataImportsTab";
 export * from "./components/TablesTab";
 export * from "./components/UsersTab";
 export * from "./components/UnitsTab";

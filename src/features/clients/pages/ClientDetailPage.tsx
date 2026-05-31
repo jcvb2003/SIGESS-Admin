@@ -54,9 +54,6 @@ interface ClientMember {
 }
 
 function extractProjectRef(client: Client): string {
-  if (client.deployment_mode === "shared") {
-    return client.shared_project_ref || "—";
-  }
   try {
     return new URL(client.supabase_url).hostname.split(".")[0];
   } catch {

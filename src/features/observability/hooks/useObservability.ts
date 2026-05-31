@@ -8,7 +8,6 @@ import { getSchemaSyncStatus, runSchemaAudit } from "../services/schema-sync.ser
 import { buildSchemaSyncActionKey } from "../utils/drift-utils";
 import type {
   ExportRun,
-  ImportRecord,
   TenantSnapshot,
   SchemaDriftPreview,
   SchemaDriftApplyResult,
@@ -189,36 +188,10 @@ export function useObservability() {
   const [isApplyingDrift, setIsApplyingDrift] = useState(false);
   const [driftApplyResults, setDriftApplyResults] = useState<SchemaDriftApplyResult[]>([]);
 
-  const queryImports = useQuery<ImportRecord[]>({
-    queryKey: ["global-data-imports"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("data_imports")
-        .select("id, tenant_id, tabela, status, total_registros, created_at, erro_detalhe")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return (data as ImportRecord[]) ?? [];
-    },
-  });
-  const allImports = useMemo(() => queryImports.data ?? [], [queryImports.data]);
-  const isLoadingImports = queryImports.isLoading;
-
-  const snapshots = useMemo<TenantSnapshot[]>(() => {
-    const importsByTenant = new Map<string, ImportRecord[]>();
-
-    for (const item of allImports) {
-      if (!item.tenant_id) continue;
-      const group = importsByTenant.get(item.tenant_id) ?? [];
-      group.push(item);
-      importsByTenant.set(item.tenant_id, group);
-    }
-
-    return clients.map((client) => ({
-      client,
-      imports: importsByTenant.get(client.id) ?? [],
-    }));
-  }, [allImports, clients]);
+  const snapshots = useMemo<TenantSnapshot[]>(
+    () => clients.map((client) => ({ client })),
+    [clients],
+  );
 
   const queryExports = useQuery<ExportRun[]>({
     queryKey: ["global-export-runs"],
@@ -262,21 +235,10 @@ export function useObservability() {
   const overview = useMemo(() => {
     const healthy = snapshots.filter((item) => item.client.key_status === "valid").length;
     const publicConfigOk = clients.filter((c) => !!(c.tenant_code && c.supabase_publishable_key)).length;
-    const failedImports = snapshots.reduce(
-      (acc, item) => acc + item.imports.filter((entry) => entry.status === "failed").length,
-      0,
-    );
-    const processingImports = snapshots.reduce(
-      (acc, item) => acc + item.imports.filter((entry) => ["pending", "processing"].includes(entry.status)).length,
-      0,
-    );
-
     return {
       total: clients.length,
       healthy,
       publicConfigOk,
-      failedImports,
-      processingImports,
     };
   }, [snapshots, clients]);
 
@@ -486,13 +448,11 @@ export function useObservability() {
 
   return {
     clients,
-    allImports,
     exportRuns,
     schemaStatus,
     snapshots,
     overview,
     isLoadingClients,
-    isLoadingImports,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,

@@ -122,11 +122,6 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
       return;
     }
 
-    if (formData.deployment_mode === "shared" && !formData.shared_project_ref.trim()) {
-      toast.error("Informe o project ref do ambiente shared");
-      return;
-    }
-
     if (formData.deployment_mode === "shared" && !formData.shared_mode) {
       toast.error("Selecione o modo shared (polo, multi, multi_polo ou hybrid)");
       return;
@@ -141,10 +136,15 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
         acessoExpiraEm = new Date(formData.acesso_expira_em).toISOString();
       }
 
+      let derivedProjectRef: string | null = null;
+      try {
+        derivedProjectRef = new URL(formData.supabase_url).hostname.split(".")[0] || null;
+      } catch { /* invalid URL */ }
+
       const payload: ClientCreate = {
         ...formData,
         tenant_code: formData.tenant_code.trim().toLowerCase(),
-        shared_project_ref: formData.shared_project_ref.trim() || null,
+        shared_project_ref: derivedProjectRef,
         shared_tenant_id: formData.shared_tenant_id.trim() || null,
         acesso_expira_em: acessoExpiraEm,
         max_socios: formData.assinatura === "trial" ? formData.max_socios : null,
@@ -271,18 +271,6 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
               value={formData.supabase_publishable_key || ""}
               onChange={(e) => handleChange("supabase_publishable_key", e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="shared_project_ref">
-              Shared Project Ref {formData.deployment_mode === "shared" ? "*" : ""}
-            </Label>
-            <Input
-              id="shared_project_ref"
-              placeholder="Ex: jmahgvgtjstklabwkkit"
-              value={formData.shared_project_ref || ""}
-              onChange={(e) => handleChange("shared_project_ref", e.target.value)}
             />
           </div>
 

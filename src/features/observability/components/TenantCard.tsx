@@ -42,44 +42,27 @@ export function TenantCard({ snapshot, schemaStatus }: TenantCardProps) {
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-border/60 bg-secondary/20 p-3">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Schema</p>
-            <p className="mt-2 text-lg font-semibold text-foreground">
-              {(() => {
-                if (!currentSchema) return "Pendente";
-                if (currentSchema.totalDiffs === 0) return "Alinhado";
-                return `${currentSchema.totalDiffs} Diverg.`;
-              })()}
+            <p className="mt-1.5 text-lg font-semibold text-foreground">
+              {!currentSchema ? "Pendente" : currentSchema.totalDiffs === 0 ? "Alinhado" : `${currentSchema.totalDiffs} diverg.`}
             </p>
             <p className="text-xs text-muted-foreground">
-              {(() => {
-                if (!currentSchema) return "Aguardando auditoria";
-                if (currentSchema.totalDiffs === 0) return "100% Sincronizado";
-                return "Requer atenção";
-              })()}
+              {!currentSchema ? "Aguardando auditoria" : currentSchema.totalDiffs === 0 ? "100% sincronizado" : "Requer atenção"}
             </p>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+          <div className={`rounded-lg border p-3 ${snapshot.client.health_error_detail ? "border-destructive/30 bg-destructive/5" : "border-border/60 bg-secondary/20"}`}>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Último health check</p>
-            <p className="mt-2 text-sm font-medium text-foreground">
+            <p className="mt-1.5 text-sm font-medium text-foreground">
               {formatDateTime(snapshot.client.last_health_check_at)}
             </p>
-            <p className="text-xs text-muted-foreground truncate">
+            <p className={`truncate text-xs ${snapshot.client.health_error_detail ? "text-destructive/80" : "text-muted-foreground"}`}>
               {snapshot.client.health_error_detail ?? "Sem erros recentes"}
             </p>
           </div>
-
         </div>
-
-        <Button
-          variant="outline"
-          onClick={() => navigate(`/clients/${snapshot.client.id}`)}
-          className="w-full sm:w-auto"
-        >
-          Ver detalhes do tenant
-        </Button>
       </div>
     </Card>
   );

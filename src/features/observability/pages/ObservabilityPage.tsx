@@ -1,10 +1,12 @@
 import {
-  CheckCircle2,
+  AlertTriangle,
   Database,
   Globe2,
   Loader2,
   RefreshCw,
   Rocket,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -24,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useObservability } from "../hooks/useObservability";
 import { TenantCard } from "../components/TenantCard";
+import { ReferenceCard } from "../components/ReferenceCard";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 import { buildSchemaSyncActionKey, getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
@@ -130,48 +133,23 @@ export default function ObservabilityPage() {
           </Button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="group relative overflow-hidden border-border/40 bg-secondary/10 p-5 shadow-sm transition-all hover:border-border/80 hover:shadow-md">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary/5 transition-transform group-hover:scale-150" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Auditando</p>
-                <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-                  {isLoadingSchema ? "..." : schemaStatus.length}
-                </p>
+        <div className="grid grid-cols-2 divide-x divide-y divide-border/40 rounded-xl border border-border/50 sm:grid-cols-4 sm:divide-y-0">
+          {[
+            { label: "Monitorados", value: overview.total, icon: Globe2, color: "text-primary", bg: "bg-primary/10" },
+            { label: "Saudáveis", value: overview.healthy, icon: ShieldCheck, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+            { label: "Com problema", value: overview.total - overview.healthy, icon: AlertTriangle, color: overview.total - overview.healthy > 0 ? "text-destructive" : "text-muted-foreground", bg: overview.total - overview.healthy > 0 ? "bg-destructive/10" : "bg-muted/40" },
+            { label: "Config pública OK", value: `${overview.publicConfigOk}/${overview.total}`, icon: KeyRound, color: overview.publicConfigOk === overview.total ? "text-sky-500" : "text-amber-500", bg: overview.publicConfigOk === overview.total ? "bg-sky-500/10" : "bg-amber-500/10" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="flex items-center gap-3 px-5 py-4">
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${bg}`}>
+                <Icon className={`h-4 w-4 ${color}`} />
               </div>
-              <div className="rounded-full bg-primary/10 p-2 text-primary transition-colors group-hover:bg-primary/20">
-                <Database className="h-5 w-5" />
+              <div>
+                <p className={`text-xl font-bold leading-none ${color}`}>{value}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
               </div>
             </div>
-          </Card>
-
-          <Card className="group relative overflow-hidden border-border/40 bg-secondary/10 p-5 shadow-sm transition-all hover:border-border/80 hover:shadow-md">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary/5 transition-transform group-hover:scale-150" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Tenants monitorados</p>
-                <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">{overview.total}</p>
-              </div>
-              <div className="rounded-full bg-primary/10 p-2 text-primary transition-colors group-hover:bg-primary/20">
-                <Globe2 className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="group relative overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-transparent p-5 shadow-sm transition-all hover:border-emerald-500/40 hover:shadow-md">
-            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-emerald-500/5 transition-transform group-hover:scale-150" />
-            <div className="relative z-10 flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Saudáveis</p>
-                <p className="mt-2 text-3xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">{overview.healthy}</p>
-              </div>
-              <div className="rounded-full bg-emerald-500/10 p-2 text-emerald-600 transition-colors group-hover:bg-emerald-500/20 dark:text-emerald-400">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-            </div>
-          </Card>
-
+          ))}
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
@@ -181,62 +159,34 @@ export default function ObservabilityPage() {
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-semibold text-foreground">Estado Geral da Rede</h2>
-                  <p className="text-sm text-muted-foreground">
-                    As ações antes espalhadas por cliente agora ficam concentradas aqui: leitura de drift, sincronização manual e histórico operacional por tenant.
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Apenas projetos isolated são comparados. Projetos shared têm modelo de schema próprio.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="border-border/60 bg-background">
-                    {isLoadingSchema ? "Carregando schema..." : `${schemaStatus.filter(s => (s.totalDiffs ?? 0) > 0).length} tenant(s) divergentes`}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={`border-border/60 ${
-                      overview.publicConfigOk === overview.total
-                        ? "border-sky-200 bg-sky-50 text-sky-700"
-                        : "border-amber-200 bg-amber-50 text-amber-700"
-                    }`}
-                  >
-                    {overview.publicConfigOk}/{overview.total} config pública OK
-                  </Badge>
-                </div>
-              </div>
-            </Card>
-
+          <TabsContent value="overview" className="space-y-4">
             {isLoadingClients ? (
               <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
                 <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Carregando tenants...</span>
               </div>
             ) : (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {snapshots.map((snapshot) => (
-                  <TenantCard 
-                    key={snapshot.client.id} 
-                    snapshot={snapshot} 
-                    schemaStatus={schemaStatus} 
-                  />
-                ))}
-              </div>
+              <>
+                {(() => {
+                  const ref = clients.find(c => c.tenant_code === 'sinpesca-oeiras');
+                  return ref ? <ReferenceCard client={ref} /> : null;
+                })()}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {snapshots
+                    .filter(s => s.client.tenant_code !== 'sinpesca-oeiras')
+                    .map((snapshot) => (
+                      <TenantCard
+                        key={snapshot.client.id}
+                        snapshot={snapshot}
+                        schemaStatus={schemaStatus}
+                      />
+                    ))}
+                </div>
+              </>
             )}
           </TabsContent>
 
           <TabsContent value="exports" className="space-y-4">
-            <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
-              <h2 className="text-lg font-semibold text-foreground">Observabilidade de Exportação (JSONL)</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Acompanhamento granular das exportações operacionais. Cada tenant deve exportar tabelas críticas para o backup lógico.
-              </p>
-            </Card>
-
             {isLoadingExports ? (
               <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
                 <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />

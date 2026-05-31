@@ -42,6 +42,9 @@ export function ExportStatusCard({ client, exportRuns }: ExportStatusCardProps) 
   const isRunning = latestCycle.some(r => r.status === 'running');
   const lastUpdate = latestCycle[0]?.executed_at;
 
+  const totalBytes = latestCycle.reduce((acc, r) => acc + (r.file_size_bytes ?? 0), 0);
+  const totalSizeLabel = formatBytes(totalBytes);
+
   return (
     <Card className="p-5 overflow-hidden">
       <div className="flex flex-col gap-4">
@@ -59,6 +62,9 @@ export function ExportStatusCard({ client, exportRuns }: ExportStatusCardProps) 
               if (latestCycle.length > 0) return <Badge variant="outline" className="border-emerald-500 text-emerald-600 bg-emerald-50">Ciclo Saudável</Badge>;
               return <Badge variant="secondary">Sem registros</Badge>;
             })()}
+            {totalBytes > 0 && (
+              <p className="text-xs font-semibold text-foreground">{totalSizeLabel}</p>
+            )}
             <p className="text-[10px] text-muted-foreground uppercase font-medium">
               {lastUpdate ? `Atualizado em ${formatDateTime(lastUpdate)}` : "Nunca executado"}
             </p>
@@ -87,6 +93,14 @@ export function ExportStatusCard({ client, exportRuns }: ExportStatusCardProps) 
       </div>
     </Card>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function getStatusInfo(run: ExportRun | undefined) {

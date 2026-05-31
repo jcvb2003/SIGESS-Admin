@@ -36,7 +36,7 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
   }
 
   return (data || [])
-    .filter((row) => row.entidades?.deployment_mode === 'isolated')
+    .filter((row) => row.entidades?.deployment_mode === 'isolated' && row.entidades?.tenant_code !== 'sinpesca-oeiras')
     .map(row => ({
     tenantId: row.tenant_id,
     tenantName: row.entidades?.nome_entidade || row.entidades?.tenant_code || 'Unknown',

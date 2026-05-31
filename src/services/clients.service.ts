@@ -323,6 +323,21 @@ export async function deleteSharedTenantUser(input: {
   if (authDeleteError) throw handleSupabaseError(authDeleteError);
 }
 
+export async function updateSharedTenantUser(
+  id: string,
+  input: Partial<Pick<TenantUser, "operator_type" | "is_active">>,
+): Promise<TenantUser> {
+  const { data, error } = await getSharedSupabase()
+    .from("tenant_users")
+    .update(input)
+    .eq("id", id)
+    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+    .single();
+
+  if (error) throw handleSupabaseError(error);
+  return data as TenantUser;
+}
+
 export async function listSharedMemberships(tenantId: string): Promise<UserUnitMembership[]> {
   const { data, error } = await getSharedSupabaseAdmin()
     .from("user_unit_memberships")

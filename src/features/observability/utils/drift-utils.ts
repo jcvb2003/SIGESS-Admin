@@ -3,12 +3,64 @@ import type { SyncableSchemaDrift } from "../types";
 
 type SupportedDiffType = "missing_in_tenant" | "extra_in_tenant" | "different_definition";
 
+const SHARED_GOVERNANCE_TABLES = new Set([
+  "tenants",
+  "tenant_units",
+  "tenant_users",
+  "user_profiles",
+  "user_unit_memberships",
+]);
+
+const ISOLATED_ANON_TABLE_GRANT_ALLOWLIST = new Set([
+  "foto_upload_tokens",
+]);
+
+const ISOLATED_ANON_FUNCTION_GRANT_ALLOWLIST = new Set([
+  "confirmar_upload_foto(uuid, text)",
+]);
+
 function isSupportedDiffType(type: string): type is SupportedDiffType {
   return type === "missing_in_tenant" || type === "extra_in_tenant" || type === "different_definition";
 }
 
 function pickSource(diff: SchemaDiff) {
   return diff.oeiras_value ?? diff.tenant_value ?? null;
+}
+
+function isAllowedForIsolatedSync(drift: SyncableSchemaDrift) {
+  if (drift.objectType === "grant") {
+    const lastDotIndex = drift.objectName.lastIndexOf(".");
+    if (lastDotIndex <= 0) return true;
+
+    const tableName = drift.objectName.slice(0, lastDotIndex);
+    const grantee = drift.objectName.slice(lastDotIndex + 1);
+
+    if (SHARED_GOVERNANCE_TABLES.has(tableName)) {
+      return false;
+    }
+
+    if (grantee === "anon" && !ISOLATED_ANON_TABLE_GRANT_ALLOWLIST.has(tableName)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  if (drift.objectType === "function_grant") {
+    const lastDotIndex = drift.objectName.lastIndexOf(".");
+    if (lastDotIndex <= 0) return true;
+
+    const functionSignature = drift.objectName.slice(0, lastDotIndex);
+    const grantee = drift.objectName.slice(lastDotIndex + 1);
+
+    if (grantee === "anon" && !ISOLATED_ANON_FUNCTION_GRANT_ALLOWLIST.has(functionSignature)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return true;
 }
 
 function buildViewDrift(diff: SchemaDiff, diffs: SchemaDiff[]): SyncableSchemaDrift | null {
@@ -172,6 +224,7 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
       buildTriggerDrift(diff);
 
     if (!drift) continue;
+    if (!isAllowedForIsolatedSync(drift)) continue;
     syncable.set(`${drift.objectType}:${drift.schema}:${drift.objectName}:${drift.diffType}`, drift);
   }
 

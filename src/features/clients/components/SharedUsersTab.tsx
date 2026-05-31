@@ -39,6 +39,7 @@ import {
   createSharedTenantOperator,
   deleteSharedTenantUser,
   listSharedTenantUsers,
+  updateSharedTenantUser,
 } from "@/services/clients.service";
 
 interface SharedUsersTabProps {
@@ -94,6 +95,8 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
   const [adminForm, setAdminForm] = useState<CreateAdminFormState>(initialAdminForm);
   const [operatorForm, setOperatorForm] = useState<CreateOperatorFormState>(initialOperatorForm);
   const [pendingDelete, setPendingDelete] = useState<TenantUser | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<TenantUser | null>(null);
+  const [editOperatorType, setEditOperatorType] = useState<OperatorType>("auxiliar");
 
   const queryKey = useMemo(() => ["shared-tenant-users", tenantId], [tenantId]);
 
@@ -173,6 +176,26 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
     },
   });
 
+  const updateOperatorMutation = useMutation({
+    mutationFn: async ({ tenantUserId, operatorType }: { tenantUserId: string; operatorType: OperatorType }) =>
+      updateSharedTenantUser(tenantUserId, { operator_type: operatorType }),
+    onSuccess: async (_, variables) => {
+      toast({
+        title: "Nível de acesso atualizado",
+        description: `Operador atualizado para ${OPERATOR_TYPE_LABEL[variables.operatorType]}.`,
+      });
+      await queryClient.invalidateQueries({ queryKey });
+      setPendingEdit(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao atualizar operador",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    },
+  });
+
   const ownerCount     = tenantUsers.filter((u) => u.tenant_role === "owner").length;
   const presidentCount = tenantUsers.filter((u) => u.tenant_role === "member" && u.operator_type === "presidente").length;
   const auxiliarCount  = tenantUsers.filter((u) => u.tenant_role === "member" && u.operator_type === "auxiliar").length;
@@ -236,6 +259,21 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
                   <Badge variant={tenantUser.is_active ? "default" : "secondary"}>
                     {tenantUser.is_active ? "Ativo" : "Inativo"}
                   </Badge>
+                  {tenantUser.tenant_role === "member" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => {
+                        setPendingEdit(tenantUser);
+                        setEditOperatorType(tenantUser.operator_type ?? "auxiliar");
+                      }}
+                    >
+                      <UserCog className="h-4 w-4" />
+                      Alterar nível
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -291,6 +329,62 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
               onClick={() => createAdminMutation.mutate()}
             >
               {createAdminMutation.isPending ? "Criando..." : "Criar Gestor"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingEdit)}
+        onOpenChange={(openState) => {
+          if (!openState) {
+            setPendingEdit(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar nível de acesso</DialogTitle>
+            <DialogDescription>
+              Defina se o operador atua como Presidente ou Auxiliar neste tenant.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">
+                {pendingEdit?.user_profiles?.nome || pendingEdit?.user_profiles?.email || pendingEdit?.user_id}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {pendingEdit?.user_profiles?.email || "Sem email"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-op-tipo">Tipo de operador</Label>
+              <Select value={editOperatorType} onValueChange={(v) => setEditOperatorType(v as OperatorType)}>
+                <SelectTrigger id="edit-op-tipo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="presidente">Presidente</SelectItem>
+                  <SelectItem value="auxiliar">Auxiliar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingEdit(null)}>Cancelar</Button>
+            <Button
+              disabled={updateOperatorMutation.isPending || !pendingEdit}
+              onClick={() => {
+                if (pendingEdit) {
+                  updateOperatorMutation.mutate({
+                    tenantUserId: pendingEdit.id,
+                    operatorType: editOperatorType,
+                  });
+                }
+              }}
+            >
+              {updateOperatorMutation.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>

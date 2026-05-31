@@ -291,7 +291,7 @@ export async function deleteSharedTenantUser(input: {
 }
 
 export async function listSharedMemberships(tenantId: string): Promise<UserUnitMembership[]> {
-  const { data, error } = await getSharedSupabase()
+  const { data, error } = await getSharedSupabaseAdmin()
     .from("user_unit_memberships")
     .select("*")
     .eq("tenant_id", tenantId)

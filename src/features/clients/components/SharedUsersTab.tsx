@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -123,57 +123,38 @@ export function SharedUsersTab({ tenantId }: SharedUsersTabProps) {
 
   const ownerCount = tenantUsers.filter((user) => user.tenant_role === "owner").length;
 
+  const isReady = ownerCount > 0;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-primary/5 p-4">
-        <div>
-          <p className="font-semibold text-primary">{tenantUsers.length} usuario(s) no tenant</p>
-          <p className="text-sm text-muted-foreground">
-            Crie o gestor inicial do cliente e acompanhe quem pertence a este tenant.
-          </p>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 divide-x divide-border/40">
+        {[
+          { icon: Users, label: "Usuários", value: String(tenantUsers.length), color: "text-primary", bg: "bg-primary/10" },
+          { icon: Shield, label: "Gestores", value: String(ownerCount), color: "text-primary", bg: "bg-primary/10" },
+          {
+            icon: isReady ? CheckCircle2 : Clock,
+            label: "Status",
+            value: isReady ? "Pronto" : "Pendente",
+            color: isReady ? "text-emerald-500" : "text-amber-500",
+            bg: isReady ? "bg-emerald-500/10" : "bg-amber-500/10",
+          },
+        ].map(({ icon: Icon, label, value, color, bg }) => (
+          <div key={label} className="flex flex-1 items-center gap-3 px-5 py-4">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${bg}`}>
+              <Icon className={`h-4 w-4 ${color}`} />
+            </div>
+            <div>
+              <p className={`text-lg font-bold leading-none ${color}`}>{value}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
+            </div>
+          </div>
+        ))}
+        <div className="px-5 py-4">
+          <Button onClick={() => setOpen(true)} className="gap-2" size="sm">
+            <UserPlus className="h-4 w-4" />
+            Novo Gestor
+          </Button>
         </div>
-        <Button onClick={() => setOpen(true)} className="gap-2">
-          <UserPlus className="h-4 w-4" />
-          Novo Gestor
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/15 p-2">
-              <Users className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Usuarios</p>
-              <p className="text-xl font-bold text-foreground">{tenantUsers.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/15 p-2">
-              <Shield className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Gestores</p>
-              <p className="text-xl font-bold text-foreground">{ownerCount}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/15 p-2">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <p className="text-sm font-medium text-foreground">
-                {ownerCount > 0 ? "Cliente pronto para acessar o Web" : "Gestor inicial pendente"}
-              </p>
-            </div>
-          </div>
-        </Card>
       </div>
 
       {isLoading ? (

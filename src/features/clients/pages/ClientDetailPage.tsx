@@ -8,8 +8,6 @@ import {
   CreditCard,
   Eye,
   EyeOff,
-  Globe2,
-  HardDrive,
   Info,
   Loader2,
   Pencil,
@@ -17,7 +15,6 @@ import {
   Rocket,
   Settings2,
   Shield,
-  Table,
   Trash2,
   Users,
 } from "lucide-react";
@@ -34,7 +31,6 @@ import {
   HealthCheckCard,
   PublicConfigCard,
   SubscriptionModal,
-  TablesTab,
   UsersTab,
   SharedUsersTab,
   UnitsTab,
@@ -52,13 +48,6 @@ import {
 } from "@/components/ui/select";
 import type { SharedTenant } from "@/features/clients/types";
 
-interface StorageBucket {
-  id: string;
-  name: string;
-  public: boolean;
-  created_at: string;
-}
-
 interface ClientMember {
   id: string;
   email: string | null;
@@ -66,11 +55,6 @@ interface ClientMember {
   last_sign_in_at: string | null;
   acesso_expira_em: string | null;
   max_socios: number | null;
-}
-
-interface TableInfo {
-  name: string;
-  schema: string;
 }
 
 export default function ClientDetailPage() {
@@ -107,18 +91,6 @@ export default function ClientDetailPage() {
     staleTime: 1000 * 60 * 10,
   });
 
-  const {
-    data: buckets = [],
-    isLoading: isLoadingBuckets,
-    error: bucketError,
-  } = useQuery({
-    queryKey: ["client-buckets", id],
-    enabled: !!client && !isSharedClient,
-    queryFn: () => proxyAction(id!, "list-buckets"),
-    retry: false,
-    staleTime: 1000 * 60 * 10,
-  });
-
   const { data: users = [] } = useQuery({
     queryKey: ["client-users-count", id],
     enabled: !!client && client.deployment_mode === "isolated",
@@ -143,35 +115,6 @@ export default function ClientDetailPage() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const { data: tables = [] } = useQuery({
-    queryKey: ["client-tables", id],
-    enabled: !!client && !isSharedClient,
-    staleTime: 1000 * 60 * 5,
-    queryFn: async () => {
-      const data = await proxyAction(id!, "list-tables");
-      let rawList: Array<{ name?: string; table_name?: string; schema?: string } | string> = [];
-
-      if (Array.isArray(data)) {
-        rawList = data;
-      } else if (data && typeof data === "object" && "definitions" in data) {
-        rawList = Object.keys(data.definitions).map((name) => ({ name, schema: "public" }));
-      }
-
-      return rawList
-        .map((item) => ({
-          name:
-            typeof item === "string"
-              ? item
-              : item.name || ((item as Record<string, unknown>).table_name as string) || "",
-          schema:
-            (typeof item === "object" &&
-              ((item as Record<string, unknown>).schema as string)) ||
-            "public",
-        }))
-        .filter((item: TableInfo) => item.name);
-    },
-  });
-
   const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
     queryKey: ["shared-tenant-units", effectiveTenantId],
     enabled: Boolean(client) && isSharedClient && showUnitsTab && Boolean(effectiveTenantId),
@@ -184,10 +127,8 @@ export default function ClientDetailPage() {
     try {
       await Promise.all([
         refetchClient(),
-        queryClient.invalidateQueries({ queryKey: ["client-buckets", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-users-count", id] }),
         queryClient.invalidateQueries({ queryKey: ["client-users", id] }),
-        queryClient.invalidateQueries({ queryKey: ["client-tables", id] }),
         ...(sharedTenantId
           ? [
               queryClient.invalidateQueries({ queryKey: ["shared-tenant-units", sharedTenantId] }),
@@ -230,55 +171,6 @@ export default function ClientDetailPage() {
       </MainLayout>
     );
   }
-
-  const connectionError = bucketError instanceof Error ? bucketError.message : null;
-
-  const renderStorageContent = () => {
-    if (isLoadingBuckets) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        </div>
-      );
-    }
-
-    if (buckets.length === 0) {
-      return (
-        <Card className="p-12 text-center">
-          <HardDrive className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-          <p className="text-lg font-medium text-foreground">Nenhum bucket encontrado</p>
-          <p className="text-muted-foreground">
-            {connectionError ? "Verifique a conexao" : "Este projeto nao possui buckets de storage"}
-          </p>
-        </Card>
-      );
-    }
-
-    return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {buckets.map((bucket: StorageBucket) => (
-          <Card key={bucket.id} className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-secondary p-2">
-                  <HardDrive className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{bucket.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(bucket.created_at), "dd/MM/yyyy")}
-                  </p>
-                </div>
-              </div>
-              <Badge variant={bucket.public ? "default" : "secondary"}>
-                {bucket.public ? "Publico" : "Privado"}
-              </Badge>
-            </div>
-          </Card>
-        ))}
-      </div>
-    );
-  };
 
   const renderDetailsContent = () => (
     <div className="space-y-6 animate-fade-in-up">
@@ -523,10 +415,10 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">
-                  {client.deployment_mode === "shared" ? "Polos" : "Buckets"}
+                  {client.deployment_mode === "shared" ? "Polos" : "Usuarios"}
                 </p>
                 <p className="text-xl font-bold text-foreground">
-                  {client.deployment_mode === "shared" ? sharedUnits.length : buckets.length}
+                  {client.deployment_mode === "shared" ? sharedUnits.length : users.length}
                 </p>
               </div>
             </div>
@@ -554,11 +446,9 @@ export default function ClientDetailPage() {
                 )}
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">
-                  {client.deployment_mode === "shared" ? "Memberships" : "Tabelas"}
-                </p>
+                <p className="text-sm text-muted-foreground">Memberships</p>
                 <p className="text-xl font-bold text-foreground">
-                  {client.deployment_mode === "shared" ? "Shared" : tables.length}
+                  {client.deployment_mode === "shared" ? sharedTenantUsers.length : "—"}
                 </p>
               </div>
             </div>
@@ -570,17 +460,6 @@ export default function ClientDetailPage() {
             </p>
           </Card>
         </div>
-
-        {client.deployment_mode === "isolated" && connectionError ? (
-          <Card className="border-destructive/50 bg-destructive/10 p-4">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              <p className="text-sm text-destructive">
-                Nao foi possivel conectar ao projeto do cliente via Proxy.
-              </p>
-            </div>
-          </Card>
-        ) : null}
 
         {needsTenantSelector && (
           <Card className="p-4">
@@ -620,17 +499,9 @@ export default function ClientDetailPage() {
             </TabsTrigger>
             {client.deployment_mode === "isolated" ? (
               <>
-                <TabsTrigger value="storage" className="gap-2">
-                  <HardDrive className="h-4 w-4" />
-                  Storage ({buckets.length})
-                </TabsTrigger>
                 <TabsTrigger value="users" className="gap-2">
                   <Users className="h-4 w-4" />
                   Usuarios ({users.length})
-                </TabsTrigger>
-                <TabsTrigger value="tables" className="gap-2">
-                  <Table className="h-4 w-4" />
-                  Tabelas ({tables.length})
                 </TabsTrigger>
               </>
             ) : (
@@ -658,19 +529,11 @@ export default function ClientDetailPage() {
           <TabsContent value="configuracoes">{renderDetailsContent()}</TabsContent>
           {client.deployment_mode === "isolated" ? (
             <>
-              <TabsContent value="storage">{renderStorageContent()}</TabsContent>
               <TabsContent value="users">
                 <UsersTab
                   clientId={client.id}
-                  connectionError={connectionError}
+                  connectionError={null}
                   onUsersLoaded={() => {}}
-                />
-              </TabsContent>
-              <TabsContent value="tables">
-                <TablesTab
-                  clientId={client.id}
-                  connectionError={connectionError}
-                  onTablesLoaded={() => {}}
                 />
               </TabsContent>
             </>

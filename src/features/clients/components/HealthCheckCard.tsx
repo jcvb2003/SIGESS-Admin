@@ -5,16 +5,43 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { proxyAction } from "@/services/clients.service";
 
+type KeyStatus = "ok" | "invalid" | "unknown";
+
+interface KeyStatuses {
+  anon: KeyStatus;
+  service_role: KeyStatus;
+  pat: KeyStatus;
+}
+
 interface HealthStatus {
   status: "online" | "offline" | "checking" | "error";
   latency?: number;
   message?: string;
+  keys?: KeyStatuses;
 }
 
 interface HealthCheckCardProps {
   readonly clientId: string;
   readonly client?: import("@/features/clients/types").Client;
 }
+
+const KEY_LABELS: Record<string, string> = {
+  anon:         "anon",
+  service_role: "service_role",
+  pat:          "PAT",
+};
+
+const KEY_STATUS_CLASS: Record<KeyStatus, string> = {
+  ok:      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  invalid: "bg-destructive/10 text-destructive",
+  unknown: "bg-secondary/60 text-muted-foreground",
+};
+
+const KEY_DOT_CLASS: Record<KeyStatus, string> = {
+  ok:      "bg-emerald-500",
+  invalid: "bg-destructive",
+  unknown: "bg-muted-foreground/40",
+};
 
 export function HealthCheckCard({ clientId }: HealthCheckCardProps) {
   const [health, setHealth] = useState<HealthStatus>({ status: "checking" });
@@ -28,7 +55,11 @@ export function HealthCheckCard({ clientId }: HealthCheckCardProps) {
       const result = await proxyAction(clientId, "health-check");
       
       if (result.status === "online") {
-        setHealth({ status: "online", latency: result.latency });
+        setHealth({
+          status: "online",
+          latency: result.latency,
+          keys: result.keys ?? undefined,
+        });
       } else {
         setHealth({ status: "offline", message: result.error || "Serviço indisponível" });
       }
@@ -132,6 +163,22 @@ export function HealthCheckCard({ clientId }: HealthCheckCardProps) {
             {health.message}
           </p>
         )}
+
+        <div className="mt-3 flex items-center gap-1.5 border-t border-border/40 pt-3">
+          {(["anon", "service_role", "pat"] as const).map((key) => {
+            const s = health.keys?.[key] ?? "unknown";
+            return (
+              <span
+                key={key}
+                title={KEY_LABELS[key]}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${KEY_STATUS_CLASS[s]}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${KEY_DOT_CLASS[s]}`} />
+                {KEY_LABELS[key]}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </Card>
   );

@@ -6,9 +6,9 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClients, useDeleteClient, ClientCard, AddTenantDialog, DeleteClientDialog, SubscriptionModal } from "@/features/clients";
-import { type Client } from "@/features/clients/types";
+import type { ClienteComProjeto } from "@/features/clients/types";
 
-function StatStrip({ clients }: { clients: Client[] }) {
+function StatStrip({ clients }: { clients: ClienteComProjeto[] }) {
   const total = clients.length;
 
   const ativos = clients.filter((c) => {
@@ -56,9 +56,9 @@ export default function ClientsPage() {
   const { data: clients = [], isLoading } = useClients();
   const deleteClientMutation = useDeleteClient();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<ClienteComProjeto | null>(null);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
-  const [clientForSubscription, setClientForSubscription] = useState<Client | null>(null);
+  const [clientForSubscription, setClientForSubscription] = useState<ClienteComProjeto | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -71,10 +71,12 @@ export default function ClientsPage() {
     );
   }, [clients, search]);
 
-  const handleClientClick = (client: Client) => navigate(`/clients/${client.id}`);
-  const handleDeleteClick = (client: Client) => { setClientToDelete(client); setDeleteDialogOpen(true); };
-  const handleSubscriptionClick = (client: Client) => { setClientForSubscription(client); setSubscriptionOpen(true); };
-  const handleConfirmDelete = async () => { if (clientToDelete) await deleteClientMutation.mutateAsync(clientToDelete.id); };
+  const handleClientClick = (client: ClienteComProjeto) => navigate(`/clients/${client.project_id}`);
+  const handleDeleteClick = (client: ClienteComProjeto) => { setClientToDelete(client); setDeleteDialogOpen(true); };
+  const handleSubscriptionClick = (client: ClienteComProjeto) => { setClientForSubscription(client); setSubscriptionOpen(true); };
+  const handleConfirmDelete = async () => {
+    if (clientToDelete) await deleteClientMutation.mutateAsync(clientToDelete.project_id);
+  };
 
   if (isLoading) {
     return (

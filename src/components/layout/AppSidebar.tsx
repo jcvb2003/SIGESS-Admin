@@ -25,7 +25,7 @@ export function AppSidebar() {
   const fetchClientCount = async () => {
     try {
       const { count, error } = await supabase
-        .from("entidades")
+        .from("projetos")
         .select("*", { count: "exact", head: true });
 
       if (!error && count !== null) {

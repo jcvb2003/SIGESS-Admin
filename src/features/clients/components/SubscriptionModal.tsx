@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Client } from "../types";
+import type { ClienteComProjeto } from "../types";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,24 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useUpdateClient } from "../hooks/index";
-import { proxyAction } from "@/services/clients.service";
+import { proxyAction } from "@/services/projects.service";
 import { CreditCard, Calendar, Users, Rocket } from "lucide-react";
 
 interface SubscriptionModalProps {
-  readonly client: Client;
+  readonly client: ClienteComProjeto;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onUpdated?: (updated: Client) => void;
+  readonly onUpdated?: () => void;
 }
 
 function isoToDateInput(isoString: string | null): string {
   if (!isoString) return "";
-  // Slice the UTC date directly — avoids any local timezone offset shift
   return isoString.slice(0, 10);
 }
 
 function dateInputToIso(dateString: string): string {
-  // Store as end of day UTC so the date is unambiguous regardless of client timezone
   return dateString + "T23:59:59.999Z";
 }
 
@@ -52,26 +50,28 @@ export function SubscriptionModal({ client, open, onOpenChange, onUpdated }: Sub
     setIsSaving(true);
     try {
       const expiresAt = form.acesso_expira_em ? dateInputToIso(form.acesso_expira_em) : null;
+      const maxSocios = Number(form.max_socios) > 0 ? Number(form.max_socios) : 0;
 
-      const updatePayload = {
-        assinatura: form.assinatura,
-        acesso_expira_em: expiresAt,
-        max_socios: Number(form.max_socios) > 0 ? Number(form.max_socios) : null,
-      };
-
-      const result = await updateClientMutation.mutateAsync({ id: client.id, input: updatePayload });
+      await updateClientMutation.mutateAsync({
+        id: client.id,
+        input: {
+          assinatura: form.assinatura as "trial" | "monthly" | "annual",
+          acesso_expira_em: expiresAt,
+          max_socios: maxSocios,
+        },
+      });
 
       try {
-        await proxyAction(client.id, "sync-trial-limits", {
-          acesso_expira_em: updatePayload.acesso_expira_em,
-          max_socios: updatePayload.max_socios,
+        await proxyAction(client.project_id, "sync-trial-limits", {
+          acesso_expira_em: expiresAt,
+          max_socios: maxSocios,
         });
         toast.success("Assinatura atualizada e limites sincronizados!");
       } catch (syncError) {
         toast.error(`Assinatura salva, mas erro ao sincronizar: ${syncError instanceof Error ? syncError.message : "Erro desconhecido"}`);
       }
 
-      if (onUpdated) onUpdated(result);
+      onUpdated?.();
       onOpenChange(false);
     } catch (error) {
       toast.error(`Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
@@ -105,10 +105,9 @@ export function SubscriptionModal({ client, open, onOpenChange, onUpdated }: Sub
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mensal">Mensal</SelectItem>
-                  <SelectItem value="anual">Anual</SelectItem>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="annual">Anual</SelectItem>
                   <SelectItem value="trial">Experimental</SelectItem>
-                  <SelectItem value="cortesia">Cortesia</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -135,7 +134,7 @@ export function SubscriptionModal({ client, open, onOpenChange, onUpdated }: Sub
             <Input
               type="number"
               min={0}
-              placeholder="0 = ilimitado"
+              placeholder="0 = bloqueia acesso"
               value={form.max_socios || ""}
               onChange={(e) => update("max_socios", e.target.value)}
             />

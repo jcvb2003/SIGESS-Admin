@@ -1,9 +1,22 @@
 import { supabase } from "@/lib/supabase";
 import { handleSupabaseError } from "@/services/error.handler";
-import type { Cliente, ClienteCreate, ClienteUpdate } from "@/features/clients/types";
+import type { Cliente, ClienteCreate, ClienteUpdate, ClienteComProjeto } from "@/features/clients/types";
 
 const CLIENTE_SELECT =
   "id, project_id, nome_entidade, nome_abreviado, tenant_code, runtime_tenant_id, supports_units, email, telefone, cnpj_cpf, logo_url, assinatura, acesso_expira_em, max_socios, status, data_cadastro, created_at, updated_at";
+
+const CLIENTE_COM_PROJETO_SELECT =
+  `${CLIENTE_SELECT}, projetos(id, project_name, topology, supabase_url, supabase_publishable_key, key_status, last_health_check_at, health_error_detail, data_cadastro)`;
+
+export async function listClientes(): Promise<ClienteComProjeto[]> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .select(CLIENTE_COM_PROJETO_SELECT)
+    .order("data_cadastro", { ascending: false });
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []) as unknown as ClienteComProjeto[];
+}
 
 export async function listClientesByProject(projectId: string): Promise<Cliente[]> {
   const { data, error } = await supabase

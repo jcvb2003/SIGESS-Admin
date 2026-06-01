@@ -68,8 +68,25 @@ export type ClienteCreate = Omit<Cliente, "id" | "data_cadastro" | "created_at" 
 export type ClienteUpdate = Partial<Omit<ClienteCreate, "project_id">>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legado — mantido enquanto a migração do banco não for executada
-// Remover após o corte big bang + validação em produção
+// ClienteComProjeto — shape usado nas listagens (clientes JOIN projetos)
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ClienteComProjeto extends Cliente {
+  projetos: Pick<Project,
+    | "id"
+    | "project_name"
+    | "topology"
+    | "supabase_url"
+    | "supabase_publishable_key"
+    | "key_status"
+    | "last_health_check_at"
+    | "health_error_detail"
+    | "data_cadastro"
+  >;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legado — manter somente os tipos, não as queries. Remover depois da migração
+// completa da UI.
 // ─────────────────────────────────────────────────────────────────────────────
 /** @deprecated Usar Project + Cliente */
 export type SharedMode = "polo" | "multi" | "multi_polo" | "hybrid";

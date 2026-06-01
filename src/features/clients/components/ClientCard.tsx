@@ -9,18 +9,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Client } from "../types";
+import type { ClienteComProjeto } from "../types";
+import { TOPOLOGY_LABEL } from "../types";
 import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface ClientCardProps {
-  client: Client;
-  onDelete: (client: Client) => void;
-  onSubscription: (client: Client) => void;
-  onClick: (client: Client) => void;
+  client: ClienteComProjeto;
+  onDelete: (client: ClienteComProjeto) => void;
+  onSubscription: (client: ClienteComProjeto) => void;
+  onClick: (client: ClienteComProjeto) => void;
 }
 
-function KeyStatusBadge({ status }: { status: Client["key_status"] }) {
+function KeyStatusBadge({ status }: { status: ClienteComProjeto["projetos"]["key_status"] }) {
   if (status === "valid") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-500">
@@ -79,13 +80,16 @@ function ExpiryInfo({ expiresAt }: { expiresAt: string | null }) {
   );
 }
 
-export function ClientCard({ client, onDelete, onSubscription, onClick }: ClientCardProps) {
-  const planLabel =
-    client.assinatura === "anual" ? "Anual" :
-    client.assinatura === "trial" ? "Trial" : "Mensal";
+const PLAN_LABEL: Record<string, string> = {
+  annual: "Anual",
+  monthly: "Mensal",
+  trial: "Trial",
+};
 
-  const planVariant =
-    client.assinatura === "trial" ? "secondary" : "outline";
+export function ClientCard({ client, onDelete, onSubscription, onClick }: ClientCardProps) {
+  const planLabel = PLAN_LABEL[client.assinatura] ?? client.assinatura;
+  const planVariant = client.assinatura === "trial" ? "secondary" : "outline";
+  const topologyLabel = TOPOLOGY_LABEL[client.projetos.topology] ?? client.projetos.topology;
 
   return (
     <Card
@@ -119,12 +123,8 @@ export function ClientCard({ client, onDelete, onSubscription, onClick }: Client
                   {client.tenant_code}
                 </span>
               )}
-              <Badge
-                variant={client.deployment_mode === "isolated" ? "outline" : "secondary"}
-                className="h-4 px-1.5 text-[10px]"
-              >
-                {client.deployment_mode}
-                {client.shared_mode ? ` · ${client.shared_mode}` : ""}
+              <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
+                {topologyLabel}
               </Badge>
               <Badge variant={planVariant} className="h-4 px-1.5 text-[10px]">
                 {planLabel}
@@ -145,7 +145,7 @@ export function ClientCard({ client, onDelete, onSubscription, onClick }: Client
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem
-              onClick={(e) => { e.stopPropagation(); window.open(client.supabase_url, "_blank"); }}
+              onClick={(e) => { e.stopPropagation(); window.open(client.projetos.supabase_url, "_blank"); }}
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               Abrir Supabase
@@ -171,7 +171,7 @@ export function ClientCard({ client, onDelete, onSubscription, onClick }: Client
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          <KeyStatusBadge status={client.key_status} />
+          <KeyStatusBadge status={client.projetos.key_status} />
           <ExpiryInfo expiresAt={client.acesso_expira_em} />
         </div>
         {client.email && (

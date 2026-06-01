@@ -8,14 +8,19 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/features/auth";
 import { useClients } from "@/features/clients";
 
+const PLAN_LABEL: Record<string, string> = {
+  annual: "Anual",
+  monthly: "Mensal",
+  trial: "Trial",
+};
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: clients = [], isLoading } = useClients();
 
-  const activeClients = clients.length;
-  const annualClients = clients.filter((c) => c.assinatura === "anual").length;
-  const monthlyClients = clients.filter((c) => c.assinatura === "mensal").length;
+  const annualClients  = clients.filter((c) => c.assinatura === "annual").length;
+  const monthlyClients = clients.filter((c) => c.assinatura === "monthly").length;
 
   if (isLoading) {
     return (
@@ -50,7 +55,7 @@ export default function DashboardPage() {
           />
           <StatsCard
             title="Clientes Ativos"
-            value={activeClients}
+            value={clients.length}
             subtitle="todos os planos"
             icon={Activity}
           />
@@ -85,7 +90,7 @@ export default function DashboardPage() {
                 {clients.slice(0, 5).map((client) => (
                   <div
                     key={client.id}
-                    onClick={() => navigate(`/clients/${client.id}`)}
+                    onClick={() => navigate(`/clients/${client.project_id}`)}
                     className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-secondary/50 cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
@@ -107,7 +112,7 @@ export default function DashboardPage() {
                           {client.nome_entidade}
                         </p>
                         <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-                          {client.supabase_url}
+                          {client.projetos.supabase_url}
                         </p>
                       </div>
                     </div>
@@ -115,7 +120,7 @@ export default function DashboardPage() {
                       variant="default"
                       className="bg-primary/20 text-primary border-primary/30"
                     >
-                      {client.assinatura === "anual" ? "Anual" : "Mensal"}
+                      {PLAN_LABEL[client.assinatura] ?? client.assinatura}
                     </Badge>
                   </div>
                 ))}

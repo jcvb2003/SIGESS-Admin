@@ -17,9 +17,9 @@ export async function auditAllEdgeFunctions(
   adminClient: ReturnType<typeof createClient>
 ): Promise<EdgeFunctionAuditResult[]> {
   
-  // 1. Carrega o tenant de referência (Rayssa/sinpesca) separadamente
+  // 1. Carrega o projeto de referência (Rayssa/sinpesca) separadamente
   const { data: refEntidade, error: refErr } = await adminClient
-    .from('entidades')
+    .from('projetos')
     .select('id, tenant_code, supabase_url, supabase_access_token')
     .eq('tenant_code', 'sinpesca')
     .not('supabase_access_token', 'is', null)
@@ -27,14 +27,14 @@ export async function auditAllEdgeFunctions(
 
   if (refErr) throw refErr;
   if (!refEntidade) {
-    throw new Error('Impossível realizar auditoria: Tenant de referência (sinpesca/Rayssa) não encontrado ou sem PAT.');
+    throw new Error('Impossível realizar auditoria: Projeto de referência (sinpesca/Rayssa) não encontrado ou sem PAT.');
   }
 
-  // 2. Carrega todos os isolated que possuem PAT
+  // 2. Carrega todos os projetos isolated que possuem PAT
   const { data: entidades, error: eErr } = await adminClient
-    .from('entidades')
+    .from('projetos')
     .select('id, tenant_code, supabase_url, supabase_access_token')
-    .eq('deployment_mode', 'isolated')
+    .not('topology', 'like', 'shared%')
     .not('supabase_access_token', 'is', null);
 
   if (eErr) throw eErr;

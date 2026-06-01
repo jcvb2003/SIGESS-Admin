@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createSharedTenantForClient } from "@/services/clients.service";
+import { createSharedTenantForProject } from "@/services/runtime-tenants.service";
 
 interface CreateSharedTenantDialogProps {
   clientId: string;
@@ -38,7 +38,7 @@ export function CreateSharedTenantDialog({
 
     setLoading(true);
     try {
-      const created = await createSharedTenantForClient(clientId, { name: name.trim(), code });
+      const created = await createSharedTenantForProject(clientId, { name: name.trim(), code });
       await queryClient.invalidateQueries({ queryKey: ["shared-tenants-list"] });
       toast.success(`Tenant "${created.name}" criado com sucesso.`);
       onCreated(created.id);

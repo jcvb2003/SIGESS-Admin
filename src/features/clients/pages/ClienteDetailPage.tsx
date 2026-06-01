@@ -119,8 +119,6 @@ export default function ClienteDetailPage() {
 
   const { data: project, isLoading: loadingProject } = useProjectDetail(projectId!);
   const { data: cliente, isLoading: loadingCliente, refetch } = useClienteDetail(clienteId!);
-  const { deleteCliente } = useClienteMutations();
-
   const isLoading = loadingProject || loadingCliente;
 
   if (isLoading) {

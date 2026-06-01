@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
-  AlertCircle, ArrowLeft, Building2, Layers, Loader2,
-  Pencil, Plus, Users, MapPin,
+  AlertCircle, ArrowLeft, ChevronRight, Layers, Loader2,
+  Pencil, Plus, Users,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -11,35 +10,23 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Cliente, Project } from "../types";
 import { TOPOLOGY_LABEL } from "../types";
 import { useProjectDetail } from "../hooks/useProjectDetail";
 import { useClientes } from "../hooks/useClientes";
 import { EditProjectModal } from "../components/EditProjectModal";
 import { AddClienteDialog } from "../components/AddClienteDialog";
-import { EditClienteModal } from "../components/EditClienteModal";
-import { HealthCheckCard, UsersTab, UnitsTab } from "@/features/clients";
-import { proxyAction } from "@/services/projects.service";
-import { listSharedTenantUnits } from "@/services/runtime-tenants.service";
-import type { TenantUnit } from "../types";
+import { HealthCheckCard } from "@/features/clients";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function extractProjectRef(project: Project): string {
-  try {
-    return new URL(project.supabase_url).hostname.split(".")[0];
-  } catch {
-    return "—";
-  }
+  try { return new URL(project.supabase_url).hostname.split(".")[0]; }
+  catch { return "—"; }
 }
 
-function isSharedTopology(topology: Project["topology"]): boolean {
-  return topology.startsWith("shared");
-}
-
-function hasPolos(topology: Project["topology"]): boolean {
-  return topology === "isolated_polo" || topology === "shared_multi_polo" || topology === "shared_hybrid";
+function isIsolatedTopology(topology: Project["topology"]): boolean {
+  return topology === "isolated_single" || topology === "isolated_polo";
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -47,7 +34,9 @@ function hasPolos(topology: Project["topology"]): boolean {
 function InfraCard({ project }: { project: Project }) {
   return (
     <Card className="p-5">
-      <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">Infraestrutura</p>
+      <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Infraestrutura
+      </p>
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         <div className="space-y-1">
           <p className="text-[10px] text-muted-foreground">Project Ref</p>
@@ -71,41 +60,40 @@ function InfraCard({ project }: { project: Project }) {
 
 function ClienteRow({
   cliente,
-  onEdit,
-  showPolosButton,
-  isActive,
-  onSelectTenant,
+  onClick,
 }: {
   cliente: Cliente;
-  onEdit: (c: Cliente) => void;
-  showPolosButton?: boolean;
-  isActive?: boolean;
-  onSelectTenant?: () => void;
+  onClick: () => void;
 }) {
-  const expiresAt  = cliente.acesso_expira_em ? new Date(cliente.acesso_expira_em) : null;
-  const expired    = expiresAt ? isPast(expiresAt) : false;
-  const daysLeft   = expiresAt ? differenceInDays(expiresAt, new Date()) : null;
+  const expiresAt = cliente.acesso_expira_em ? new Date(cliente.acesso_expira_em) : null;
+  const expired   = expiresAt ? isPast(expiresAt) : false;
+  const daysLeft  = expiresAt ? differenceInDays(expiresAt, new Date()) : null;
+
+  const planLabel   = { trial: "Trial", monthly: "Mensal", annual: "Anual" }[cliente.assinatura];
+  const planVariant = cliente.assinatura === "trial" ? "secondary" : "default";
 
   const expiryEl = () => {
     if (!expiresAt) return <span className="text-xs text-muted-foreground">Sem expiração</span>;
-    if (expired) return (
-      <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
-        Expirado em {format(expiresAt, "dd/MM/yyyy")}
-      </span>
-    );
-    if (daysLeft !== null && daysLeft <= 30) return (
-      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
-        {daysLeft}d restantes
-      </span>
-    );
+    if (expired)
+      return (
+        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
+          Expirado em {format(expiresAt, "dd/MM/yyyy")}
+        </span>
+      );
+    if (daysLeft !== null && daysLeft <= 30)
+      return (
+        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
+          {daysLeft}d restantes
+        </span>
+      );
     return <span className="text-xs text-muted-foreground">{format(expiresAt, "dd/MM/yyyy")}</span>;
   };
 
-  const planLabel  = cliente.assinatura === "trial" ? "Trial" : cliente.assinatura === "monthly" ? "Mensal" : "Anual";
-  const planVariant = cliente.assinatura === "trial" ? "secondary" : "default";
-
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border/50 px-4 py-3 hover:bg-secondary/20 transition-colors">
+    <div
+      onClick={onClick}
+      className="flex cursor-pointer items-center justify-between rounded-lg border border-border/50 px-4 py-3 hover:bg-secondary/30 hover:border-primary/30 transition-colors"
+    >
       <div className="flex items-center gap-3 min-w-0">
         {cliente.logo_url ? (
           <img src={cliente.logo_url} alt={cliente.nome_entidade} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
@@ -125,22 +113,9 @@ function ClienteRow({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         {expiryEl()}
-        {showPolosButton && (
-          <Button
-            variant={isActive ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 gap-1.5 text-[11px]"
-            onClick={onSelectTenant}
-          >
-            <MapPin className="h-3 w-3" />
-            Polos
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(cliente)}>
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </div>
     </div>
   );
@@ -167,44 +142,16 @@ function UnconfiguredBanner({ onConfigure }: { onConfigure: () => void }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetailPage() {
-  const { id }   = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [addClienteOpen, setAddClienteOpen]   = useState(false);
-  const [editCliente, setEditCliente]         = useState<Cliente | null>(null);
-  const [activeTenantId, setActiveTenantId]   = useState<string | null>(null);
 
   const { data: project, isLoading, refetch: refetchProject } = useProjectDetail(id!);
   const { data: clientes = [], refetch: refetchClientes }      = useClientes(id!);
 
-  const isShared  = project ? isSharedTopology(project.topology) : false;
-  const showUnits = project ? hasPolos(project.topology) : false;
-  const isIsolated = project
-    ? project.topology === "isolated_single" || project.topology === "isolated_polo"
-    : false;
-
-  // Para isolado: único cliente. Para compartilhado: selecionado via botão "Polos" na lista.
-  const effectiveTenantId = isShared
-    ? activeTenantId
-    : (clientes[0]?.runtime_tenant_id ?? null);
-
-  const { data: users = [] } = useQuery({
-    queryKey:  ["client-users-count", id],
-    enabled:   !!project && !isShared,
-    staleTime: 1000 * 60 * 5,
-    queryFn:   async () => {
-      const data = await proxyAction(id!, "list-client-members");
-      return (data.users || []) as { id: string; email: string | null; created_at: string; last_sign_in_at: string | null }[];
-    },
-  });
-
-  const { data: sharedUnits = [], isLoading: loadingUnits } = useQuery<TenantUnit[]>({
-    queryKey: ["shared-tenant-units", effectiveTenantId],
-    enabled:  Boolean(project) && showUnits && Boolean(effectiveTenantId),
-    queryFn:  () => listSharedTenantUnits(effectiveTenantId!),
-    staleTime: 1000 * 60 * 5,
-  });
+  const isIsolated = project ? isIsolatedTopology(project.topology) : false;
 
   if (isLoading) {
     return (
@@ -260,19 +207,18 @@ export default function ProjectDetailPage() {
           <InfraCard project={project} />
         </div>
 
-        {/* Estado não configurado */}
+        {/* Não configurado */}
         {project.topology === "unconfigured" && (
           <UnconfiguredBanner onConfigure={() => setEditProjectOpen(true)} />
         )}
 
-        {/* Clientes do projeto */}
+        {/* Lista de clientes */}
         {project.topology !== "unconfigured" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">
                 Clientes ({clientes.length})
               </h2>
-              {/* Isolado: só 1 cliente permitido */}
               {(!isIsolated || clientes.length === 0) && (
                 <Button size="sm" onClick={() => setAddClienteOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -280,6 +226,7 @@ export default function ProjectDetailPage() {
                 </Button>
               )}
             </div>
+
             {clientes.length === 0 ? (
               <Card className="flex flex-col items-center justify-center gap-3 p-8 text-center border-dashed">
                 <Users className="h-8 w-8 text-muted-foreground/50" />
@@ -295,55 +242,12 @@ export default function ProjectDetailPage() {
                   <ClienteRow
                     key={c.id}
                     cliente={c}
-                    onEdit={setEditCliente}
-                    showPolosButton={showUnits && isShared}
-                    isActive={activeTenantId === c.runtime_tenant_id}
-                    onSelectTenant={() => setActiveTenantId(c.runtime_tenant_id)}
+                    onClick={() => navigate(`/clients/${id}/clientes/${c.id}`)}
                   />
                 ))}
               </div>
             )}
           </div>
-        )}
-
-        {/* Tabs de operação */}
-        {project.topology !== "unconfigured" && (
-          <Tabs defaultValue={isShared ? "units" : "users"} className="space-y-4">
-            <TabsList className="bg-secondary/50">
-              {!isShared && (
-                <TabsTrigger value="users" className="gap-2">
-                  <Users className="h-4 w-4" />
-                  Usuários ({users.length})
-                </TabsTrigger>
-              )}
-              {showUnits && (
-                <TabsTrigger value="units" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Polos ({loadingUnits ? "…" : sharedUnits.length})
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            {!isShared && (
-              <TabsContent value="users">
-                <UsersTab clientId={project.id} connectionError={null} onUsersLoaded={() => {}} />
-              </TabsContent>
-            )}
-            {showUnits && (
-              <TabsContent value="units">
-                {effectiveTenantId ? (
-                  <UnitsTab tenantId={effectiveTenantId} />
-                ) : (
-                  <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
-                    <MapPin className="h-7 w-7 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">
-                      Clique em <strong>Polos</strong> em um cliente da lista acima para visualizar seus polos.
-                    </p>
-                  </Card>
-                )}
-              </TabsContent>
-            )}
-          </Tabs>
         )}
 
         {/* Modais */}
@@ -360,17 +264,6 @@ export default function ProjectDetailPage() {
           onOpenChange={setAddClienteOpen}
           onCreated={() => { refetchClientes(); setAddClienteOpen(false); }}
         />
-
-        {editCliente && (
-          <EditClienteModal
-            cliente={editCliente}
-            project={project}
-            open={!!editCliente}
-            onOpenChange={(v) => { if (!v) setEditCliente(null); }}
-            onUpdated={() => { refetchClientes(); setEditCliente(null); }}
-            onDeleted={() => { refetchClientes(); setEditCliente(null); }}
-          />
-        )}
       </div>
     </MainLayout>
   );

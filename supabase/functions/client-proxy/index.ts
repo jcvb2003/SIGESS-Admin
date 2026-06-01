@@ -79,48 +79,26 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   const authData = await authRes.json();
   const authUsers = authData.users || [];
 
-  // 2. Fetch from public.User and public.configuracao_entidade
-  let publicUsers: PublicUser[] = [];
+  // 2. Fetch from public.configuracao_entidade
   let configData: { max_socios: number | null } | null = null;
   try {
-    const [userRes, configRes] = await Promise.all([
-      fetch(`${clientUrl}/rest/v1/User?select=id,acesso_expira_em,role,ativo`, {
-        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-      }),
-      fetch(`${clientUrl}/rest/v1/configuracao_entidade?select=max_socios&limit=1`, {
-        headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-      })
-    ]);
-
-    if (userRes.ok) publicUsers = await userRes.json();
+    const configRes = await fetch(`${clientUrl}/rest/v1/configuracao_entidade?select=max_socios&limit=1`, {
+      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+    });
     if (configRes.ok) {
       const configArr = await configRes.json();
       configData = configArr[0] || null;
     }
   } catch (e) {
-    console.error("Failed to fetch client data:", e);
-  }
-
-  const safePublicUsers = Array.isArray(publicUsers) ? publicUsers : [];
-
-  if (authUsers.length > 0) {
-    console.log("DEBUG: First user auth data:", JSON.stringify(authUsers[0]));
-    const foundPublic = safePublicUsers.find((p: PublicUser) => p.id === authUsers[0].id);
-    console.log("DEBUG: First user public data:", JSON.stringify(foundPublic));
+    console.error("Failed to fetch configuracao_entidade:", e);
   }
 
   // 3. Merge including app_metadata and role
   const merged: MergedMember[] = authUsers.map((au: AuthUser) => {
-    const pu = safePublicUsers.find((p: PublicUser) => p.id === au.id);
-
-    // Auth metadata is source of truth for role (Canon for SIGESS)
     const roleFromMetadata = au.app_metadata?.role;
     const isAdmin = roleFromMetadata === 'admin' || au.app_metadata?.is_admin === true;
-    
-    // Auth wins: if Auth says admin, it's admin — public.User is just a cache
-    const finalRole = isAdmin ? 'admin' : (roleFromMetadata || pu?.role || 'user');
+    const finalRole = isAdmin ? 'admin' : (roleFromMetadata || 'user');
 
-    // Use banned_until from Auth to determine active status (not pu.ativo which can be stale)
     const bannedUntilRaw = (au as any).banned_until;
     const bannedUntil = (bannedUntilRaw && bannedUntilRaw !== '') ? new Date(bannedUntilRaw) : null;
     const isAtivo = !(bannedUntil && bannedUntil > new Date());
@@ -130,32 +108,11 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
       isAdmin: finalRole === 'admin',
       role: finalRole,
       ativo: isAtivo,
-      acesso_expira_em: pu?.acesso_expira_em || null,
+      acesso_expira_em: null,
       max_socios: configData?.max_socios || null,
-      // Metadata check for UI warning if legacy
       hasLegacyMetadata: !!au.app_metadata?.is_admin
     } as MergedMember;
   });
-
-  // 4. SELF-HEALING: If we detect users that are 'Inativo' but NOT banned, fix them in background
-  const inconsistents = merged.filter((u: MergedMember) => u.ativo === false && (!u.ban_duration || u.ban_duration === 'none'));
-  if (inconsistents.length > 0) {
-    console.log(`Self-healing: fixing ${inconsistents.length} users with inconsistent status...`);
-    fetch(`${clientUrl}/rest/v1/User?ativo=not.is.true`, {
-      method: "PATCH",
-      headers: {
-        apikey: clientKey,
-        Authorization: `Bearer ${clientKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ ativo: true })
-    }).catch(e => console.error("Self-healing failed:", e));
-
-    // Update the returned objects immediately for the UI
-    inconsistents.forEach((u: MergedMember) => {
-      u.ativo = true;
-    });
-  }
 
   return { users: merged };
 }
@@ -187,24 +144,6 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
     results.authSync = "success";
   }
 
-  // 2. Update Public Schema (PostgREST)
-  const publicRes = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
-    method: "PATCH",
-    headers: {
-      apikey: clientKey,
-      Authorization: `Bearer ${clientKey}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation"
-    },
-    body: JSON.stringify(updates)
-  });
-
-  if (!publicRes.ok) {
-    const errorText = await publicRes.text();
-    throw new Error(`Data Update failed: ${errorText}`);
-  }
-
-  results.data = await publicRes.json();
   return results;
 }
 
@@ -255,20 +194,6 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
         body: JSON.stringify({ app_metadata: { role } }),
       });
 
-      // Wait for client DB trigger to potentially fire
-      await new Promise(r => setTimeout(r, 800));
-
-      // UPSERT to public.User
-      await fetch(`${clientUrl}/rest/v1/User`, {
-        method: "POST",
-        headers: {
-          apikey: clientKey,
-          Authorization: `Bearer ${clientKey}`,
-          "Content-Type": "application/json",
-          "Prefer": "resolution=merge-duplicates",
-        },
-        body: JSON.stringify({ id: newUser.id, email, role }),
-      });
     }
 
     return { user: newUser, mode: 'direct' };
@@ -315,20 +240,6 @@ async function deleteClientUser(clientUrl: string, clientKey: string, userId: st
   const { error: authError } = await supabase.auth.admin.deleteUser(userId);
   if (authError) throw authError;
 
-  // 2. Delete from public.User (Explicit cleanup)
-  const res = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
-    method: "DELETE",
-    headers: {
-      apikey: clientKey,
-      Authorization: `Bearer ${clientKey}`,
-    }
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    console.warn(`Public user record cleanup failed (might already be gone): ${txt}`);
-  }
-
   return { success: true };
 }
 
@@ -342,19 +253,6 @@ async function banClientUser(clientUrl: string, clientKey: string, userId: strin
     ban_duration: banDuration
   });
   if (authError) throw authError;
-
-  // Sync active status in public table
-  const res = await fetch(`${clientUrl}/rest/v1/User?id=eq.${userId}`, {
-    method: "PATCH",
-    headers: {
-      apikey: clientKey,
-      Authorization: `Bearer ${clientKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ ativo: active })
-  });
-
-  if (!res.ok) throw new Error(`Status sync failed: ${await res.text()}`);
 
   return { success: true, active };
 }

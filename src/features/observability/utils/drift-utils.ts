@@ -49,6 +49,15 @@ const PHASE_G_CONSTRAINTS = new Set([
   "user_unit_memberships_unit_id_fkey",
 ]);
 
+// Indexes that are extra in isolated tenants due to architectural extras — must NOT be auto-removed.
+const INTENTIONAL_EXTRA_INDEXES = new Set([
+  "user_unit_memberships.user_unit_memberships_tenant_id_user_id_unit_id_key",
+]);
+
+function looksLikeViewName(name: string) {
+  return name.endsWith("_view") || name.startsWith("v_");
+}
+
 function isSupportedDiffType(type: string): type is SupportedDiffType {
   return type === "missing_in_tenant" || type === "extra_in_tenant" || type === "different_definition";
 }
@@ -125,10 +134,13 @@ function buildIndexDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   const indexName = source?.name;
   if (!tableName || !indexName) return null;
 
+  const objectName = `${tableName}.${indexName}`;
+  if (INTENTIONAL_EXTRA_INDEXES.has(objectName)) return null;
+
   return {
     objectType: "index",
     schema: "public",
-    objectName: `${tableName}.${indexName}`,
+    objectName,
     diffType: diff.type,
     displayName: `public.${tableName}.${indexName}`,
     relatedDiffCount: 1,
@@ -250,6 +262,7 @@ function buildColumnDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   const tableName = source?.table;
   const columnName = source?.column;
   if (!tableName || !columnName) return null;
+  if (looksLikeViewName(tableName)) return null;
 
   return {
     objectType: "column",

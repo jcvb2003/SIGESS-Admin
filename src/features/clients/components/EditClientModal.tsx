@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Client } from "../types";
+import type { ClienteComProjeto, Topology } from "../types";
+import { TOPOLOGY_LABEL } from "../types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,13 +16,14 @@ import {
 } from "@/components/ui/select";
 import { ChevronDown, ImageIcon, KeyRound, Trash2 } from "lucide-react";
 import { useUpdateClient, useDeleteClient } from "../hooks/index";
+import { updateProject } from "@/services/projects.service";
 import { DeleteClientDialog } from "./DeleteClientDialog";
 
 interface EditClientModalProps {
-  readonly client: Client;
+  readonly client: ClienteComProjeto;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onUpdated?: (updated: Client) => void;
+  readonly onUpdated?: () => void;
   readonly onDeleted?: () => void;
 }
 
@@ -52,24 +54,24 @@ export function EditClientModal({
   onDeleted,
 }: EditClientModalProps) {
   const [form, setForm] = useState({
+    // campos de clientes
     nome_entidade: client.nome_entidade,
     nome_abreviado: client.nome_abreviado || "",
     tenant_code: client.tenant_code,
-    deployment_mode: client.deployment_mode,
-    shared_mode: client.shared_mode ?? "",
-    shared_tenant_id: client.shared_tenant_id || "",
     email: client.email || "",
     telefone: client.telefone || "",
-    supabase_url: client.supabase_url,
-    supabase_publishable_key: client.supabase_publishable_key,
+    logo_url: client.logo_url || "",
+    // campos de projetos
+    topology: client.projetos.topology as Topology,
+    supabase_url: client.projetos.supabase_url,
+    supabase_publishable_key: client.projetos.supabase_publishable_key,
     supabase_secret_keys: "",
     supabase_access_token: "",
-    logo_url: client.logo_url || "",
   });
 
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const updateClientMutation = useUpdateClient();
+  const updateClienteMutation = useUpdateClient();
   const deleteClientMutation = useDeleteClient();
 
   useEffect(() => {
@@ -78,16 +80,14 @@ export function EditClientModal({
         nome_entidade: client.nome_entidade,
         nome_abreviado: client.nome_abreviado || "",
         tenant_code: client.tenant_code,
-        deployment_mode: client.deployment_mode,
-        shared_mode: client.shared_mode ?? "",
-        shared_tenant_id: client.shared_tenant_id || "",
         email: client.email || "",
         telefone: client.telefone || "",
-        supabase_url: client.supabase_url,
-        supabase_publishable_key: client.supabase_publishable_key,
+        logo_url: client.logo_url || "",
+        topology: client.projetos.topology as Topology,
+        supabase_url: client.projetos.supabase_url,
+        supabase_publishable_key: client.projetos.supabase_publishable_key,
         supabase_secret_keys: "",
         supabase_access_token: "",
-        logo_url: client.logo_url || "",
       });
       setCredentialsOpen(false);
     }
@@ -95,32 +95,33 @@ export function EditClientModal({
 
   const handleSave = async () => {
     try {
-      let derivedProjectRef: string | null = null;
-      try {
-        derivedProjectRef = new URL(form.supabase_url).hostname.split(".")[0] || null;
-      } catch { /* invalid URL — leave null */ }
+      // Atualiza campos comerciais em clientes
+      await updateClienteMutation.mutateAsync({
+        id: client.id,
+        input: {
+          nome_entidade: form.nome_entidade,
+          nome_abreviado: form.nome_abreviado.trim() || null,
+          tenant_code: form.tenant_code.trim().toLowerCase(),
+          email: form.email || null,
+          telefone: form.telefone || null,
+          logo_url: form.logo_url || null,
+        },
+      });
 
-      const updatePayload: Record<string, unknown> = {
-        nome_entidade: form.nome_entidade,
-        nome_abreviado: form.nome_abreviado.trim() || null,
-        tenant_code: form.tenant_code.trim().toLowerCase(),
-        deployment_mode: form.deployment_mode,
-        shared_mode: form.shared_mode || null,
-        shared_project_ref: derivedProjectRef,
-        shared_tenant_id: form.shared_tenant_id.trim() || null,
-        email: form.email || null,
-        telefone: form.telefone || null,
+      // Atualiza campos de infra em projetos
+      const projetoUpdate: Record<string, unknown> = {
+        topology: form.topology,
         supabase_url: form.supabase_url,
         supabase_publishable_key: form.supabase_publishable_key,
-        logo_url: form.logo_url || null,
+        tenant_code: form.tenant_code.trim().toLowerCase(),
       };
+      if (form.supabase_secret_keys) projetoUpdate.supabase_secret_keys = form.supabase_secret_keys;
+      if (form.supabase_access_token) projetoUpdate.supabase_access_token = form.supabase_access_token;
 
-      if (form.supabase_secret_keys) updatePayload.supabase_secret_keys = form.supabase_secret_keys;
-      if (form.supabase_access_token) updatePayload.supabase_access_token = form.supabase_access_token;
+      await updateProject(client.project_id, projetoUpdate);
 
-      const result = await updateClientMutation.mutateAsync({ id: client.id, input: updatePayload });
       toast.success("Cliente atualizado com sucesso");
-      if (onUpdated) onUpdated(result);
+      onUpdated?.();
       onOpenChange(false);
     } catch (error) {
       toast.error(`Erro ao salvar: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
@@ -128,7 +129,7 @@ export function EditClientModal({
   };
 
   const handleConfirmDelete = async () => {
-    await deleteClientMutation.mutateAsync(client.id);
+    await deleteClientMutation.mutateAsync(client.project_id);
     onOpenChange(false);
     onDeleted?.();
   };
@@ -136,7 +137,7 @@ export function EditClientModal({
   const update = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const isShared = form.deployment_mode === "shared";
+  const isSaving = updateClienteMutation.isPending;
 
   return (
     <>
@@ -150,10 +151,7 @@ export function EditClientModal({
 
             {/* ── Identidade ── */}
             <SectionBox title="Identidade">
-              <FieldRow
-                label="Nome da Entidade"
-                hint={undefined}
-              >
+              <FieldRow label="Nome da Entidade">
                 <Input
                   value={form.nome_entidade}
                   onChange={(e) => update("nome_entidade", e.target.value)}
@@ -227,47 +225,18 @@ export function EditClientModal({
 
             {/* ── Infraestrutura ── */}
             <SectionBox title="Infraestrutura">
-              <FieldRow label="Modo de Implantação">
-                <Select value={form.deployment_mode} onValueChange={(v) => update("deployment_mode", v)}>
+              <FieldRow label="Topologia">
+                <Select value={form.topology} onValueChange={(v) => update("topology", v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="isolated">Isolated — projeto Supabase próprio</SelectItem>
-                    <SelectItem value="shared">Shared — projeto Supabase compartilhado</SelectItem>
+                    {(Object.entries(TOPOLOGY_LABEL) as [Topology, string][]).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FieldRow>
-
-              {isShared && (
-                <>
-                  <FieldRow label="Modo Shared">
-                    <Select value={form.shared_mode} onValueChange={(v) => update("shared_mode", v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o modo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="polo">polo — 1 tenant, N polos</SelectItem>
-                        <SelectItem value="multi">multi — N tenants, sem polos</SelectItem>
-                        <SelectItem value="multi_polo">multi_polo — N tenants, cada um com polos</SelectItem>
-                        <SelectItem value="hybrid">hybrid — N tenants, modo misto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldRow>
-
-                  <FieldRow
-                    label="Shared Tenant ID"
-                    hint="UUID do tenant na tabela do banco compartilhado."
-                  >
-                    <Input
-                      value={form.shared_tenant_id}
-                      onChange={(e) => update("shared_tenant_id", e.target.value.trim())}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      className="font-mono text-sm"
-                    />
-                  </FieldRow>
-                </>
-              )}
 
               <FieldRow label="URL do Supabase">
                 <Input
@@ -364,16 +333,9 @@ export function EditClientModal({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={
-                updateClientMutation.isPending ||
-                !form.nome_entidade ||
-                !form.tenant_code.trim() ||
-                !form.supabase_url ||
-                !form.supabase_publishable_key.trim() ||
-                false
-              }
+              disabled={isSaving || !form.nome_entidade || !form.tenant_code.trim() || !form.supabase_url || !form.supabase_publishable_key.trim()}
             >
-              {updateClientMutation.isPending ? "Salvando..." : "Salvar"}
+              {isSaving ? "Salvando..." : "Salvar"}
             </Button>
           </div>
         </DialogContent>

@@ -41,7 +41,8 @@ import {
   listSharedTenants,
   proxyAction,
 } from "@/services/clients.service";
-import type { Client, SharedTenant } from "@/features/clients/types";
+import type { ClienteComProjeto, SharedTenant, Topology } from "@/features/clients/types";
+import { TOPOLOGY_LABEL } from "@/features/clients/types";
 
 interface ClientMember {
   id: string;
@@ -50,30 +51,25 @@ interface ClientMember {
   last_sign_in_at: string | null;
 }
 
-function extractProjectRef(client: Client): string {
-  try {
-    return new URL(client.supabase_url).hostname.split(".")[0];
-  } catch {
-    return "—";
-  }
+const PLAN_LABEL: Record<string, string> = { annual: "Anual", monthly: "Mensal", trial: "Trial" };
+const PLAN_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
+  trial:   "secondary",
+  annual:  "default",
+  monthly: "outline",
+};
+
+function topologyIsShared(t: Topology) { return t.startsWith("shared"); }
+function topologyHasUnits(t: Topology) {
+  return (["isolated_polo", "shared_multi_polo", "shared_hybrid"] as Topology[]).includes(t);
+}
+function topologyNeedsTenantSelector(t: Topology) {
+  return (["shared_multi_single", "shared_multi_polo", "shared_hybrid"] as Topology[]).includes(t);
 }
 
-const DEPLOYMENT_LABEL: Record<string, string> = {
-  isolated: "Isolado",
-  shared:   "Compartilhado",
-};
-
-const SHARED_MODE_LABEL: Record<string, string> = {
-  polo:       "Single Tenant Polo",
-  multi:      "Multi-tenant Isolated",
-  multi_polo: "Multi-tenant Polo",
-  hybrid:     "Híbrido",
-};
-
-function InfraCard({ client }: { client: Client }) {
-  const projectRef  = extractProjectRef(client);
-  const deployLabel = DEPLOYMENT_LABEL[client.deployment_mode] ?? client.deployment_mode;
-  const isShared    = client.deployment_mode === "shared";
+function InfraCard({ client }: { client: ClienteComProjeto }) {
+  const { projetos: proj } = client;
+  let projectRef = "—";
+  try { projectRef = new URL(proj.supabase_url).hostname.split(".")[0]; } catch { /* noop */ }
 
   return (
     <Card className="p-5">
@@ -93,26 +89,20 @@ function InfraCard({ client }: { client: Client }) {
             {projectRef}
           </code>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] text-muted-foreground">Modo</p>
+        <div className="space-y-1 col-span-2">
+          <p className="text-[10px] text-muted-foreground">Topologia</p>
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-foreground">{deployLabel}</span>
-          </div>
-        </div>
-        {isShared && client.shared_mode && (
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Sub-modo</p>
             <span className="text-xs font-medium text-foreground">
-              {SHARED_MODE_LABEL[client.shared_mode] ?? client.shared_mode}
+              {TOPOLOGY_LABEL[proj.topology] ?? proj.topology}
             </span>
           </div>
-        )}
-        {isShared && client.shared_tenant_id && (
+        </div>
+        {client.runtime_tenant_id && (
           <div className="space-y-1 col-span-2">
-            <p className="text-[10px] text-muted-foreground">Tenant ID (shared)</p>
+            <p className="text-[10px] text-muted-foreground">Runtime Tenant ID</p>
             <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs text-foreground break-all">
-              {client.shared_tenant_id}
+              {client.runtime_tenant_id}
             </code>
           </div>
         )}
@@ -121,7 +111,7 @@ function InfraCard({ client }: { client: Client }) {
   );
 }
 
-function ContaCard({ client }: { client: Client }) {
+function ContaCard({ client }: { client: ClienteComProjeto }) {
   const expiresAt = client.acesso_expira_em ? new Date(client.acesso_expira_em) : null;
   const expired   = expiresAt ? isPast(expiresAt) : false;
   const daysLeft  = expiresAt ? differenceInDays(expiresAt, new Date()) : null;
@@ -143,15 +133,6 @@ function ContaCard({ client }: { client: Client }) {
     return <span className="text-sm text-foreground">{format(expiresAt, "dd/MM/yyyy")}</span>;
   };
 
-  const planVariant =
-    client.assinatura === "trial"    ? "secondary" :
-    client.assinatura === "anual"    ? "default"   : "outline";
-
-  const planLabel =
-    client.assinatura === "trial"    ? "Trial" :
-    client.assinatura === "anual"    ? "Anual" :
-    client.assinatura === "mensal"   ? "Mensal" : client.assinatura;
-
   return (
     <Card className="p-5">
       <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -160,7 +141,9 @@ function ContaCard({ client }: { client: Client }) {
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">Plano</p>
-          <Badge variant={planVariant}>{planLabel}</Badge>
+          <Badge variant={PLAN_VARIANT[client.assinatura] ?? "outline"}>
+            {PLAN_LABEL[client.assinatura] ?? client.assinatura}
+          </Badge>
         </div>
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">Expiração</p>
@@ -169,7 +152,7 @@ function ContaCard({ client }: { client: Client }) {
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">Máx. sócios</p>
           <p className="text-sm font-medium text-foreground">
-            {client.max_socios ?? "Ilimitado"}
+            {client.max_socios > 0 ? client.max_socios : "Bloqueado"}
           </p>
         </div>
         <div className="space-y-1">
@@ -187,21 +170,21 @@ export default function ClientDetailPage() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [editOpen, setEditOpen]                   = useState(false);
-  const [subscriptionOpen, setSubscriptionOpen]   = useState(false);
-  const [newTenantOpen, setNewTenantOpen]         = useState(false);
+  const [editOpen, setEditOpen]                 = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [newTenantOpen, setNewTenantOpen]       = useState(false);
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
 
-  const isSharedClient = client?.deployment_mode === "shared";
-  const sharedMode     = client?.shared_mode ?? null;
+  const topology           = client?.projetos.topology ?? "unconfigured";
+  const isShared           = topologyIsShared(topology);
+  const showUnitsTab       = topologyHasUnits(topology);
+  const needsTenantSelector = topologyNeedsTenantSelector(topology);
 
   const [activeTenantId, setActiveTenantId] = useState<string | null>(null);
-  const effectiveTenantId =
-    sharedMode === "polo" ? (client?.shared_tenant_id ?? null) : activeTenantId;
-
-  const needsTenantSelector = isSharedClient && sharedMode !== null && sharedMode !== "polo";
-  const showUnitsTab        = isSharedClient && (sharedMode === "polo" || sharedMode === "multi_polo" || sharedMode === "hybrid");
+  const effectiveTenantId = needsTenantSelector
+    ? activeTenantId
+    : (client?.runtime_tenant_id ?? null);
 
   const { data: sharedTenants = [], isLoading: isLoadingTenants } = useQuery<SharedTenant[]>({
     queryKey:  ["shared-tenants-list"],
@@ -212,23 +195,22 @@ export default function ClientDetailPage() {
 
   const { data: users = [] } = useQuery({
     queryKey:  ["client-users-count", id],
-    enabled:   !!client && client.deployment_mode === "isolated",
+    enabled:   !!client && !isShared,
     staleTime: 1000 * 60 * 5,
     queryFn:   async () => {
       const data = await proxyAction(id!, "list-client-members");
       return (data.users || []).map((u: Record<string, unknown>) => ({
-        id:               u.id as string,
-        email:            (u.email as string) || "Sem email",
-        created_at:       u.created_at as string,
-        last_sign_in_at:  (u.last_sign_in_at as string) || null,
+        id:              u.id as string,
+        email:           (u.email as string) || "Sem email",
+        created_at:      u.created_at as string,
+        last_sign_in_at: (u.last_sign_in_at as string) || null,
       })) as ClientMember[];
     },
   });
 
-
   const { data: sharedUnits = [], isLoading: isLoadingSharedUnits } = useQuery({
     queryKey:  ["shared-tenant-units", effectiveTenantId],
-    enabled:   Boolean(client) && isSharedClient && showUnitsTab && Boolean(effectiveTenantId),
+    enabled:   Boolean(client) && showUnitsTab && Boolean(effectiveTenantId),
     queryFn:   () => listSharedTenantUnits(effectiveTenantId!),
     staleTime: 1000 * 60 * 5,
   });
@@ -256,7 +238,6 @@ export default function ClientDetailPage() {
       </MainLayout>
     );
   }
-
 
   return (
     <MainLayout>
@@ -302,14 +283,14 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        {/* ── Inline cards ── */}
+        {/* ── Cards ── */}
         <div className="grid gap-4 md:grid-cols-3">
-          <HealthCheckCard clientId={client.id} client={client} />
+          <HealthCheckCard clientId={client.project_id} />
           <ContaCard client={client} />
           <InfraCard client={client} />
         </div>
 
-        {/* ── Tenant selector banner (shared multi) ── */}
+        {/* ── Tenant selector (shared multi) ── */}
         {needsTenantSelector && (
           <div className="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 dark:border-violet-800/50 dark:bg-violet-950/20">
             <Building2 className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
@@ -344,42 +325,37 @@ export default function ClientDetailPage() {
         )}
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue={isSharedClient ? "units" : "users"} className="space-y-4">
+        <Tabs defaultValue={isShared ? "units" : "users"} className="space-y-4">
           <TabsList className="bg-secondary/50">
-            {client.deployment_mode === "isolated" ? (
+            {!isShared ? (
               <TabsTrigger value="users" className="gap-2">
                 <Users className="h-4 w-4" />
                 Usuários ({users.length})
               </TabsTrigger>
-            ) : (
-              showUnitsTab && (
-                <TabsTrigger value="units" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
-                </TabsTrigger>
-              )
+            ) : showUnitsTab && (
+              <TabsTrigger value="units" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                Polos ({isLoadingSharedUnits ? "…" : sharedUnits.length})
+              </TabsTrigger>
             )}
           </TabsList>
 
-          {/* Tab contents */}
-          {client.deployment_mode === "isolated" ? (
+          {!isShared ? (
             <TabsContent value="users">
-              <UsersTab clientId={client.id} connectionError={null} onUsersLoaded={() => {}} />
+              <UsersTab clientId={client.project_id} connectionError={null} onUsersLoaded={() => {}} />
             </TabsContent>
-          ) : (
-            showUnitsTab && (
-              <TabsContent value="units">
-                {effectiveTenantId ? (
-                  <UnitsTab tenantId={effectiveTenantId} />
-                ) : (
-                  <Card className="p-8 text-center text-muted-foreground text-sm">
-                    {needsTenantSelector
-                      ? "Selecione um tenant no seletor ao lado das tabs para gerenciar usuários."
-                      : "Defina o shared_tenant_id deste cliente via Editar para habilitar esta aba."}
-                  </Card>
-                )}
-              </TabsContent>
-            )
+          ) : showUnitsTab && (
+            <TabsContent value="units">
+              {effectiveTenantId ? (
+                <UnitsTab tenantId={effectiveTenantId} />
+              ) : (
+                <Card className="p-8 text-center text-muted-foreground text-sm">
+                  {needsTenantSelector
+                    ? "Selecione um tenant no seletor acima para gerenciar polos."
+                    : "Defina o runtime_tenant_id deste cliente via Editar para habilitar esta aba."}
+                </Card>
+              )}
+            </TabsContent>
           )}
         </Tabs>
 
@@ -399,7 +375,7 @@ export default function ClientDetailPage() {
           onUpdated={() => refetchClient()}
         />
 
-        {isSharedClient && (
+        {isShared && (
           <CreateSharedTenantDialog
             clientId={client.id}
             open={newTenantOpen}

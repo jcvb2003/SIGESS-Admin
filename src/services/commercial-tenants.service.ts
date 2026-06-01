@@ -18,6 +18,17 @@ export async function listClientes(): Promise<ClienteComProjeto[]> {
   return (data || []) as unknown as ClienteComProjeto[];
 }
 
+export async function getClienteComProjetoByProjectId(projectId: string): Promise<ClienteComProjeto | null> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .select(CLIENTE_COM_PROJETO_SELECT)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (error) throw handleSupabaseError(error);
+  return data as unknown as ClienteComProjeto | null;
+}
+
 export async function listClientesByProject(projectId: string): Promise<Cliente[]> {
   const { data, error } = await supabase
     .from("clientes")

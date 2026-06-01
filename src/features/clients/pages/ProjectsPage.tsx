@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Project } from "../types";
 import { useProjects } from "../hooks/useProjects";
-import { useClients } from "../hooks/useClients";
+import { useClientCountsByProject } from "../hooks/useClientCountsByProject";
 import { ProjectCard } from "../components/ProjectCard";
 import { AddProjectDialog } from "../components/AddProjectDialog";
 import { EditProjectModal } from "../components/EditProjectModal";
@@ -76,24 +76,20 @@ export default function ProjectsPage() {
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [search, setSearch]           = useState("");
 
-  const { data: projects = [], isLoading: loadingProjects } = useProjects();
-  const { data: clientes = [], isLoading: loadingClientes } = useClients();
-  const { data: accounts = [] }                             = useSupabaseAccounts();
+  const { data: projects = [], isLoading: loadingProjects }       = useProjects();
+  const { data: clientCounts = {}, isLoading: loadingCounts }     = useClientCountsByProject();
+  const { data: accounts = [] }                                    = useSupabaseAccounts();
 
-  const isLoading = loadingProjects || loadingClientes;
+  const isLoading = loadingProjects || loadingCounts;
 
   const accountMap = useMemo(
     () => Object.fromEntries(accounts.map((a) => [a.id, a.label ?? a.id])),
     [accounts],
   );
 
-  const clientCountByProject = useMemo(
-    () =>
-      clientes.reduce<Record<string, number>>((acc, c) => {
-        acc[c.project_id] = (acc[c.project_id] ?? 0) + 1;
-        return acc;
-      }, {}),
-    [clientes],
+  const totalClientes = useMemo(
+    () => Object.values(clientCounts).reduce((sum, n) => sum + n, 0),
+    [clientCounts],
   );
 
   const filtered = useMemo(() => {
@@ -128,7 +124,7 @@ export default function ProjectsPage() {
           </Button>
         </div>
 
-        <StatStrip projects={projects} totalClientes={clientes.length} />
+        <StatStrip projects={projects} totalClientes={totalClientes} />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -146,7 +142,7 @@ export default function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                clientCount={clientCountByProject[project.id] ?? 0}
+                clientCount={clientCounts[project.id] ?? 0}
                 accountLabel={accountMap[project.supabase_account_id ?? ""] ?? undefined}
                 onEdit={(p) => setEditProject(p)}
                 onClick={(p) => navigate(`/clients/${p.id}`)}

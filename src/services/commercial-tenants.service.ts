@@ -29,6 +29,18 @@ export async function getClienteComProjetoByProjectId(projectId: string): Promis
   return data as unknown as ClienteComProjeto | null;
 }
 
+export async function listClientesCountsByProject(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("project_id");
+
+  if (error) throw handleSupabaseError(error);
+  return (data || []).reduce<Record<string, number>>((acc, row) => {
+    acc[row.project_id] = (acc[row.project_id] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
 export async function listClientesByProject(projectId: string): Promise<Cliente[]> {
   const { data, error } = await supabase
     .from("clientes")

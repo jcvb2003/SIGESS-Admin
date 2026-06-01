@@ -47,51 +47,51 @@ function getSyncHelperText(item: SyncableSchemaDrift) {
     return `1 operação alinha ${item.relatedDiffCount} divergência(s) derivada(s).`;
   }
   if (item.objectType === "function") {
-    return "1 operação recria a função com a definição atual de Oeiras.";
+    return "1 operação recria a função com a definição atual do Rayssa.";
   }
   if (item.objectType === "grant") {
-    return "1 operação revoga e reaplica os privilégios conforme Oeiras.";
+    return "1 operação revoga e reaplica os privilégios conforme Rayssa.";
   }
   if (item.objectType === "function_grant") {
-    return "1 operação revoga e reaplica o EXECUTE da função conforme Oeiras.";
+    return "1 operação revoga e reaplica o EXECUTE da função conforme Rayssa.";
   }
   if (item.objectType === "auth_config") {
-    return "1 operação reaplica o campo canônico do template conforme Oeiras.";
+    return "1 operação reaplica o campo canônico do template conforme Rayssa.";
   }
   if (item.objectType === "trigger") {
     return item.diffType === "extra_in_tenant"
-      ? "1 operação remove a trigger extra para alinhar com Oeiras."
-      : "1 operação recria a trigger com a definição atual de Oeiras.";
+      ? "1 operação remove a trigger extra para alinhar com o Rayssa."
+      : "1 operação recria a trigger com a definição atual do Rayssa.";
   }
   if (item.diffType === "extra_in_tenant") {
-    return "1 operação remove o objeto extra para alinhar com Oeiras.";
+    return "1 operação remove o objeto extra para alinhar com o Rayssa.";
   }
-  return "1 operação recria o objeto com a definição de Oeiras.";
+  return "1 operação recria o objeto com a definição do Rayssa.";
 }
 
 function getPreviewDescription(item: SyncableSchemaDrift) {
   if (item.objectType === "view") {
-    return "O SQL abaixo é derivado do estado real do Oeiras e alinha a view com suas colunas e grants relacionados.";
+    return "O SQL abaixo é derivado do estado real do Rayssa e alinha a view com suas colunas e grants relacionados.";
   }
   if (item.objectType === "function") {
-    return "O SQL abaixo recria a função a partir da definição real do Oeiras.";
+    return "O SQL abaixo recria a função a partir da definição real do Rayssa.";
   }
   if (item.objectType === "grant") {
-    return "O preview abaixo revoga tudo no tenant e reaplica apenas os privilégios existentes em Oeiras.";
+    return "O preview abaixo revoga tudo no tenant e reaplica apenas os privilégios existentes em Rayssa.";
   }
   if (item.objectType === "function_grant") {
-    return "O preview abaixo revoga o EXECUTE atual e reaplica apenas o que existe em Oeiras para essa função.";
+    return "O preview abaixo revoga o EXECUTE atual e reaplica apenas o que existe em Rayssa para essa função.";
   }
   if (item.objectType === "auth_config") {
-    return "O preview abaixo mostra o campo de auth que será sincronizado a partir da configuração canônica do Oeiras.";
+    return "O preview abaixo mostra o campo de auth que será sincronizado a partir da configuração canônica do Rayssa.";
   }
   if (item.objectType === "trigger") {
-    return "O SQL abaixo recria a trigger com a definição real do Oeiras.";
+    return "O SQL abaixo recria a trigger com a definição real do Rayssa.";
   }
   if (item.diffType === "extra_in_tenant") {
-    return "O SQL abaixo remove o objeto extra no tenant para alinhá-lo com o Oeiras.";
+    return "O SQL abaixo remove o objeto extra no tenant para alinhá-lo com o Rayssa.";
   }
-  return "O SQL abaixo recria o objeto com a definição atual do Oeiras.";
+  return "O SQL abaixo recria o objeto com a definição atual do Rayssa.";
 }
 
 export function SchemaDriftCard({
@@ -268,11 +268,11 @@ export function SchemaDriftCard({
                     {diff.type === "different_definition" && (
                       <div className="mt-3 grid grid-cols-2 gap-4 rounded-md bg-secondary/20 p-2 font-mono text-xs">
                         <div>
-                          <p className="mb-1 font-semibold text-muted-foreground">Oeiras (Ref)</p>
+                          <p className="mb-1 font-semibold text-muted-foreground">Rayssa (Ref)</p>
                           <pre className="overflow-x-auto whitespace-pre-wrap break-all text-emerald-600 dark:text-emerald-400">
-                            {typeof diff.oeiras_value === "object"
-                              ? JSON.stringify(diff.oeiras_value, null, 2)
-                              : String(diff.oeiras_value)}
+                            {typeof diff.reference_value === "object"
+                              ? JSON.stringify(diff.reference_value, null, 2)
+                              : String(diff.reference_value)}
                           </pre>
                         </div>
                         <div>

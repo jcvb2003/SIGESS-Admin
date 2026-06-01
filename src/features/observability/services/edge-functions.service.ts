@@ -17,7 +17,20 @@ export async function auditAllEdgeFunctions(
   adminClient: ReturnType<typeof createClient>
 ): Promise<EdgeFunctionAuditResult[]> {
   
-  // 1. Carrega todos os tenants que possuem PAT (Personal Access Token)
+  // 1. Carrega o tenant de referência (Rayssa/sinpesca) separadamente
+  const { data: refEntidade, error: refErr } = await adminClient
+    .from('entidades')
+    .select('id, tenant_code, supabase_url, supabase_access_token')
+    .eq('tenant_code', 'sinpesca')
+    .not('supabase_access_token', 'is', null)
+    .maybeSingle();
+
+  if (refErr) throw refErr;
+  if (!refEntidade) {
+    throw new Error('Impossível realizar auditoria: Tenant de referência (sinpesca/Rayssa) não encontrado ou sem PAT.');
+  }
+
+  // 2. Carrega todos os isolated que possuem PAT
   const { data: entidades, error: eErr } = await adminClient
     .from('entidades')
     .select('id, tenant_code, supabase_url, supabase_access_token')
@@ -26,22 +39,15 @@ export async function auditAllEdgeFunctions(
 
   if (eErr) throw eErr;
 
-  // 2. Identifica OEIRAS como a fonte de verdade (referência)
-  const oeiras = entidades.find(e => e.tenant_code === 'sinpesca-oeiras');
-  if (!oeiras) {
-    throw new Error('Impossível realizar auditoria: Tenant de referência (sinpesca-oeiras) não encontrado ou sem PAT.');
-  }
-
-  console.log(`🔍 Obtendo funções de referência em OEIRAS...`);
-  const refRef = extractProjectRef(oeiras.supabase_url);
-  const refFunctions = await listEdgeFunctions(refRef, oeiras.supabase_access_token);
+  console.log(`🔍 Obtendo funções de referência em Rayssa...`);
+  const refRef = extractProjectRef(refEntidade.supabase_url);
+  const refFunctions = await listEdgeFunctions(refRef, refEntidade.supabase_access_token);
 
   const auditResults: EdgeFunctionAuditResult[] = [];
 
   // 3. Itera sobre cada tenant para auditar disparidades
   for (const tenant of entidades) {
-    // Pula o próprio OEIRAS na comparação
-    if (tenant.tenant_code === 'sinpesca-oeiras') continue;
+    if (tenant.tenant_code === 'sinpesca') continue;
 
     console.log(`   ➡ Auditando tenant: ${tenant.tenant_code}...`);
     const tenantRef = extractProjectRef(tenant.supabase_url);

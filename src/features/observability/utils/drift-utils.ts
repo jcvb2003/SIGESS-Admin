@@ -24,7 +24,7 @@ function isSupportedDiffType(type: string): type is SupportedDiffType {
 }
 
 function pickSource(diff: SchemaDiff) {
-  return diff.oeiras_value ?? diff.tenant_value ?? null;
+  return diff.reference_value ?? diff.tenant_value ?? null;
 }
 
 function isAllowedForIsolatedSync(drift: SyncableSchemaDrift) {

@@ -168,12 +168,12 @@ export default function ObservabilityPage() {
             ) : (
               <>
                 {(() => {
-                  const ref = clients.find(c => c.tenant_code === 'sinpesca-oeiras');
+                  const ref = clients.find(c => c.tenant_code === 'sinpesca');
                   return ref ? <ReferenceCard client={ref} /> : null;
                 })()}
                 <div className="grid gap-4 xl:grid-cols-2">
                   {snapshots
-                    .filter(s => s.client.tenant_code !== 'sinpesca-oeiras')
+                    .filter(s => s.client.tenant_code !== 'sinpesca')
                     .map((snapshot) => (
                       <TenantCard
                         key={snapshot.client.id}

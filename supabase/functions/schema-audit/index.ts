@@ -87,8 +87,8 @@ serve(async (req: Request) => {
       });
     }
 
-    const oeiras = entidades.find(e => e.tenant_code === 'sinpesca-oeiras');
-    if (!oeiras) throw new Error("Reference tenant (sinpesca-oeiras) not found");
+    const refTenant = entidades.find(e => e.tenant_code === 'sinpesca');
+    if (!refTenant) throw new Error("Reference tenant (sinpesca/Rayssa) not found");
 
     const getSnapshot = async (projectRef: string, pat: string) => {
       const dbRows = await runManagementQuery(projectRef, pat, DATABASE_SNAPSHOT_QUERY);
@@ -104,21 +104,21 @@ serve(async (req: Request) => {
       };
     };
 
-    const refRef = extractProjectRef(oeiras.supabase_url);
+    const refRef = extractProjectRef(refTenant.supabase_url);
     let refSnap;
     try {
-      refSnap = await getSnapshot(refRef, oeiras.supabase_access_token);
+      refSnap = await getSnapshot(refRef, refTenant.supabase_access_token);
     } catch (error) {
       return new Response(JSON.stringify({
         success: false,
-        error: buildAuditErrorMessage(error, oeiras.tenant_code),
+        error: buildAuditErrorMessage(error, refTenant.tenant_code),
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
     }
 
-    if (!refSnap.db) throw new Error("Failed to load reference snapshot (OEIRAS)");
+    if (!refSnap.db) throw new Error("Failed to load reference snapshot (Rayssa/sinpesca)");
 
     const results = [];
 

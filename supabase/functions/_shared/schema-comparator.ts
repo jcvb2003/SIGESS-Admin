@@ -414,7 +414,7 @@ export interface SchemaDiff {
   category: DiffCategory;
   key: string;
   type: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';
-  oeiras_value?: any;
+  reference_value?: any;
   tenant_value?: any;
 }
 
@@ -514,7 +514,7 @@ function compareArrays<T>(
         category,
         key,
         type: 'missing_in_tenant',
-        oeiras_value: oItem
+        reference_value: oItem
       });
     } else {
       const tItem = tenantMap.get(key)!;
@@ -524,7 +524,7 @@ function compareArrays<T>(
           category,
           key,
           type: 'different_definition',
-          oeiras_value: comp.oVal || oItem,
+          reference_value: comp.oVal || oItem,
           tenant_value: comp.tVal || tItem
         });
       }
@@ -655,7 +655,7 @@ export function compareSnapshots(
           category: 'auth_config',
           key: field,
           type: 'different_definition',
-          oeiras_value: oVal,
+          reference_value: oVal,
           tenant_value: tVal
         });
       }

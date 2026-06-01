@@ -49,7 +49,6 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
   const [projectCode, setProjectCode]         = useState("");
   const [projectName, setProjectName]         = useState("");
   const [projectRef, setProjectRef]           = useState("");
-  const [adminEmail, setAdminEmail]           = useState("");
   const [supabaseAccountId, setSupabaseAccountId] = useState("");
 
   const [jobId, setJobId]           = useState<string | null>(null);
@@ -76,11 +75,10 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
     setJobId(null);
     try {
       const response = await startProjectOnboarding({
-        tenantCode:         projectCode,
-        tenantLabel:        projectName,
+        tenantCode:   projectCode,
+        tenantLabel:  projectName,
         projectRef,
         supabaseAccountId,
-        adminEmail:         adminEmail || undefined,
       });
       setJobId(response.jobId);
     } catch (error) {
@@ -96,7 +94,6 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
       setProjectCode("");
       setProjectName("");
       setProjectRef("");
-      setAdminEmail("");
       setSupabaseAccountId("");
     }
     setJobId(null);
@@ -212,19 +209,6 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
                 <p className="text-[11px] text-muted-foreground">
                   Encontrado na URL: supabase.com/dashboard/project/<strong>ref</strong>
                 </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="adminEmail">
-                  Email do Administrador Master{" "}
-                  <span className="font-normal text-muted-foreground">(opcional)</span>
-                </Label>
-                <Input
-                  id="adminEmail"
-                  type="email"
-                  placeholder="admin@entidade.com.br"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                />
               </div>
             </div>
 

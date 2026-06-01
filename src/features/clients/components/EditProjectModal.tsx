@@ -17,7 +17,6 @@ import { TOPOLOGY_LABEL } from "../types";
 import { useUpdateProject } from "../hooks/useProjectMutations";
 
 const TOPOLOGIES: Topology[] = [
-  "unconfigured",
   "isolated_single",
   "isolated_polo",
   "shared_multi_single",

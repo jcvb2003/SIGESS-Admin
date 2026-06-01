@@ -17,8 +17,10 @@ export function AppRouter() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/" element={<ProtectedRoute requireAdmin><Index /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute requireAdmin><ProjectsPage /></ProtectedRoute>} />
-        <Route path="/clients/:id" element={<ProtectedRoute requireAdmin><ProjectDetailPage /></ProtectedRoute>} />
-        <Route path="/clients/:id/clientes/:clienteId" element={<ProtectedRoute requireAdmin><ClienteDetailPage /></ProtectedRoute>} />
+        <Route path="/clients/:id">
+          <Route index element={<ProtectedRoute requireAdmin><ProjectDetailPage /></ProtectedRoute>} />
+          <Route path="clientes/:clienteId" element={<ProtectedRoute requireAdmin><ClienteDetailPage /></ProtectedRoute>} />
+        </Route>
         <Route path="/observability" element={<ProtectedRoute requireAdmin><ObservabilityPage /></ProtectedRoute>} />
         <Route path="/licenses" element={<ProtectedRoute requireAdmin><LicensesPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requireAdmin><SettingsPage /></ProtectedRoute>} />

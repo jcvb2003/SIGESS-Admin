@@ -317,9 +317,7 @@ export async function createSharedTenantOperatorWithMembership(input: {
     tenant_id: input.tenantId,
     unit_id: input.unitId,
     user_id: tenantUser.user_id,
-    role: "unit_operator",
     is_active: true,
-    is_default: true,
   });
 
   return tenantUser;

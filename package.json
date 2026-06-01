@@ -9,8 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "migrate:propagate": "tsx scripts/propagate-from-oeiras.ts",
-    "migrate:dry-run": "tsx scripts/propagate-from-oeiras.ts --dry-run",
+    "migrate:propagate": "tsx scripts/propagate-from-reference.ts",
+    "migrate:dry-run": "tsx scripts/propagate-from-reference.ts --dry-run",
     "export:tenant": "tsx scripts/export-tenant.ts",
     "export:all": "tsx scripts/export-tenant.ts --all",
     "schema:update-initial": "tsx scripts/update-initial-schema.ts"

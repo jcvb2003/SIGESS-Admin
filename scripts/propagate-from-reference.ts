@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { propagateFromOeiras, TenantConfig } from '../src/features/observability/model/propagate';
+import { propagateFromReference, TenantConfig } from '../src/features/observability/model/propagate';
 import * as dotenv from 'dotenv';
 import path from 'path';
 
@@ -25,7 +25,7 @@ if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
 Uso:
   npm run migrate:tenant -- --tenant=<codigo>   Aplica em um tenant específico
   npm run migrate:all                           Aplica em todos os tenants registrados
-  
+
 Opções:
   --tenant=<code>            Código do tenant (ex: z2, sinpesca-breves)
   --all                      Processa todos os tenants que possuem token de acesso
@@ -51,8 +51,7 @@ const adminClient = createClient(ADMIN_URL, ADMIN_KEY);
 (async () => {
   try {
     console.log('📦 Carregando catálogo de tenants do banco Admin...');
-    
-    // Busca tenants que possuem token de acesso configurado
+
     const { data: entidades, error } = await adminClient
       .from('entidades')
       .select('id, nome_entidade, tenant_code, supabase_url, supabase_secret_keys, supabase_access_token')
@@ -69,21 +68,20 @@ const adminClient = createClient(ADMIN_URL, ADMIN_KEY);
       process.exit(0);
     }
 
-    // Identifica o tenant de referência (OEIRAS)
-    const oeirasData = entidades.find(e => e.tenant_code === 'sinpesca-oeiras');
-    if (!oeirasData) {
-      console.error('❌ Erro: Tenant de referência "sinpesca-oeiras" não encontrado no banco ou está sem PAT.');
+    // Identifica o tenant de referência (Rayssa / sinpesca)
+    const referenceData = entidades.find(e => e.tenant_code === 'sinpesca');
+    if (!referenceData) {
+      console.error('❌ Erro: Tenant de referência "sinpesca" (Rayssa) não encontrado no banco ou está sem PAT.');
       process.exit(1);
     }
 
-    const oeiras: TenantConfig = {
-      id: oeirasData.tenant_code,
-      url: oeirasData.supabase_url,
-      serviceKey: oeirasData.supabase_secret_keys,
-      managementToken: oeirasData.supabase_access_token,
+    const reference: TenantConfig = {
+      id: referenceData.tenant_code,
+      url: referenceData.supabase_url,
+      serviceKey: referenceData.supabase_secret_keys,
+      managementToken: referenceData.supabase_access_token,
     };
 
-    // Mapeia os tenants para o formato esperado pelo serviço de propagação
     const tenants: TenantConfig[] = entidades.map(e => ({
       id: e.tenant_code,
       url: e.supabase_url,
@@ -91,26 +89,24 @@ const adminClient = createClient(ADMIN_URL, ADMIN_KEY);
       managementToken: e.supabase_access_token,
     }));
 
-    console.log(`✅ ${tenants.length} tenants prontos para auditoria (Referência: ${oeiras.id})`);
+    console.log(`✅ ${tenants.length} tenants prontos para auditoria (Referência: ${reference.id})`);
 
-    // Inicia a propagação
-    const results = await propagateFromOeiras({
-      oeiras,
+    const results = await propagateFromReference({
+      reference,
       tenants,
       targetTenant,
       dryRun,
       fromVersion,
     }, adminClient);
 
-    // Relatório final resumido
     console.log('\n📊 Resumo da Operação:');
     console.log('--------------------------------------------------');
     results.forEach(r => {
       const statusIcon = r.failed ? '❌' : (r.applied.length > 0 ? '✅' : '✔');
       const statusText = r.failed ? 'FALHA' : (r.applied.length > 0 ? 'APLICADO' : 'SYNC');
-      
+
       console.log(`${statusIcon} [${r.tenant.padEnd(15)}] Status: ${statusText.padEnd(8)} | Aplicadas: ${r.applied.length} | Puladas: ${r.skipped.length} | Bloqueadas: ${r.blocked.length}`);
-      
+
       if (r.failed) {
         console.log(`   └─ 🛑 Erro na versão ${r.failed}: ${r.error}`);
       }

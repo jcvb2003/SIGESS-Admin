@@ -9,16 +9,16 @@ dotenv.config({ path: path.join(process.cwd(), '.env') });
 
 const ADMIN_URL = process.env.VITE_SUPABASE_URL;
 const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-const OEIRAS_DB_URL = process.env.OEIRAS_DATABASE_URL;
+const RAYSSA_DB_URL = process.env.RAYSSA_DATABASE_URL;
 
 if (!ADMIN_URL || !ADMIN_KEY) {
   console.error('Erro: VITE_SUPABASE_URL ou VITE_SUPABASE_SERVICE_ROLE_KEY nao definidos no .env');
   process.exit(1);
 }
 
-if (!OEIRAS_DB_URL) {
-  console.error('Erro: OEIRAS_DATABASE_URL nao definido no .env');
-  console.log('Exemplo: OEIRAS_DATABASE_URL=postgresql://postgres:[PASSWORD]@db.tnrzxuznerneilxoojgv.supabase.co:5432/postgres');
+if (!RAYSSA_DB_URL) {
+  console.error('Erro: RAYSSA_DATABASE_URL nao definido no .env');
+  console.log('Exemplo: RAYSSA_DATABASE_URL=postgresql://postgres.jmahgvgtjstklabwkkit:[PASSWORD]@aws-1-us-west-2.pooler.supabase.com:5432/postgres');
   process.exit(1);
 }
 
@@ -51,13 +51,13 @@ async function updateInitialSchema() {
   const promote = args.includes('--promote');
 
   try {
-    console.log('Gerando dump do schema de Oeiras...');
+    console.log('Gerando dump do schema de Rayssa (sinpesca — baseline canônico)...');
 
     // --schema-only: apenas estrutura
     // --no-owner: remove comandos de owner
     // --no-privileges: remove GRANTs, pois o onboarding aplica os seus proprios
     // --schema=public: foca apenas no dominio do sistema
-    const dumpCommand = `pg_dump "${OEIRAS_DB_URL}" --schema-only --no-owner --no-privileges --schema=public`;
+    const dumpCommand = `pg_dump "${RAYSSA_DB_URL}" --schema-only --no-owner --no-privileges --schema=public`;
     const dump = execSync(dumpCommand, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 50 });
 
     console.log('Limpando metadados de migracoes e extensoes desnecessarias...');

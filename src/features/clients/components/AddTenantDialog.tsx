@@ -50,6 +50,8 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
   const [projectRef, setProjectRef]         = useState("");
   const [adminEmail, setAdminEmail]         = useState("");
   const [supabaseAccountId, setSupabaseAccountId] = useState("");
+  const [maxSocios, setMaxSocios]           = useState("");
+  const [acessoExpiraEm, setAcessoExpiraEm] = useState("");
 
   const [jobId, setJobId]       = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -80,6 +82,8 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
         projectRef,
         supabaseAccountId,
         adminEmail: adminEmail || undefined,
+        maxSocios: maxSocios ? parseInt(maxSocios, 10) : null,
+        acessoExpiraEm: acessoExpiraEm || null,
       });
       setJobId(response.jobId);
     } catch (error) {
@@ -99,6 +103,8 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
       setProjectRef("");
       setAdminEmail("");
       setSupabaseAccountId("");
+      setMaxSocios("");
+      setAcessoExpiraEm("");
     }
     setJobId(null);
     onOpenChange(false);
@@ -182,7 +188,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
                 <Label htmlFor="tenantCode">Código do Tenant</Label>
                 <Input
                   id="tenantCode"
-                  placeholder="Ex: sinpesca-oeiras"
+                  placeholder="Ex: sinpesca-breves"
                   value={tenantCode}
                   onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
                   required
@@ -239,13 +245,42 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
               </div>
             </div>
 
+            {/* Separador visual — Contrato */}
+            <div className="space-y-3 rounded-lg border border-border/50 bg-secondary/20 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Contrato
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="maxSocios">Limite de Sócios</Label>
+                <Input
+                  id="maxSocios"
+                  type="number"
+                  min={1}
+                  placeholder="Ex: 500"
+                  value={maxSocios}
+                  onChange={(e) => setMaxSocios(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="acessoExpiraEm">Acesso expira em</Label>
+                <Input
+                  id="acessoExpiraEm"
+                  type="date"
+                  value={acessoExpiraEm}
+                  onChange={(e) => setAcessoExpiraEm(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                disabled={isStarting || !supabaseAccountId || !tenantLabel || !tenantCode || !projectRef}
+                disabled={isStarting || !supabaseAccountId || !tenantLabel || !tenantCode || !projectRef || !maxSocios || !acessoExpiraEm}
               >
                 {isStarting
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />

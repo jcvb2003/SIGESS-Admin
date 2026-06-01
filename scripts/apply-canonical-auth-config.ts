@@ -7,7 +7,7 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 const ADMIN_URL = process.env.VITE_SUPABASE_URL;
 const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-const DEFAULT_TENANT_CODE = "sinpesca-oeiras";
+const DEFAULT_TENANT_CODE = "sinpesca";
 const ONBOARDING_FILE = path.join(
   process.cwd(),
   "supabase",

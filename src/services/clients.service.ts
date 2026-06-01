@@ -98,7 +98,8 @@ export async function startTenantOnboarding(payload: {
   projectRef: string;
   supabaseAccountId: string;
   adminEmail?: string;
-  sharedMode?: string;
+  maxSocios?: number | null;
+  acessoExpiraEm?: string | null;
 }) {
   const { data, error } = await supabase.functions.invoke("tenant-onboarding", {
     body: payload
@@ -150,6 +151,52 @@ export async function listSharedTenants(): Promise<SharedTenant[]> {
 
   if (error) throw handleSupabaseError(error);
   return (data || []) as SharedTenant[];
+}
+
+export async function createSharedTenantForClient(
+  clientId: string,
+  input: { name: string; code: string },
+): Promise<SharedTenant> {
+  const sharedAdmin = getSharedSupabaseAdmin();
+
+  const { data: tenant, error: tenantError } = await sharedAdmin
+    .from("tenants")
+    .insert({ name: input.name, code: input.code.toLowerCase(), status: "active" })
+    .select("id, code, name")
+    .single();
+
+  if (tenantError) throw handleSupabaseError(tenantError);
+
+  const tenantId = tenant.id;
+
+  const { data: unit, error: unitError } = await sharedAdmin
+    .from("tenant_units")
+    .insert({ tenant_id: tenantId, code: "principal", name: "Sede", is_active: true })
+    .select("id")
+    .single();
+
+  if (unitError) throw handleSupabaseError(unitError);
+
+  const unitId = unit.id;
+
+  const seedResults = await Promise.all([
+    sharedAdmin.from("configuracao_entidade").insert({ tenant_id: tenantId, unit_id: unitId }),
+    sharedAdmin.from("parametros").insert({ tenant_id: tenantId, unit_id: unitId }),
+    sharedAdmin.from("parametros_financeiros").insert({ tenant_id: tenantId, unit_id: unitId }),
+  ]);
+
+  for (const result of seedResults) {
+    if (result.error) throw handleSupabaseError(result.error);
+  }
+
+  const { error: updateError } = await supabase
+    .from("entidades")
+    .update({ shared_tenant_id: tenantId })
+    .eq("id", clientId);
+
+  if (updateError) throw handleSupabaseError(updateError);
+
+  return tenant as SharedTenant;
 }
 
 export async function listSharedTenantUnits(tenantId: string): Promise<TenantUnit[]> {

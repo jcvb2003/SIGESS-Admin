@@ -10,6 +10,7 @@ import {
   Layers,
   Loader2,
   Pencil,
+  PlusCircle,
   Users,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
@@ -34,6 +35,7 @@ import {
   UnitsTab,
   useClientDetail,
 } from "@/features/clients";
+import { CreateSharedTenantDialog } from "@/features/clients/components/CreateSharedTenantDialog";
 import {
   listSharedTenantUnits,
   listSharedTenants,
@@ -185,8 +187,9 @@ export default function ClientDetailPage() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [editOpen, setEditOpen]               = useState(false);
-  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [editOpen, setEditOpen]                   = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen]   = useState(false);
+  const [newTenantOpen, setNewTenantOpen]         = useState(false);
 
   const { data: client, isLoading, refetch: refetchClient } = useClientDetail(id!);
 
@@ -328,6 +331,15 @@ export default function ClientDetailPage() {
                 </SelectContent>
               </Select>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto h-8 border-violet-300 text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/40"
+              onClick={() => setNewTenantOpen(true)}
+            >
+              <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+              Novo Tenant
+            </Button>
           </div>
         )}
 
@@ -386,6 +398,18 @@ export default function ClientDetailPage() {
           onOpenChange={setSubscriptionOpen}
           onUpdated={() => refetchClient()}
         />
+
+        {isSharedClient && (
+          <CreateSharedTenantDialog
+            clientId={client.id}
+            open={newTenantOpen}
+            onOpenChange={setNewTenantOpen}
+            onCreated={(tenantId) => {
+              setActiveTenantId(tenantId);
+              refetchClient();
+            }}
+          />
+        )}
       </div>
     </MainLayout>
   );

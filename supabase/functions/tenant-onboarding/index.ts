@@ -217,6 +217,8 @@ interface OnboardingPayload {
   projectRef: string;
   adminEmail?: string;
   supabaseAccountId: string;
+  maxSocios?: number | null;
+  acessoExpiraEm?: string | null;
 }
 
 interface SystemSetting {
@@ -323,7 +325,7 @@ async function updateJob(
 // --- Main background processing ---
 async function processOnboarding(jobId: string, payload: OnboardingPayload, supabaseAdmin: SupabaseClient) {
   try {
-    const { projectRef, tenantCode, tenantLabel, adminEmail, supabaseAccountId } = payload;
+    const { projectRef, tenantCode, tenantLabel, adminEmail, supabaseAccountId, maxSocios, acessoExpiraEm } = payload;
     const projectUrl = `https://${projectRef}.supabase.co`;
 
     const { data: settingsData } = await supabaseAdmin.from("system_settings").select("key, value");
@@ -370,7 +372,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
 
     // 5. Registration
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
-    const entidadeId = await registerTenantInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken);
+    const entidadeId = await registerTenantInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken, maxSocios, acessoExpiraEm);
 
     // 6. Finalization
     await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, entidadeId);
@@ -508,19 +510,19 @@ async function runManagementQuery(projectRef: string, accessToken: string, query
   return await res.json();
 }
 
-async function fetchOeirasStorageBlueprint(supabaseAdmin: SupabaseClient) {
-  const { data: oeiras, error } = await supabaseAdmin
+async function fetchReferenceStorageBlueprint(supabaseAdmin: SupabaseClient) {
+  const { data: reference, error } = await supabaseAdmin
     .from("entidades")
     .select("supabase_url, supabase_access_token")
-    .eq("tenant_code", "sinpesca-oeiras")
+    .eq("tenant_code", "sinpesca")
     .single();
 
-  if (error || !oeiras?.supabase_access_token || !oeiras.supabase_url) {
-    throw new Error("Falha ao carregar blueprint de storage do Oeiras.");
+  if (error || !reference?.supabase_access_token || !reference.supabase_url) {
+    throw new Error("Falha ao carregar blueprint de storage do tenant de referência (sinpesca/Rayssa).");
   }
 
-  const projectRef = new URL(oeiras.supabase_url).hostname.split(".")[0];
-  const rows = await runManagementQuery(projectRef, oeiras.supabase_access_token, STORAGE_SNAPSHOT_QUERY);
+  const projectRef = new URL(reference.supabase_url).hostname.split(".")[0];
+  const rows = await runManagementQuery(projectRef, reference.supabase_access_token, STORAGE_SNAPSHOT_QUERY);
   return rows?.[0]?.snapshot as { buckets?: StorageBucketDef[]; policies?: StoragePolicyDef[] } | undefined;
 }
 
@@ -556,7 +558,7 @@ async function syncProjectStorage(
   accessToken: string,
   supabaseAdmin: SupabaseClient,
 ) {
-  const blueprint = await fetchOeirasStorageBlueprint(supabaseAdmin);
+  const blueprint = await fetchReferenceStorageBlueprint(supabaseAdmin);
   const targetClient = createClient(projectUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -624,18 +626,49 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   });
   if (authError && !authError.message.includes("already exists")) throw authError;
 
-  if (data?.user?.id) {
-    await client.auth.admin.updateUserById(data.user.id, { app_metadata: { role: "admin" } });
+  const userId = data?.user?.id;
+  if (!userId) return;
+
+  await client.auth.admin.updateUserById(userId, { app_metadata: { role: "admin" } });
+
+  // Vincular owner ao tenant e unidade criados pelo seed
+  const { data: tenant } = await client.from("tenants").select("id").limit(1).maybeSingle();
+  const { data: unit } = await client.from("tenant_units").select("id").limit(1).maybeSingle();
+
+  if (tenant?.id && unit?.id) {
+    const { error: tuError } = await client.from("tenant_users").insert({
+      tenant_id: tenant.id,
+      user_id: userId,
+      tenant_role: "owner",
+      is_active: true,
+    });
+    if (tuError && !tuError.message.includes("duplicate")) throw tuError;
+
+    const { error: umError } = await client.from("user_unit_memberships").insert({
+      tenant_id: tenant.id,
+      user_id: userId,
+      unit_id: unit.id,
+      is_active: true,
+    });
+    if (umError && !umError.message.includes("duplicate")) throw umError;
   }
 }
 
-async function registerTenantInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string) {
+async function registerTenantInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string, maxSocios?: number | null, acessoExpiraEm?: string | null) {
   const { data: existing } = await admin.from('entidades').select('id').eq('tenant_code', code.toLowerCase()).single();
   if (existing) return existing.id;
 
   const { data: tenant, error } = await admin.from('entidades').insert({
-    nome_entidade: label, tenant_code: code.toLowerCase(), supabase_url: url,
-    supabase_publishable_key: anon, supabase_secret_keys: sr, supabase_access_token: pat, assinatura: 'anual'
+    nome_entidade: label,
+    tenant_code: code.toLowerCase(),
+    supabase_url: url,
+    supabase_publishable_key: anon,
+    supabase_secret_keys: sr,
+    supabase_access_token: pat,
+    assinatura: 'anual',
+    deployment_mode: 'isolated',
+    max_socios: maxSocios ?? null,
+    acesso_expira_em: acessoExpiraEm ?? null,
   }).select('id').single();
   if (error || !tenant) throw new Error("Failed to register tenant: " + (error ? error.message : ""));
 

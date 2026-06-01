@@ -186,7 +186,7 @@ export function AddClientModal({ open, onOpenChange }: AddClientModalProps) {
             <Label htmlFor="tenant_code">Tenant Code *</Label>
             <Input
               id="tenant_code"
-              placeholder="Ex: sinpesca-oeiras"
+              placeholder="Ex: sinpesca-breves"
               value={formData.tenant_code}
               onChange={(e) => handleChange("tenant_code", e.target.value)}
             />

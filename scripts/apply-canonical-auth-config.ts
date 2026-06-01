@@ -66,18 +66,19 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Infra: lê projetos (fonte de credenciais e PAT).
   const { data: tenant, error } = await supabaseAdmin
-    .from("entidades")
-    .select("nome_entidade, tenant_code, supabase_url, supabase_access_token")
+    .from("projetos")
+    .select("project_name, tenant_code, supabase_url, supabase_access_token")
     .eq("tenant_code", tenantCode)
     .single();
 
   if (error || !tenant) {
-    throw new Error(`Tenant ${tenantCode} não encontrado em entidades`);
+    throw new Error(`Projeto ${tenantCode} não encontrado em projetos`);
   }
 
   if (!tenant.supabase_access_token) {
-    throw new Error(`Tenant ${tenantCode} está sem supabase_access_token`);
+    throw new Error(`Projeto ${tenantCode} está sem supabase_access_token`);
   }
 
   const projectRef = extractProjectRef(tenant.supabase_url);
@@ -123,7 +124,7 @@ async function main() {
     throw new Error(`Verificação falhou. Campos divergentes após PATCH: ${fields}`);
   }
 
-  console.log(`Auth config canônico aplicado com sucesso em ${tenant.nome_entidade} (${tenant.tenant_code}).`);
+  console.log(`Auth config canônico aplicado com sucesso em ${tenant.project_name} (${tenant.tenant_code}).`);
   console.log(`Project ref: ${projectRef}`);
 }
 

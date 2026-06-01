@@ -50,40 +50,42 @@ const adminClient = createClient(ADMIN_URL, ADMIN_KEY);
 
 (async () => {
   try {
-    console.log('📦 Carregando catálogo de tenants do banco Admin...');
+    console.log('📦 Carregando catálogo de projetos do banco Admin...');
 
+    // Infra: lê projetos (fonte de credenciais, PAT e schema migrations).
     const { data: entidades, error } = await adminClient
-      .from('entidades')
-      .select('id, nome_entidade, tenant_code, supabase_url, supabase_secret_keys, supabase_access_token')
+      .from('projetos')
+      .select('id, project_name, tenant_code, supabase_url, supabase_secret_keys, supabase_access_token')
       .not('supabase_access_token', 'is', null)
-      .order('nome_entidade');
+      .order('project_name');
 
     if (error) {
-      console.error('❌ Erro ao buscar entidades no banco Admin:', error.message);
+      console.error('❌ Erro ao buscar projetos no banco Admin:', error.message);
       process.exit(1);
     }
 
     if (!entidades || entidades.length === 0) {
-      console.warn('⚠️ Nenhum tenant com token de acesso (PAT) encontrado no banco.');
+      console.warn('⚠️ Nenhum projeto com token de acesso (PAT) encontrado no banco.');
       process.exit(0);
     }
 
-    // Identifica o tenant de referência (Rayssa / sinpesca)
+    // Identifica o projeto de referência (Rayssa / sinpesca)
+    // tenant_code permanece em projetos por compat com Web — usar para lookup é correto aqui.
     const referenceData = entidades.find(e => e.tenant_code === 'sinpesca');
     if (!referenceData) {
-      console.error('❌ Erro: Tenant de referência "sinpesca" (Rayssa) não encontrado no banco ou está sem PAT.');
+      console.error('❌ Erro: Projeto de referência "sinpesca" (Rayssa) não encontrado no banco ou está sem PAT.');
       process.exit(1);
     }
 
     const reference: TenantConfig = {
-      id: referenceData.tenant_code,
+      id: referenceData.tenant_code,   // tenant_code compat — drop após migração Web
       url: referenceData.supabase_url,
       serviceKey: referenceData.supabase_secret_keys,
       managementToken: referenceData.supabase_access_token,
     };
 
     const tenants: TenantConfig[] = entidades.map(e => ({
-      id: e.tenant_code,
+      id: e.tenant_code,               // tenant_code compat — drop após migração Web
       url: e.supabase_url,
       serviceKey: e.supabase_secret_keys,
       managementToken: e.supabase_access_token,

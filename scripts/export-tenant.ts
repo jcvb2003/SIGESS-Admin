@@ -55,7 +55,7 @@ async function logExportRun(params: {
     run_id,
     tenant_id: tenant.id,
     tenant_code: tenant.tenant_code,
-    tenant_name: tenant.nome_entidade,
+    tenant_name: tenant.project_name,
     tabela,
     status,
     skip_reason,
@@ -77,7 +77,7 @@ async function logExportRun(params: {
  * Realiza o export lógico de um tenant para o Storage do Admin
  */
 async function exportTenantData(tenant: any, adminClient: any, run_id: string) {
-  console.log(`\n⏳ Iniciando export operacional: ${tenant.tenant_code} (${tenant.nome_entidade})...`);
+  console.log(`\n⏳ Iniciando export operacional: ${tenant.tenant_code} (${tenant.project_name})...`);
   
   // Conecta ao tenant via PostgREST com service_role
   const tenantClient = createClient(tenant.supabase_url, tenant.supabase_secret_keys);
@@ -216,16 +216,16 @@ const run_id = crypto.randomUUID();
 (async () => {
   try {
     console.log(`📦 Iniciando Ciclo de Exportação | Run ID: ${run_id}`);
-    console.log('📦 Carregando tenants do banco Admin...');
-    
-    // Busca tenants registrados
+    console.log('📦 Carregando projetos do banco Admin...');
+
+    // Infra: lê projetos (fonte de credenciais para acesso ao runtime DB).
     const { data: entidades, error } = await adminClient
-      .from('entidades')
-      .select('id, tenant_code, nome_entidade, supabase_url, supabase_secret_keys')
+      .from('projetos')
+      .select('id, tenant_code, project_name, supabase_url, supabase_secret_keys')
       .order('tenant_code');
 
     if (error) {
-      console.error('❌ Erro ao buscar entidades:', error.message);
+      console.error('❌ Erro ao buscar projetos:', error.message);
       process.exit(1);
     }
 

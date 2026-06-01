@@ -46,8 +46,6 @@ interface ClientMember {
   email: string | null;
   created_at: string;
   last_sign_in_at: string | null;
-  acesso_expira_em: string | null;
-  max_socios: number | null;
 }
 
 function extractProjectRef(client: Client): string {
@@ -220,8 +218,6 @@ export default function ClientDetailPage() {
         email:            (u.email as string) || "Sem email",
         created_at:       u.created_at as string,
         last_sign_in_at:  (u.last_sign_in_at as string) || null,
-        acesso_expira_em: (u.acesso_expira_em as string) || null,
-        max_socios:       (u.max_socios as number) || null,
       })) as ClientMember[];
     },
   });

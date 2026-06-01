@@ -14,8 +14,6 @@ interface MergedMember extends AuthUser {
   isAdmin: boolean;
   role: string;
   ativo: boolean;
-  acesso_expira_em: string | null;
-  max_socios: number | null;
   hasLegacyMetadata: boolean;
   ban_duration?: string | null;
 }
@@ -79,21 +77,7 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   const authData = await authRes.json();
   const authUsers = authData.users || [];
 
-  // 2. Fetch from public.configuracao_entidade
-  let configData: { max_socios: number | null } | null = null;
-  try {
-    const configRes = await fetch(`${clientUrl}/rest/v1/configuracao_entidade?select=max_socios&limit=1`, {
-      headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
-    });
-    if (configRes.ok) {
-      const configArr = await configRes.json();
-      configData = configArr[0] || null;
-    }
-  } catch (e) {
-    console.error("Failed to fetch configuracao_entidade:", e);
-  }
-
-  // 3. Merge including app_metadata and role
+  // 2. Merge including app_metadata and role
   const merged: MergedMember[] = authUsers.map((au: AuthUser) => {
     const roleFromMetadata = au.app_metadata?.role;
     const isAdmin = roleFromMetadata === 'admin' || au.app_metadata?.is_admin === true;
@@ -108,8 +92,6 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
       isAdmin: finalRole === 'admin',
       role: finalRole,
       ativo: isAtivo,
-      acesso_expira_em: null,
-      max_socios: configData?.max_socios || null,
       hasLegacyMetadata: !!au.app_metadata?.is_admin
     } as MergedMember;
   });

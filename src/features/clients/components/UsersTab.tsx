@@ -45,8 +45,6 @@ interface ClientUser {
   name: string | null;
   created_at: string;
   last_sign_in_at: string | null;
-  acesso_expira_em: string | null;
-  max_socios: number | null;
   role: string;
   isAdmin: boolean;
   isActive: boolean;
@@ -90,8 +88,6 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
         name: u.nome || u.user_metadata?.nome || u.user_metadata?.full_name || null,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at || null,
-        acesso_expira_em: u.acesso_expira_em || null,
-        max_socios: u.max_socios || null,
         role: u.role || (u.isAdmin ? "admin" : "user"),
         isAdmin: u.isAdmin || false,
         isActive: u.ativo !== false,
@@ -308,12 +304,6 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                         Alterar nivel
                       </Button>
                     </div>
-                  </div>
-                  <div className="text-left md:text-right min-w-[80px]">
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Max. Socios</p>
-                    <p className="text-sm font-medium mt-1">
-                      {user.max_socios ?? "Ilimitado"}
-                    </p>
                   </div>
                 </div>
 

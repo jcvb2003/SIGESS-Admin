@@ -1537,14 +1537,35 @@ async function processDataImport(
   }
 }
 
+async function syncLicenseConfig(
+  clientUrl: string,
+  clientKey: string,
+  limits: { acesso_expira_em: string | null, max_socios: number | null }
+) {
+  const configUpdates: Record<string, unknown> = {};
+  if (limits.max_socios !== null) configUpdates.max_socios = limits.max_socios;
+  if (limits.acesso_expira_em !== null) configUpdates.acesso_expira_em = limits.acesso_expira_em;
+
+  if (Object.keys(configUpdates).length === 0) return;
+
+  await fetch(`${clientUrl}/rest/v1/configuracao_entidade?id=eq.1`, {
+    method: "PATCH",
+    headers: {
+      apikey: clientKey,
+      Authorization: `Bearer ${clientKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(configUpdates)
+  });
+}
+
 async function syncTrialLimits(
   clientUrl: string,
   clientKey: string,
   acessoExpiraEm: string | null,
   maxSocios: number | null
 ) {
-  // Use the same logic as repairUserSync for consistency
-  return await repairUserSync(clientUrl, clientKey, {
+  return await syncLicenseConfig(clientUrl, clientKey, {
     acesso_expira_em: acessoExpiraEm,
     max_socios: maxSocios
   });
@@ -1576,11 +1597,7 @@ async function repairAuthMetadata(clientUrl: string, clientKey: string, authUser
   return repairedCount;
 }
 
-async function repairUserSync(
-  clientUrl: string, 
-  clientKey: string, 
-  limits: { acesso_expira_em: string | null, max_socios: number | null }
-) {
+async function repairUserSync(clientUrl: string, clientKey: string) {
   // 1. Fetch all Auth users from client with higher limit
   const authRes = await fetch(`${clientUrl}/auth/v1/admin/users?per_page=1000`, {
     headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
@@ -1632,24 +1649,7 @@ async function repairUserSync(
     throw new Error(`Bulk UPSERT failed: ${await upsertRes.text()}`);
   }
 
-  // 4. Sync Global Config (max_socios AND acesso_expira_em)
-  const configUpdates: Record<string, unknown> = {};
-  if (limits.max_socios !== null) configUpdates.max_socios = limits.max_socios;
-  if (limits.acesso_expira_em !== null) configUpdates.acesso_expira_em = limits.acesso_expira_em;
-
-  if (Object.keys(configUpdates).length > 0) {
-    await fetch(`${clientUrl}/rest/v1/configuracao_entidade?id=eq.1`, {
-      method: "PATCH",
-      headers: {
-        apikey: clientKey,
-        Authorization: `Bearer ${clientKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(configUpdates)
-    });
-  }
-
-  // 5. Repair Auth Metadata: CLEANUP is_admin AND set role AND heal ban_duration
+  // 4. Repair Auth Metadata: CLEANUP is_admin AND set role AND heal ban_duration
   const repairedCount = await repairAuthMetadata(clientUrl, clientKey, authUsers, publicUsers, adminIds);
 
   return { 
@@ -1677,10 +1677,7 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
       return await deleteClientUser(clientUrl, clientKey, params?.userId as string);
     case "ban-client-member":
       return await banClientUser(clientUrl, clientKey, params?.userId as string, params?.active as boolean);
-    case "repair-user-sync": return await repairUserSync(clientUrl, clientKey, {
-      acesso_expira_em: params?.acesso_expira_em as string | null,
-      max_socios: params?.max_socios as number | null
-    });
+    case "repair-user-sync": return await repairUserSync(clientUrl, clientKey);
     case "execute-raw-sql": // New: For seeds or maintenance
       if (!params?.sql) throw new Error("Missing SQL");
       return await executeRawSql(clientUrl, params.supabase_access_token as string, params.sql as string);
@@ -1807,14 +1804,7 @@ async function handleLimitActions(action: string, clientId: string, client: Clie
   }
 
   if (action === "repair-user-sync") {
-    return await repairUserSync(
-      client.supabase_url,
-      client.supabase_secret_keys,
-      {
-        acesso_expira_em: client.acesso_expira_em ?? null,
-        max_socios: client.max_socios ?? null
-      }
-    );
+    return await repairUserSync(client.supabase_url, client.supabase_secret_keys);
   }
   return null;
 }

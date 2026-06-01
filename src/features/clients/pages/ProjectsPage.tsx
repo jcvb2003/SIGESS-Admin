@@ -1,27 +1,56 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Layers, Loader2, Search, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Plus, Layers, Loader2, Search, Users, AlertTriangle, XCircle } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Project } from "../types";
 import { useProjects } from "../hooks/useProjects";
+import { useClients } from "../hooks/useClients";
 import { ProjectCard } from "../components/ProjectCard";
 import { AddProjectDialog } from "../components/AddProjectDialog";
 import { EditProjectModal } from "../components/EditProjectModal";
 import { useSupabaseAccounts } from "../../settings/hooks/useSystemSettings";
 
-function StatStrip({ projects }: { projects: Project[] }) {
-  const total    = projects.length;
-  const valid    = projects.filter((p) => p.key_status === "valid").length;
-  const broken   = projects.filter((p) => p.key_status === "broken").length;
-  const unknown  = projects.filter((p) => p.key_status === "unknown").length;
+function StatStrip({
+  projects,
+  totalClientes,
+}: {
+  projects: Project[];
+  totalClientes: number;
+}) {
+  const unconfigured = projects.filter((p) => p.topology === "unconfigured").length;
+  const broken       = projects.filter((p) => p.key_status === "broken").length;
 
   const items = [
-    { label: "Total",             value: total,   icon: Layers,        color: "text-primary",          bg: "bg-primary/10" },
-    { label: "Chave válida",      value: valid,   icon: CheckCircle2,  color: "text-emerald-500",       bg: "bg-emerald-500/10" },
-    { label: "Chave inválida",    value: broken,  icon: XCircle,       color: broken > 0 ? "text-destructive" : "text-muted-foreground", bg: broken > 0 ? "bg-destructive/10" : "bg-muted/40" },
-    { label: "Status desconhecido", value: unknown, icon: HelpCircle,  color: "text-muted-foreground",  bg: "bg-muted/40" },
+    {
+      label: "Projetos",
+      value: projects.length,
+      icon: Layers,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      label: "Clientes",
+      value: totalClientes,
+      icon: Users,
+      color: "text-sky-500",
+      bg: "bg-sky-500/10",
+    },
+    {
+      label: "Não configurados",
+      value: unconfigured,
+      icon: AlertTriangle,
+      color: unconfigured > 0 ? "text-amber-500" : "text-muted-foreground",
+      bg: unconfigured > 0 ? "bg-amber-500/10" : "bg-muted/40",
+    },
+    {
+      label: "Chave inválida",
+      value: broken,
+      icon: XCircle,
+      color: broken > 0 ? "text-destructive" : "text-muted-foreground",
+      bg: broken > 0 ? "bg-destructive/10" : "bg-muted/40",
+    },
   ];
 
   return (
@@ -42,27 +71,35 @@ function StatStrip({ projects }: { projects: Project[] }) {
 }
 
 export default function ProjectsPage() {
-  const navigate   = useNavigate();
-  const [addOpen, setAddOpen]     = useState(false);
+  const navigate = useNavigate();
+  const [addOpen, setAddOpen]         = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
-  const [search, setSearch]       = useState("");
+  const [search, setSearch]           = useState("");
 
-  const { data: projects = [], isLoading } = useProjects();
-  const { data: accounts = [] }            = useSupabaseAccounts();
+  const { data: projects = [], isLoading: loadingProjects } = useProjects();
+  const { data: clientes = [], isLoading: loadingClientes } = useClients();
+  const { data: accounts = [] }                             = useSupabaseAccounts();
 
-  const accountMap = useMemo(() =>
-    Object.fromEntries(accounts.map((a) => [a.id, a.label ?? a.id])),
+  const isLoading = loadingProjects || loadingClientes;
+
+  const accountMap = useMemo(
+    () => Object.fromEntries(accounts.map((a) => [a.id, a.label ?? a.id])),
     [accounts],
+  );
+
+  const clientCountByProject = useMemo(
+    () =>
+      clientes.reduce<Record<string, number>>((acc, c) => {
+        acc[c.project_id] = (acc[c.project_id] ?? 0) + 1;
+        return acc;
+      }, {}),
+    [clientes],
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return projects;
-    return projects.filter(
-      (p) =>
-        p.project_name.toLowerCase().includes(q) ||
-        p.tenant_code.toLowerCase().includes(q),
-    );
+    return projects.filter((p) => p.project_name.toLowerCase().includes(q));
   }, [projects, search]);
 
   if (isLoading) {
@@ -82,7 +119,7 @@ export default function ProjectsPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Projetos</h1>
             <p className="mt-1 text-muted-foreground">
-              Projetos Supabase provisionados — cada projeto contém um ou mais clientes.
+              Cada projeto é uma conta Supabase que contém um ou mais clientes.
             </p>
           </div>
           <Button onClick={() => setAddOpen(true)}>
@@ -91,12 +128,12 @@ export default function ProjectsPage() {
           </Button>
         </div>
 
-        <StatStrip projects={projects} />
+        <StatStrip projects={projects} totalClientes={clientes.length} />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome ou código..."
+            placeholder="Buscar por nome do projeto..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -109,6 +146,7 @@ export default function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 project={project}
+                clientCount={clientCountByProject[project.id] ?? 0}
                 accountLabel={accountMap[project.supabase_account_id ?? ""] ?? undefined}
                 onEdit={(p) => setEditProject(p)}
                 onClick={(p) => navigate(`/clients/${p.id}`)}
@@ -122,7 +160,9 @@ export default function ProjectsPage() {
               {search ? "Nenhum projeto encontrado" : "Nenhum projeto cadastrado"}
             </p>
             <p className="mt-1 text-muted-foreground">
-              {search ? "Tente ajustar sua busca" : "Adicione seu primeiro projeto para começar"}
+              {search
+                ? "Tente ajustar sua busca"
+                : "Adicione seu primeiro projeto para começar"}
             </p>
             {!search && (
               <Button className="mt-4" onClick={() => setAddOpen(true)}>

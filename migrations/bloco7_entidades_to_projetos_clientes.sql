@@ -16,6 +16,7 @@
 --  11. Habilita RLS em clientes
 --  12. Renomeia onboarding_jobs.entidade_id → projeto_id e recria FK
 --  13. Expande CHECK de status do onboarding_jobs (adiciona finalizing_setup, etc.)
+--  14. Renomeia schema_sync_status.entidade_id → projeto_id e recria FK
 --
 -- ATENÇÃO: irreversível. Fazer backup antes de aplicar em produção.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -93,18 +94,19 @@ CREATE TABLE public.clientes (
   logo_url          text,
   assinatura        text        NOT NULL DEFAULT 'trial',
   acesso_expira_em  timestamptz,
-  max_socios        integer     NOT NULL DEFAULT 0,
+  max_socios        integer     NOT NULL DEFAULT 0 CHECK (max_socios >= 0),
   status            text        NOT NULL DEFAULT 'active',
   data_cadastro     timestamptz NOT NULL DEFAULT now(),
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
 
-  CONSTRAINT clientes_pkey             PRIMARY KEY (id),
-  CONSTRAINT clientes_project_id_fkey  FOREIGN KEY (project_id)
+  CONSTRAINT clientes_pkey                        PRIMARY KEY (id),
+  CONSTRAINT clientes_project_id_fkey             FOREIGN KEY (project_id)
     REFERENCES public.projetos(id) ON DELETE CASCADE,
-  CONSTRAINT clientes_tenant_code_key  UNIQUE (tenant_code),
-  CONSTRAINT clientes_assinatura_check CHECK (assinatura IN ('trial', 'monthly', 'annual')),
-  CONSTRAINT clientes_status_check     CHECK (status IN ('active', 'inactive', 'suspended'))
+  CONSTRAINT clientes_tenant_code_key             UNIQUE (tenant_code),
+  CONSTRAINT clientes_project_runtime_tenant_key  UNIQUE (project_id, runtime_tenant_id),
+  CONSTRAINT clientes_assinatura_check            CHECK (assinatura IN ('trial', 'monthly', 'annual')),
+  CONSTRAINT clientes_status_check                CHECK (status IN ('active', 'inactive', 'suspended'))
 );
 
 CREATE INDEX clientes_project_id_idx ON public.clientes (project_id);
@@ -227,6 +229,30 @@ ALTER TABLE public.onboarding_jobs
     'completed',
     'failed'
   ));
+
+
+-- ── 14. schema_sync_status: entidade_id → projeto_id ────────────────────────
+--    FK referenciava entidades por OID — o rename já atualizou o alvo,
+--    mas o nome da coluna ainda é entidade_id.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'schema_sync_status'
+      AND column_name  = 'entidade_id'
+  ) THEN
+    ALTER TABLE public.schema_sync_status
+      DROP CONSTRAINT IF EXISTS schema_sync_status_entidade_id_fkey;
+
+    ALTER TABLE public.schema_sync_status
+      RENAME COLUMN entidade_id TO projeto_id;
+
+    ALTER TABLE public.schema_sync_status
+      ADD CONSTRAINT schema_sync_status_projeto_id_fkey
+      FOREIGN KEY (projeto_id) REFERENCES public.projetos(id);
+  END IF;
+END $$;
 
 
 COMMIT;

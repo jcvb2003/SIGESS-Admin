@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { AppSidebar } from "./AppSidebar";
+import { AppNavbar } from "./AppNavbar";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -7,8 +7,8 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden">
-      <AppSidebar />
+    <div className="flex h-screen flex-col bg-background overflow-hidden">
+      <AppNavbar />
       <main className="flex-1 overflow-y-auto">
         <div className="container max-w-7xl py-8">
           {children}

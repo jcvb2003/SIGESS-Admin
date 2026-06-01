@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { runManagementQuery, extractProjectRef } from '@/shared/supabase-management';
-import { getOeirasMigrations, getTenantAppliedVersions, Migration } from './migration-catalog';
+import { getReferenceMigrations, getTenantAppliedVersions, Migration } from './migration-catalog';
 
 /**
  * Gate de segurança para evitar comandos destrutivos acidentais durante a propagação massiva
@@ -25,7 +25,7 @@ export type TenantConfig = {
 }
 
 export type PropagateOptions = {
-  oeiras: TenantConfig;
+  reference: TenantConfig;
   tenants: TenantConfig[];
   targetTenant?: string;
   dryRun?: boolean;
@@ -42,27 +42,26 @@ export type PropagateResult = {
 }
 
 /**
- * Propaga migrations de Oeiras para os demais tenants selecionados
+ * Propaga migrations do Rayssa (referência) para os demais tenants selecionados
  */
-export async function propagateFromOeiras(
+export async function propagateFromReference(
   options: PropagateOptions,
   adminClient: ReturnType<typeof createClient>
 ): Promise<PropagateResult[]> {
-  const { oeiras, tenants, targetTenant, dryRun, fromVersion } = options;
+  const { reference, tenants, targetTenant, dryRun, fromVersion } = options;
   const results: PropagateResult[] = [];
 
-  console.log(`📡 Obtendo catálogo de migrations de OEIRAS...`);
-  let oeirasMigrations: Migration[] = [];
+  console.log(`📡 Obtendo catálogo de migrations do Rayssa (referência)...`);
+  let referenceMigrations: Migration[] = [];
   try {
-    oeirasMigrations = await getOeirasMigrations(oeiras.url, oeiras.managementToken);
+    referenceMigrations = await getReferenceMigrations(reference.url, reference.managementToken);
   } catch (err) {
-    console.error(`❌ Erro crítico ao ler OEIRAS:`, err);
-    throw new Error(`Falha ao iniciar: impossível ler migrations de referência (Oeiras).`);
+    console.error(`❌ Erro crítico ao ler referência (Rayssa):`, err);
+    throw new Error(`Falha ao iniciar: impossível ler migrations de referência (Rayssa).`);
   }
 
   for (const tenant of tenants) {
-    // Pula o próprio OEIRAS e filtra por tenant específico se solicitado
-    if (tenant.id === oeiras.id) continue;
+    if (tenant.id === reference.id) continue;
     if (targetTenant && tenant.id !== targetTenant) continue;
 
     console.log(`\n🔍 Processando tenant: ${tenant.id}...`);
@@ -77,7 +76,7 @@ export async function propagateFromOeiras(
       const tenantProjectRef = extractProjectRef(tenant.url);
       const tenantAppliedVersions = await getTenantAppliedVersions(tenant.url, tenant.managementToken);
 
-      const pending = oeirasMigrations.filter(m => {
+      const pending = referenceMigrations.filter(m => {
         if (fromVersion && m.version < fromVersion) return false;
         if (tenantAppliedVersions.has(m.version)) {
           tenantResult.skipped.push(m.version);
@@ -128,7 +127,7 @@ export async function propagateFromOeiras(
           let integrityCheckPassed = true;
           if (functionsToVerify.length > 0) {
             console.log(`    🔍 Verificando integridade de ${functionsToVerify.length} funções...`);
-            const oeirasProjectRef = extractProjectRef(oeiras.url);
+            const referenceProjectRef = extractProjectRef(reference.url);
             
             for (const fn of functionsToVerify) {
               const hashQuery = `
@@ -139,16 +138,16 @@ export async function propagateFromOeiras(
                   AND pg_get_function_identity_arguments(p.oid) = '${fn.args.replace(/'/g, "''")}';
               `;
               
-              const [oeirasRes, tenantRes] = await Promise.all([
-                runManagementQuery(oeirasProjectRef, oeiras.managementToken, hashQuery),
+              const [referenceRes, tenantRes] = await Promise.all([
+                runManagementQuery(referenceProjectRef, reference.managementToken, hashQuery),
                 runManagementQuery(tenantProjectRef, tenant.managementToken, hashQuery)
               ]);
 
-              const oeirasHash = oeirasRes[0]?.hash;
+              const referenceHash = referenceRes[0]?.hash;
               const tenantHash = tenantRes[0]?.hash;
 
-              if (!oeirasHash || !tenantHash || oeirasHash !== tenantHash) {
-                const errorDetail = `Hash mismatch na função ${fn.name}. Esperado (OEIRAS): ${oeirasHash || 'N/A'}, Obtido (${tenant.id}): ${tenantHash || 'N/A'}`;
+              if (!referenceHash || !tenantHash || referenceHash !== tenantHash) {
+                const errorDetail = `Hash mismatch na função ${fn.name}. Esperado (Rayssa): ${referenceHash || 'N/A'}, Obtido (${tenant.id}): ${tenantHash || 'N/A'}`;
                 console.error(`    ❌ Falha de integridade:`, errorDetail);
                 
                 tenantResult.failed = migration.version;

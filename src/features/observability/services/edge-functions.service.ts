@@ -11,7 +11,7 @@ export type EdgeFunctionAuditResult = {
 
 /**
  * Realiza a auditoria de todas as Edge Functions em todos os tenants registrados,
- * comparando-as com as versões presentes no tenant de referência (OEIRAS).
+ * comparando-as com as versões presentes no tenant de referência (Rayssa).
  */
 export async function auditAllEdgeFunctions(
   adminClient: ReturnType<typeof createClient>

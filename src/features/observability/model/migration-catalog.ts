@@ -10,22 +10,22 @@ export type Migration = {
 }
 
 /**
- * Busca todas as migrations registradas no ambiente de referência (OEIRAS)
- * @param oeirasUrl URL do projeto Oeiras
- * @param oeirasToken PAT (Personal Access Token) com acesso ao projeto
+ * Busca todas as migrations registradas no ambiente de referência (Rayssa)
+ * @param referenceUrl URL do projeto Rayssa
+ * @param referenceToken PAT (Personal Access Token) com acesso ao projeto
  */
-export async function getOeirasMigrations(
-  oeirasUrl: string,
-  oeirasToken: string
+export async function getReferenceMigrations(
+  referenceUrl: string,
+  referenceToken: string
 ): Promise<Migration[]> {
-  const projectRef = extractProjectRef(oeirasUrl);
+  const projectRef = extractProjectRef(referenceUrl);
   const sql = `
     SELECT version, name, statements 
     FROM supabase_migrations.schema_migrations 
     ORDER BY version ASC
   `;
 
-  const results = await runManagementQuery(projectRef, oeirasToken, sql);
+  const results = await runManagementQuery(projectRef, referenceToken, sql);
   
   return results.map((row: any) => ({
     version: row.version,
@@ -57,21 +57,21 @@ export async function getTenantAppliedVersions(
 }
 
 /**
- * Identifica quais migrations de Oeiras ainda não foram aplicadas no tenant
+ * Identifica quais migrations de Rayssa ainda não foram aplicadas no tenant
  */
 export async function getPendingMigrations(
-  oeirasUrl: string,
-  oeirasToken: string,
+  referenceUrl: string,
+  referenceToken: string,
   tenantUrl: string,
   tenantToken: string,
   fromVersion?: string
 ): Promise<Migration[]> {
-  const [oeirasMigrations, tenantVersions] = await Promise.all([
-    getOeirasMigrations(oeirasUrl, oeirasToken),
+  const [referenceMigrations, tenantVersions] = await Promise.all([
+    getReferenceMigrations(referenceUrl, referenceToken),
     getTenantAppliedVersions(tenantUrl, tenantToken)
   ]);
 
-  return oeirasMigrations.filter(m => {
+  return referenceMigrations.filter(m => {
     // Filtro por versão mínima, se fornecida
     if (fromVersion && m.version < fromVersion) return false;
     

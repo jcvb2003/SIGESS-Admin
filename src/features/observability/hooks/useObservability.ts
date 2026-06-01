@@ -357,8 +357,8 @@ export function useObservability() {
         description:
           previewMeta?.description ??
           (operations.length === 1
-            ? `1 operação ${operations[0].diffType === "extra_in_tenant" ? "remove o objeto extra" : "alinha o objeto com Oeiras"}.`
-            : "Lote preparado a partir do estado real do Oeiras, separado por tipo de objeto."),
+            ? `1 operação ${operations[0].diffType === "extra_in_tenant" ? "remove o objeto extra" : "alinha o objeto com Rayssa"}.`
+            : "Lote preparado a partir do estado real do Rayssa, separado por tipo de objeto."),
         operations,
         sql: buildPreviewSqlFromSegments(operations, previewSegments),
       });

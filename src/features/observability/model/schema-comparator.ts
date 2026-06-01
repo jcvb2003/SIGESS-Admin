@@ -494,21 +494,21 @@ function compareViews(o: ViewDef, t: ViewDef) {
 }
 
 function compareArrays<T>(
-  oeirasList: T[], 
+  referenceList: T[], 
   tenantList: T[], 
   category: DiffCategory, 
   getKey: (item: T) => string, 
   compareItems: (oItem: T, tItem: T) => { isEqual: boolean, oVal?: any, tVal?: any }
 ): SchemaDiff[] {
   const diffs: SchemaDiff[] = [];
-  const oeirasMap = new Map<string, T>();
+  const referenceMap = new Map<string, T>();
   const tenantMap = new Map<string, T>();
 
-  oeirasList.forEach(item => oeirasMap.set(getKey(item), item));
+  referenceList.forEach(item => referenceMap.set(getKey(item), item));
   tenantList.forEach(item => tenantMap.set(getKey(item), item));
 
-  // O que tem no Oeiras e falta no tenant ou está diferente
-  oeirasMap.forEach((oItem, key) => {
+  // O que tem no Rayssa e falta no tenant ou está diferente
+  referenceMap.forEach((oItem, key) => {
     if (!tenantMap.has(key)) {
       diffs.push({
         category,
@@ -531,9 +531,9 @@ function compareArrays<T>(
     }
   });
 
-  // O que tem no tenant e falta no Oeiras
+  // O que tem no tenant e falta no Rayssa
   tenantMap.forEach((tItem, key) => {
-    if (!oeirasMap.has(key)) {
+    if (!referenceMap.has(key)) {
       diffs.push({
         category,
         key,
@@ -547,13 +547,13 @@ function compareArrays<T>(
 }
 
 export function compareSnapshots(
-  oeiras: SchemaSnapshot, 
+  reference: SchemaSnapshot, 
   tenant: SchemaSnapshot,
-  oeirasStorage: StorageSnapshot | null,
+  referenceStorage: StorageSnapshot | null,
   tenantStorage: StorageSnapshot | null,
-  oeirasAuth: AuthConfig | null,
+  referenceAuth: AuthConfig | null,
   tenantAuth: AuthConfig | null,
-  oeirasFunctions: EdgeFunctionDef[] | null,
+  referenceFunctions: EdgeFunctionDef[] | null,
   tenantFunctions: EdgeFunctionDef[] | null
 ): SchemaDiff[] {
   const diffs: SchemaDiff[] = [];
@@ -561,64 +561,64 @@ export function compareSnapshots(
   const genericCompare = (o: any, t: any) => ({ isEqual: JSON.stringify(o) === JSON.stringify(t) });
 
   // Simple string arrays (tables, views)
-  diffs.push(...compareArrays(oeiras.tables || [], tenant.tables || [], 'tables', t => t, genericCompare));
-  diffs.push(...compareArrays(oeiras.views || [], tenant.views || [], 'views', v => v.name, compareViews));
+  diffs.push(...compareArrays(reference.tables || [], tenant.tables || [], 'tables', t => t, genericCompare));
+  diffs.push(...compareArrays(reference.views || [], tenant.views || [], 'views', v => v.name, compareViews));
 
   // Columns
-  diffs.push(...compareArrays(oeiras.columns || [], tenant.columns || [], 'columns', 
+  diffs.push(...compareArrays(reference.columns || [], tenant.columns || [], 'columns', 
     c => `${c.table}.${c.column}`, genericCompare));
 
   // Functions
-  diffs.push(...compareArrays(oeiras.functions || [], tenant.functions || [], 'functions', 
+  diffs.push(...compareArrays(reference.functions || [], tenant.functions || [], 'functions', 
     f => `${f.name}(${f.identity_args})`, genericCompare));
 
   // Function grants
-  diffs.push(...compareArrays(oeiras.function_grants || [], tenant.function_grants || [], 'function_grants',
+  diffs.push(...compareArrays(reference.function_grants || [], tenant.function_grants || [], 'function_grants',
     g => `${g.schema}.${g.function_name}(${g.identity_args}).${g.grantee}`, genericCompare));
 
   // Triggers
-  diffs.push(...compareArrays(oeiras.triggers || [], tenant.triggers || [], 'triggers', 
+  diffs.push(...compareArrays(reference.triggers || [], tenant.triggers || [], 'triggers', 
     t => `${t.table}.${t.name}`, genericCompare));
 
   // Constraints
-  diffs.push(...compareArrays(oeiras.constraints || [], tenant.constraints || [], 'constraints', 
+  diffs.push(...compareArrays(reference.constraints || [], tenant.constraints || [], 'constraints', 
     c => `${c.table}.${c.name}`, genericCompare));
 
   // Indexes
-  diffs.push(...compareArrays(oeiras.indexes || [], tenant.indexes || [], 'indexes', 
+  diffs.push(...compareArrays(reference.indexes || [], tenant.indexes || [], 'indexes', 
     i => `${i.table}.${i.name}`, genericCompare));
 
   // Policies
-  diffs.push(...compareArrays(oeiras.policies || [], tenant.policies || [], 'policies', 
+  diffs.push(...compareArrays(reference.policies || [], tenant.policies || [], 'policies', 
     p => `${p.schema}.${p.table}.${p.name}`, comparePolicies));
 
   // RLS State
-  diffs.push(...compareArrays(oeiras.rls_state || [], tenant.rls_state || [], 'rls_state', 
+  diffs.push(...compareArrays(reference.rls_state || [], tenant.rls_state || [], 'rls_state', 
     r => r.table, genericCompare));
 
   // Enums/Domains
-  diffs.push(...compareArrays(oeiras.enums_and_domains || [], tenant.enums_and_domains || [], 'enums_and_domains', 
+  diffs.push(...compareArrays(reference.enums_and_domains || [], tenant.enums_and_domains || [], 'enums_and_domains', 
     e => `${e.schema}.${e.name}`, genericCompare));
 
   // Extensions
-  diffs.push(...compareArrays(oeiras.extensions || [], tenant.extensions || [], 'extensions', 
+  diffs.push(...compareArrays(reference.extensions || [], tenant.extensions || [], 'extensions', 
     e => e.name, genericCompare));
 
   // Grants
-  diffs.push(...compareArrays(oeiras.grants || [], tenant.grants || [], 'grants', 
+  diffs.push(...compareArrays(reference.grants || [], tenant.grants || [], 'grants', 
     g => `${g.table}.${g.grantee}`, genericCompare));
 
   // Storage
-  if (oeirasStorage && tenantStorage) {
-    diffs.push(...compareArrays(oeirasStorage.buckets || [], tenantStorage.buckets || [], 'buckets', 
+  if (referenceStorage && tenantStorage) {
+    diffs.push(...compareArrays(referenceStorage.buckets || [], tenantStorage.buckets || [], 'buckets', 
       b => b.name, genericCompare));
-    diffs.push(...compareArrays(oeirasStorage.policies || [], tenantStorage.policies || [], 'storage_policies', 
+    diffs.push(...compareArrays(referenceStorage.policies || [], tenantStorage.policies || [], 'storage_policies', 
       p => `${p.table}.${p.name}`, comparePolicies));
   }
 
   // Edge Functions
-  if (oeirasFunctions && tenantFunctions) {
-    diffs.push(...compareArrays(oeirasFunctions || [], tenantFunctions || [], 'edge_functions', 
+  if (referenceFunctions && tenantFunctions) {
+    diffs.push(...compareArrays(referenceFunctions || [], tenantFunctions || [], 'edge_functions', 
       f => f.name, (o, t) => {
         // Compare verify_jwt explicitly or just consider them the same if name exists?
         // Let's compare verify_jwt
@@ -628,7 +628,7 @@ export function compareSnapshots(
   }
 
   // Auth Config
-  if (oeirasAuth && tenantAuth) {
+  if (referenceAuth && tenantAuth) {
     const AUTH_FIELDS_TO_COMPARE = [
       'smtp_host',
       'smtp_port', 
@@ -648,7 +648,7 @@ export function compareSnapshots(
     ];
     
     AUTH_FIELDS_TO_COMPARE.forEach(field => {
-      const oVal = oeirasAuth[field];
+      const oVal = referenceAuth[field];
       const tVal = tenantAuth[field];
       if (oVal !== tVal) {
         diffs.push({

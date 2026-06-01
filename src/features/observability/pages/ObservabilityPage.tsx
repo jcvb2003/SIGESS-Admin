@@ -209,9 +209,9 @@ export default function ObservabilityPage() {
             <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Schema Real (Oeiras vs Tenants)</h2>
+                  <h2 className="text-lg font-semibold text-foreground">Schema Real (Rayssa vs Tenants)</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Compara fisicamente as tabelas, funções, policies, auth e triggers com a referência (Oeiras).
+                    Compara fisicamente as tabelas, funções, policies, auth e triggers com a referência (Rayssa).
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -298,7 +298,7 @@ export default function ObservabilityPage() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="rounded-md border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-slate-300">
                 {driftPreview?.description ??
-                  "O SQL abaixo é derivado do estado real do Oeiras. Para views, as colunas e grants relacionados são alinhados pela mesma operação."}
+                  "O SQL abaixo é derivado do estado real do Rayssa. Para views, as colunas e grants relacionados são alinhados pela mesma operação."}
               </div>
               
               {driftPreview && driftPreview.targets.length > 1 && (

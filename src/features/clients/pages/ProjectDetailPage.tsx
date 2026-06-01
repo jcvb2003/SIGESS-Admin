@@ -128,7 +128,7 @@ function UnconfiguredBanner({ onConfigure }: { onConfigure: () => void }) {
       <div>
         <p className="font-semibold text-foreground">Projeto não configurado</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Defina a arquitetura do projeto antes de adicionar clientes.
+          Defina a arquitetura do projeto antes de adicionar tenants.
         </p>
       </div>
       <Button onClick={onConfigure} variant="outline">
@@ -217,12 +217,12 @@ export default function ProjectDetailPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">
-                Clientes ({clientes.length})
+                Tenants ({clientes.length})
               </h2>
               {(!isIsolated || clientes.length === 0) && (
                 <Button size="sm" onClick={() => setAddClienteOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Novo Cliente
+                  Novo Tenant
                 </Button>
               )}
             </div>
@@ -230,10 +230,10 @@ export default function ProjectDetailPage() {
             {clientes.length === 0 ? (
               <Card className="flex flex-col items-center justify-center gap-3 p-8 text-center border-dashed">
                 <Users className="h-8 w-8 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">Nenhum cliente cadastrado neste projeto.</p>
+                <p className="text-sm text-muted-foreground">Nenhum tenant cadastrado neste projeto.</p>
                 <Button size="sm" variant="outline" onClick={() => setAddClienteOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Adicionar primeiro cliente
+                  Adicionar primeiro tenant
                 </Button>
               </Card>
             ) : (

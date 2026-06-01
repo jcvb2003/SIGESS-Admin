@@ -121,7 +121,7 @@ export function EditClienteModal({
           supports_units:   showSupportsUnits ? form.supports_units : cliente.supports_units,
         },
       });
-      toast.success("Cliente atualizado com sucesso");
+      toast.success("Tenant atualizado com sucesso");
       onUpdated?.(result);
       onOpenChange(false);
     } catch (error) {
@@ -144,7 +144,7 @@ export function EditClienteModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Editar Cliente</DialogTitle>
+          <DialogTitle>Editar Tenant</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto flex-1 pr-1">
@@ -227,7 +227,7 @@ export function EditClienteModal({
             {showSupportsUnits && (
               <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background px-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium">Este cliente tem polos?</p>
+                  <p className="text-sm font-medium">Este tenant tem polos?</p>
                   <p className="text-[11px] text-muted-foreground">Projeto híbrido — define disponibilidade de polos.</p>
                 </div>
                 <Switch
@@ -285,7 +285,7 @@ export function EditClienteModal({
             <Separator />
             <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
               <div>
-                <p className="text-sm font-medium text-destructive">Excluir cliente</p>
+                <p className="text-sm font-medium text-destructive">Excluir tenant</p>
                 <p className="text-xs text-muted-foreground">Remove permanentemente do Admin.</p>
               </div>
               <Button

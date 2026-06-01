@@ -138,7 +138,7 @@ export default function ClienteDetailPage() {
       <MainLayout>
         <div className="flex h-64 flex-col items-center justify-center gap-4">
           <AlertCircle className="h-8 w-8 text-destructive" />
-          <h2 className="text-xl font-bold">Cliente não encontrado</h2>
+          <h2 className="text-xl font-bold">Tenant não encontrado</h2>
           <Button variant="link" onClick={() => navigate(`/clients/${projectId}`)}>
             Voltar ao projeto
           </Button>
@@ -186,7 +186,7 @@ export default function ClienteDetailPage() {
           </div>
           <Button onClick={() => setEditOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" />
-            Editar Cliente
+            Editar Tenant
           </Button>
         </div>
 
@@ -229,7 +229,7 @@ export default function ClienteDetailPage() {
                   <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
                     <Building2 className="h-7 w-7 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">
-                      Este cliente ainda não possui um tenant runtime associado.
+                      Este tenant ainda não possui um ID runtime associado.
                     </p>
                   </Card>
                 )}

@@ -123,10 +123,10 @@ export function ProjectCard({ project, clientCount, accountLabel, onEdit, onClic
         <Users className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-[12px] font-medium text-foreground">
           {clientCount === 0
-            ? "Nenhum cliente"
+            ? "Nenhum tenant"
             : clientCount === 1
-            ? "1 cliente"
-            : `${clientCount} clientes`}
+            ? "1 tenant"
+            : `${clientCount} tenants`}
         </span>
       </div>
     </Card>

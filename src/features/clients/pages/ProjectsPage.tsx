@@ -31,7 +31,7 @@ function StatStrip({
       bg: "bg-primary/10",
     },
     {
-      label: "Clientes",
+      label: "Tenants",
       value: totalClientes,
       icon: Users,
       color: "text-sky-500",
@@ -115,7 +115,7 @@ export default function ProjectsPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Projetos</h1>
             <p className="mt-1 text-muted-foreground">
-              Cada projeto é uma conta Supabase que contém um ou mais clientes.
+              Cada projeto é uma conta Supabase que contém um ou mais tenants.
             </p>
           </div>
           <Button onClick={() => setAddOpen(true)}>

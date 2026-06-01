@@ -117,7 +117,7 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
           </DialogTitle>
           <DialogDescription>
             Provisiona um projeto Supabase e registra-o no Admin Central.
-            O primeiro cliente será definido dentro do projeto após o onboarding.
+            O primeiro tenant será definido dentro do projeto após o onboarding.
           </DialogDescription>
         </DialogHeader>
 

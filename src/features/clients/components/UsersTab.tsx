@@ -205,7 +205,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
   }, [users, onUsersLoaded]);
 
   if (loading) {
-    return <LoadingSpinner message="Buscando usuarios do cliente via Proxy..." />;
+    return <LoadingSpinner message="Buscando usuários do tenant via Proxy..." />;
   }
 
   return (
@@ -362,7 +362,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
           <DialogHeader>
             <DialogTitle>Alterar nível de acesso</DialogTitle>
             <DialogDescription>
-              Defina se este usuário atua como Administrador ou Auxiliar neste cliente.
+              Defina se este usuário atua como Administrador ou Auxiliar neste tenant.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

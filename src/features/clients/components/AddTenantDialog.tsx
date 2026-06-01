@@ -127,7 +127,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="h-5 w-5 text-primary" />
-            Onboarding de Cliente
+            Onboarding de Tenant
           </DialogTitle>
           <DialogDescription>
             Preencha os dados do projeto Supabase para inicializá-lo e conectá-lo automaticamente.
@@ -322,7 +322,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
                       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
                         <Check className="h-7 w-7 text-emerald-500" />
                       </div>
-                      <p className="text-base font-semibold text-foreground">Cliente onboarded!</p>
+                      <p className="text-base font-semibold text-foreground">Tenant onboarded!</p>
                       <p className="text-xs text-muted-foreground">{tenantLabel} está pronto para uso.</p>
                     </>
                   )}
@@ -368,7 +368,7 @@ export function AddTenantDialog({ open, onOpenChange }: Readonly<AddTenantDialog
                 {/* Ações */}
                 {isDone && (
                   <Button onClick={handleClose} className="w-full">
-                    Finalizar e ver cliente
+                    Finalizar e ver tenant
                   </Button>
                 )}
 

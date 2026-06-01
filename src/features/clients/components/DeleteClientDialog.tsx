@@ -35,7 +35,7 @@ export function DeleteClientDialog({
     e.preventDefault();
     
     if (confirmName !== clientName) {
-      toast.error("O nome do cliente não confere.");
+      toast.error("O nome do tenant não confere.");
       return;
     }
 
@@ -52,13 +52,13 @@ export function DeleteClientDialog({
       // 2. Executar deleção
       await onConfirm();
       
-      toast.success("Cliente excluído com sucesso.");
+      toast.success("Tenant excluído com sucesso.");
       onOpenChange(false);
       setPassword("");
       setConfirmName("");
     } catch (error) {
       const err = error as Error;
-      toast.error(err.message || "Erro ao excluir cliente.");
+      toast.error(err.message || "Erro ao excluir tenant.");
     } finally {
       setIsDeleting(false);
     }
@@ -70,10 +70,10 @@ export function DeleteClientDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            Excluir Cliente
+            Excluir Tenant
           </DialogTitle>
           <DialogDescription>
-            Esta ação é irreversível. Todos os dados do projeto Supabase vinculados a este cliente no Admin serão removidos.
+            Esta ação é irreversível. Todos os dados do projeto Supabase vinculados a este tenant no Admin serão removidos.
           </DialogDescription>
         </DialogHeader>
 
@@ -84,7 +84,7 @@ export function DeleteClientDialog({
             </Label>
             <Input
               id="confirmName"
-              placeholder="Digite o nome do cliente"
+              placeholder="Digite o nome do tenant"
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
               autoComplete="off"

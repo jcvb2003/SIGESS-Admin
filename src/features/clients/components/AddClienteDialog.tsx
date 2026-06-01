@@ -108,7 +108,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
         }
       }
 
-      toast.success(`Cliente "${result.nome_entidade}" criado com sucesso.`);
+      toast.success(`Tenant "${result.nome_entidade}" criado com sucesso.`);
       onCreated?.(result.id);
       onOpenChange(false);
       setForm({
@@ -117,7 +117,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
         acesso_expira_em: "", max_socios: "0", supports_units: false,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao criar cliente.");
+      toast.error(error instanceof Error ? error.message : "Erro ao criar tenant.");
     }
   };
 
@@ -127,10 +127,10 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary" />
-            Novo Cliente
+            Novo Tenant
           </DialogTitle>
           <DialogDescription>
-            Adiciona um cliente/tenant ao projeto <strong>{project.project_name}</strong>.
+            Adiciona um tenant ao projeto <strong>{project.project_name}</strong>.
           </DialogDescription>
           {!project.topology.startsWith("shared") && (
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
@@ -198,7 +198,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
             {showSupportsUnits && (
               <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background px-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium">Este cliente tem polos?</p>
+                  <p className="text-sm font-medium">Este tenant tem polos?</p>
                   <p className="text-[11px] text-muted-foreground">
                     Relevante pois o projeto é híbrido.
                   </p>
@@ -256,7 +256,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
               {createCliente.isPending
                 ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 : <UserPlus className="mr-2 h-4 w-4" />}
-              Criar Cliente
+              Criar Tenant
             </Button>
           </div>
         </form>

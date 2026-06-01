@@ -1,14 +1,9 @@
-export { useClients, clientsQueryKey } from "./hooks/useClients";
-export { useClientDetail } from "./hooks/useClientDetail";
-export { useUpdateClient, useDeleteClient } from "./hooks/useClientMutations";
 export * from "./types";
-export * from "./components/ClientCard";
-export * from "./components/AddTenantDialog";
-export * from "./components/EditClientModal";
+export { useClients, clientsQueryKey } from "./hooks/useClients";
 export * from "./components/HealthCheckCard";
 export * from "./components/MigrationsTab";
 export * from "./components/TablesTab";
 export * from "./components/UsersTab";
 export * from "./components/UnitsTab";
 export * from "./components/DeleteClientDialog";
-export * from "./components/SubscriptionModal";
+export * from "./components/AddTenantDialog";

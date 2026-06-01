@@ -243,7 +243,7 @@ export default function ProjectDetailPage() {
 
         {/* Info cards */}
         <div className="grid gap-4 md:grid-cols-2">
-          <HealthCheckCard clientId={project.id} client={project as any} />
+          <HealthCheckCard project={project} />
           <InfraCard project={project} />
         </div>
 

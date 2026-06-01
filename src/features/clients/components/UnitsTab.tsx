@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Loader2, MapPin, Pencil, Plus, Shield, Trash2, UserCog, UserPlus } from "lucide-react";
+import { Building2, Loader2, MapPin, MoreVertical, Pencil, Plus, Shield, Trash2, UserCog, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -45,6 +52,7 @@ import {
   listSharedTenantUnits,
   listSharedTenantUsers,
   updateSharedTenantUnit,
+  updateSharedTenantUser,
 } from "@/services/clients.service";
 
 interface UnitsTabProps {
@@ -75,7 +83,7 @@ interface NewGestorFormState {
 
 const initialUnitForm: UnitFormState = { code: "", name: "", city: "", state: "" };
 const initialOperatorForm: NewOperatorFormState = {
-  email: "", nome: "", password: "", operatorType: "auxiliar", autoConfirm: true,
+  email: "", nome: "", password: "", operatorType: "presidente", autoConfirm: true,
 };
 const initialGestorForm: NewGestorFormState = {
   email: "", nome: "", password: "", autoConfirm: true,
@@ -83,40 +91,42 @@ const initialGestorForm: NewGestorFormState = {
 
 const OPERATOR_TYPE_LABEL: Record<OperatorType, string> = {
   presidente: "Presidente",
-  auxiliar:   "Auxiliar",
+  auxiliar: "Auxiliar",
 };
 
 export function UnitsTab({ tenantId }: UnitsTabProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Unit form state
-  const [unitOpen, setUnitOpen]       = useState(false);
+  // Unit dialog
+  const [unitOpen, setUnitOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<TenantUnit | null>(null);
-  const [unitForm, setUnitForm]       = useState<UnitFormState>(initialUnitForm);
+  const [unitForm, setUnitForm] = useState<UnitFormState>(initialUnitForm);
+  const [pendingDeleteUnit, setPendingDeleteUnit] = useState<TenantUnit | null>(null);
 
-  // Operator form state — scoped to a specific unit
+  // Operator dialog
   const [operatorTargetUnit, setOperatorTargetUnit] = useState<TenantUnit | null>(null);
-  const [operatorForm, setOperatorForm]             = useState<NewOperatorFormState>(initialOperatorForm);
+  const [operatorForm, setOperatorForm] = useState<NewOperatorFormState>(initialOperatorForm);
+  const [pendingDeleteOperator, setPendingDeleteOperator] = useState<TenantUser | null>(null);
 
-  // Gestor form state
-  const [gestorOpen, setGestorOpen]   = useState(false);
-  const [gestorForm, setGestorForm]   = useState<NewGestorFormState>(initialGestorForm);
+  // Gestor dialog
+  const [gestorOpen, setGestorOpen] = useState(false);
+  const [gestorForm, setGestorForm] = useState<NewGestorFormState>(initialGestorForm);
   const [pendingDeleteGestor, setPendingDeleteGestor] = useState<TenantUser | null>(null);
 
-  const unitsKey      = useMemo(() => ["shared-tenant-units",       tenantId], [tenantId]);
-  const usersKey      = useMemo(() => ["shared-tenant-users",       tenantId], [tenantId]);
+  const unitsKey       = useMemo(() => ["shared-tenant-units",       tenantId], [tenantId]);
+  const usersKey       = useMemo(() => ["shared-tenant-users",       tenantId], [tenantId]);
   const membershipsKey = useMemo(() => ["shared-tenant-memberships", tenantId], [tenantId]);
 
-  const { data: units        = [], isLoading: loadingUnits }       = useQuery({ queryKey: unitsKey,       queryFn: () => listSharedTenantUnits(tenantId),   enabled: Boolean(tenantId) });
-  const { data: tenantUsers  = [], isLoading: loadingUsers }       = useQuery({ queryKey: usersKey,       queryFn: () => listSharedTenantUsers(tenantId),   enabled: Boolean(tenantId) });
-  const { data: memberships  = [], isLoading: loadingMemberships } = useQuery({ queryKey: membershipsKey, queryFn: () => listSharedMemberships(tenantId),   enabled: Boolean(tenantId) });
+  const { data: units       = [], isLoading: loadingUnits }       = useQuery({ queryKey: unitsKey,       queryFn: () => listSharedTenantUnits(tenantId),  enabled: Boolean(tenantId) });
+  const { data: tenantUsers = [], isLoading: loadingUsers }       = useQuery({ queryKey: usersKey,       queryFn: () => listSharedTenantUsers(tenantId),  enabled: Boolean(tenantId) });
+  const { data: memberships = [], isLoading: loadingMemberships } = useQuery({ queryKey: membershipsKey, queryFn: () => listSharedMemberships(tenantId),  enabled: Boolean(tenantId) });
 
   const isLoading = loadingUnits || loadingUsers || loadingMemberships;
 
   const operatorsForUnit = (unitId: string): TenantUser[] => {
     const memberIds = new Set(
-      memberships.filter((m: UserUnitMembership) => m.unit_id === unitId).map((m) => m.user_id)
+      memberships.filter((m: UserUnitMembership) => m.unit_id === unitId).map((m) => m.user_id),
     );
     return tenantUsers.filter((u) => u.tenant_role === "member" && memberIds.has(u.user_id));
   };
@@ -145,7 +155,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
 
   const deleteUnitMutation = useMutation({
     mutationFn: (unitId: string) => deleteSharedTenantUnit(unitId),
-    onSuccess: () => { toast({ title: "Polo removido" }); queryClient.invalidateQueries({ queryKey: unitsKey }); },
+    onSuccess: () => { toast({ title: "Polo removido" }); queryClient.invalidateQueries({ queryKey: unitsKey }); setPendingDeleteUnit(null); },
     onError: (e) => toast({ title: "Erro ao remover polo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
 
@@ -173,9 +183,18 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
 
   const deleteOperatorMutation = useMutation({
     mutationFn: (user: TenantUser) => deleteSharedTenantUser({ tenantId, tenantUserId: user.id, authUserId: user.user_id }),
-    onSuccess: () => { toast({ title: "Operador removido" }); invalidateAll(); },
+    onSuccess: () => { toast({ title: "Operador removido" }); invalidateAll(); setPendingDeleteOperator(null); },
     onError: (e) => toast({ title: "Erro ao remover operador", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
+
+  const updateOperatorMutation = useMutation({
+    mutationFn: (input: { id: string; patch: Partial<Pick<TenantUser, "operator_type" | "is_active">> }) =>
+      updateSharedTenantUser(input.id, input.patch),
+    onSuccess: () => { toast({ title: "Operador atualizado" }); queryClient.invalidateQueries({ queryKey: usersKey }); },
+    onError: (e) => toast({ title: "Erro ao atualizar operador", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
+  });
+
+  // ── Gestor mutations ──
 
   const createGestorMutation = useMutation({
     mutationFn: () => createSharedTenantAdmin({ tenantId, email: gestorForm.email, nome: gestorForm.nome, password: gestorForm.password, autoConfirm: gestorForm.autoConfirm }),
@@ -218,12 +237,15 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
 
   return (
     <div className="space-y-6">
+
       {/* ── Gestores ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold">Gestores ({tenantUsers.filter((u) => u.tenant_role === "owner").length})</p>
+            <p className="text-sm font-semibold">
+              Gestores ({tenantUsers.filter((u) => u.tenant_role === "owner").length})
+            </p>
           </div>
           <Button onClick={() => setGestorOpen(true)} size="sm" className="gap-2">
             <UserPlus className="h-4 w-4" />
@@ -240,18 +262,30 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
         ) : (
           <div className="space-y-2">
             {tenantUsers.filter((u) => u.tenant_role === "owner").map((gestor) => (
-              <div key={gestor.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-secondary/20 px-4 py-3">
+              <div
+                key={gestor.id}
+                className="flex items-center justify-between rounded-lg border border-border/40 bg-secondary/20 px-4 py-3"
+              >
                 <div className="flex items-center gap-3 min-w-0">
                   <Shield className="h-4 w-4 shrink-0 text-primary" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{gestor.user_profiles?.nome || gestor.user_profiles?.email || gestor.user_id}</p>
+                    <p className="truncate text-sm font-medium">
+                      {gestor.user_profiles?.nome || gestor.user_profiles?.email || gestor.user_id}
+                    </p>
                     <p className="truncate text-xs text-muted-foreground">{gestor.user_profiles?.email || ""}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant={gestor.is_active ? "default" : "secondary"}>{gestor.is_active ? "Ativo" : "Inativo"}</Badge>
-                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => setPendingDeleteGestor(gestor)}>
+                  <Badge variant={gestor.is_active ? "default" : "secondary"}>
+                    {gestor.is_active ? "Ativo" : "Inativo"}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setPendingDeleteGestor(gestor)}
+                  >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -265,113 +299,114 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
 
       {/* ── Polos ── */}
       <div className="space-y-4">
-      {/* Header strip */}
-      <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-primary/5 p-4">
-        <div>
-          <p className="font-semibold text-primary">{units.length} polo(s) cadastrados</p>
-          <p className="text-sm text-muted-foreground">Gerencie os polos e seus operadores.</p>
+        <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-primary/5 p-4">
+          <div>
+            <p className="font-semibold text-primary">{units.length} polo(s) cadastrados</p>
+            <p className="text-sm text-muted-foreground">Gerencie os polos e seus operadores.</p>
+          </div>
+          <Button onClick={() => { setEditingUnit(null); setUnitForm(initialUnitForm); setUnitOpen(true); }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo polo
+          </Button>
         </div>
-        <Button onClick={() => { setEditingUnit(null); setUnitForm(initialUnitForm); setUnitOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo polo
-        </Button>
-      </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {units.map((unit) => {
-            const operators = operatorsForUnit(unit.id);
-
-            return (
-              <Card key={unit.id} className="flex flex-col p-5 gap-4">
-                {/* Unit header */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-xl bg-primary/10 p-2">
-                      <Building2 className="h-5 w-5 text-primary" />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {units.map((unit) => {
+              const operators = operatorsForUnit(unit.id);
+              return (
+                <Card key={unit.id} className="flex flex-col p-5 gap-4">
+                  {/* Unit header */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-primary/10 p-2">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{unit.name}</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Código {unit.code}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-foreground">{unit.name}</p>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Código {unit.code}
-                      </p>
-                    </div>
+                    <Badge variant={unit.is_active ? "default" : "secondary"}>
+                      {unit.is_active ? "Ativo" : "Inativo"}
+                    </Badge>
                   </div>
-                  <Badge variant={unit.is_active ? "default" : "secondary"}>
-                    {unit.is_active ? "Ativo" : "Inativo"}
-                  </Badge>
-                </div>
 
-                {/* Localidade */}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4 text-primary/70" />
-                  <span>{[unit.city, unit.state].filter(Boolean).join(" / ") || "Sem localidade"}</span>
-                </div>
+                  {/* Localidade */}
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4 text-primary/70" />
+                    <span>{[unit.city, unit.state].filter(Boolean).join(" / ") || "Sem localidade"}</span>
+                  </div>
 
-                <Separator />
+                  <Separator />
 
-                {/* Operators */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Operadores</p>
+                  {/* Operators */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Operadores
+                    </p>
+                    {operators.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Nenhum operador vinculado.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {operators.map((op) => (
+                          <OperatorRow
+                            key={op.id}
+                            user={op}
+                            onDelete={() => setPendingDeleteOperator(op)}
+                            onToggleActive={() => updateOperatorMutation.mutate({ id: op.id, patch: { is_active: !op.is_active } })}
+                            onChangeType={(type) => updateOperatorMutation.mutate({ id: op.id, patch: { operator_type: type } })}
+                            isPending={updateOperatorMutation.isPending || deleteOperatorMutation.isPending}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                  {operators.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">Nenhum operador vinculado.</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {operators.map((op) => (
-                        <OperatorRow
-                          key={op.id}
-                          user={op}
-                          label={op.operator_type === "presidente" ? "Presidente" : op.operator_type === "auxiliar" ? "Auxiliar" : "Operador"}
-                          onDelete={() => deleteOperatorMutation.mutate(op)}
-                          deleting={deleteOperatorMutation.isPending}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between gap-2 mt-auto pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => { setOperatorTargetUnit(unit); setOperatorForm(initialOperatorForm); }}
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Novo Operador
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEditUnit(unit)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Editar
-                    </Button>
+                  {/* Actions */}
+                  <div className="flex items-center justify-between gap-2 mt-auto pt-1">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-destructive hover:bg-destructive/10"
-                      onClick={() => deleteUnitMutation.mutate(unit.id)}
-                      disabled={deleteUnitMutation.isPending}
+                      className="gap-2"
+                      onClick={() => { setOperatorTargetUnit(unit); setOperatorForm(initialOperatorForm); }}
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Excluir
+                      <UserPlus className="h-4 w-4" />
+                      Novo Operador
                     </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleEditUnit(unit)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => setPendingDeleteUnit(unit)}
+                        disabled={deleteUnitMutation.isPending}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-      </div> {/* end Polos section */}
+      {/* ── Dialogs ── */}
 
-      {/* Modal: Novo/Editar Polo */}
+      {/* Novo/Editar Polo */}
       <Dialog open={unitOpen} onOpenChange={(o) => (!o ? handleCloseUnit() : setUnitOpen(o))}>
         <DialogContent>
           <DialogHeader>
@@ -415,7 +450,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Novo Operador */}
+      {/* Novo Operador */}
       <Dialog
         open={Boolean(operatorTargetUnit)}
         onOpenChange={(o) => { if (!o) { setOperatorTargetUnit(null); setOperatorForm(initialOperatorForm); } }}
@@ -424,14 +459,12 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
           <DialogHeader>
             <DialogTitle>Novo Operador</DialogTitle>
             <DialogDescription>
-              {operatorTargetUnit
-                ? `Criando operador para o polo ${operatorTargetUnit.name}.`
-                : "Criando operador."}
+              {operatorTargetUnit ? `Criando operador para o polo ${operatorTargetUnit.name}.` : "Criando operador."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="op-tipo">Tipo</Label>
+              <Label htmlFor="op-tipo">Nível</Label>
               <Select value={operatorForm.operatorType} onValueChange={(v) => setOperatorForm((p) => ({ ...p, operatorType: v as OperatorType }))}>
                 <SelectTrigger id="op-tipo"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -475,7 +508,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Novo Gestor */}
+      {/* Novo Gestor */}
       <Dialog open={gestorOpen} onOpenChange={(o) => { setGestorOpen(o); if (!o) setGestorForm(initialGestorForm); }}>
         <DialogContent>
           <DialogHeader>
@@ -516,7 +549,55 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm delete gestor */}
+      {/* Confirm: excluir polo */}
+      <AlertDialog open={Boolean(pendingDeleteUnit)} onOpenChange={(o) => { if (!o) setPendingDeleteUnit(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir polo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteUnit
+                ? `O polo "${pendingDeleteUnit.name}" e todos os seus vínculos serão removidos permanentemente.`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (pendingDeleteUnit) deleteUnitMutation.mutate(pendingDeleteUnit.id); }}
+              disabled={deleteUnitMutation.isPending}
+            >
+              {deleteUnitMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm: excluir operador */}
+      <AlertDialog open={Boolean(pendingDeleteOperator)} onOpenChange={(o) => { if (!o) setPendingDeleteOperator(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir operador?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteOperator
+                ? `${pendingDeleteOperator.user_profiles?.nome || pendingDeleteOperator.user_profiles?.email || "Este operador"} perderá o acesso ao Web permanentemente.`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (pendingDeleteOperator) deleteOperatorMutation.mutate(pendingDeleteOperator); }}
+              disabled={deleteOperatorMutation.isPending}
+            >
+              {deleteOperatorMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm: excluir gestor */}
       <AlertDialog open={Boolean(pendingDeleteGestor)} onOpenChange={(o) => { if (!o) setPendingDeleteGestor(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -530,6 +611,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => { if (pendingDeleteGestor) deleteGestorMutation.mutate(pendingDeleteGestor); }}
               disabled={deleteGestorMutation.isPending}
             >
@@ -542,19 +624,29 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   );
 }
 
+// ─── OperatorRow ─────────────────────────────────────────────────────────────
+
 function OperatorRow({
   user,
-  label,
   onDelete,
-  deleting,
+  onToggleActive,
+  onChangeType,
+  isPending,
 }: {
   user: TenantUser;
-  label: string;
   onDelete: () => void;
-  deleting: boolean;
+  onToggleActive: () => void;
+  onChangeType: (type: OperatorType) => void;
+  isPending: boolean;
 }) {
+  const label = user.operator_type === "presidente"
+    ? "Presidente"
+    : user.operator_type === "auxiliar"
+      ? "Auxiliar"
+      : "Operador";
+
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md border border-border/40 bg-secondary/20 px-3 py-2">
+    <div className={`flex items-center justify-between gap-2 rounded-md border border-border/40 bg-secondary/20 px-3 py-2 ${!user.is_active ? "opacity-60" : ""}`}>
       <div className="flex items-center gap-2 min-w-0">
         <UserCog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
@@ -566,18 +658,48 @@ function OperatorRow({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+
+      <div className="flex items-center gap-1.5 shrink-0">
         <Badge variant="outline" className="text-[10px]">{label}</Badge>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-          disabled={deleting}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground"
+              disabled={isPending}
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={onToggleActive}>
+              {user.is_active ? "Desativar" : "Ativar"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={user.operator_type === "presidente"}
+              onClick={() => onChangeType("presidente")}
+            >
+              Promover a Presidente
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={user.operator_type === "auxiliar"}
+              onClick={() => onChangeType("auxiliar")}
+            >
+              Rebaixar a Auxiliar
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDelete}
+            >
+              Excluir
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

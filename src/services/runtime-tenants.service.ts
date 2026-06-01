@@ -23,7 +23,7 @@ export async function listSharedTenants(): Promise<SharedTenant[]> {
 }
 
 export async function createSharedTenantForProject(
-  projectId: string,
+  clienteId: string,           // ID do registro em `clientes` a ser vinculado
   input: { name: string; code: string },
 ): Promise<SharedTenant> {
   const sharedAdmin = getSharedSupabaseAdmin();
@@ -58,13 +58,11 @@ export async function createSharedTenantForProject(
     if (result.error) throw handleSupabaseError(result.error);
   }
 
-  // Atualiza runtime_tenant_id no cliente central correspondente
+  // Vincula o tenant runtime ao cliente central específico pelo ID exato
   const { error: updateError } = await supabase
     .from("clientes")
     .update({ runtime_tenant_id: tenantId })
-    .eq("project_id", projectId)
-    .is("runtime_tenant_id", null)
-    .limit(1);
+    .eq("id", clienteId);
 
   if (updateError) throw handleSupabaseError(updateError);
 

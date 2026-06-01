@@ -397,14 +397,14 @@ async function healthCheck(
   };
 }
 
-async function getOeirasConfig(supabaseAdmin: SupabaseClient) {
-  const { data: oeiras, error } = await supabaseAdmin
+async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
+  const { data: reference, error } = await supabaseAdmin
     .from("entidades")
     .select("id, nome_entidade, supabase_url, supabase_secret_keys, supabase_access_token")
-    .eq("tenant_code", "sinpesca-oeiras")
-    .single();
-  if (error || !oeiras) throw new Error("Oeiras (Fonte de Verdade) não encontrada no cadastro de entidades");
-  return oeiras;
+    .eq("tenant_code", "sinpesca")
+    .maybeSingle();
+  if (error || !reference) throw new Error("Rayssa (referência) não encontrada no cadastro de entidades");
+  return reference;
 }
 
 const CANONICAL_AUTH_CONFIG_FIELDS = new Set([
@@ -467,13 +467,13 @@ async function buildAuthConfigSyncPlan(
     throw createHttpError(`Campo auth_config ainda nÃ£o suportado: ${objectName}`, 400);
   }
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
 
-  const oeirasConfig = await fetchProjectAuthConfig(oeiras.supabase_url, oeiras.supabase_access_token);
-  const value = oeirasConfig?.[objectName];
+  const refAuthConfig = await fetchProjectAuthConfig(refConfig.supabase_url, refConfig.supabase_access_token);
+  const value = refAuthConfig?.[objectName];
 
   return {
     payload: { [objectName]: value },
@@ -489,8 +489,8 @@ async function buildViewSyncSql(
   assertSafeIdentifier(objectName, "objectName");
   assertSafeIdentifier(schemaName, "schema");
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
 
@@ -499,8 +499,8 @@ async function buildViewSyncSql(
   const qualified = `${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)}`;
 
   const viewRows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT
         pg_get_viewdef(format('%I.%I', '${schemaLiteral}', '${objectLiteral}')::regclass, true) AS definition,
         coalesce(
@@ -520,7 +520,7 @@ async function buildViewSyncSql(
 
   const definition = viewRows?.[0]?.definition;
   if (!definition) {
-    throw createHttpError(`View ${schemaName}.${objectName} não encontrada em Oeiras`, 404);
+    throw createHttpError(`View ${schemaName}.${objectName} não encontrada no Rayssa`, 404);
   }
   const securityInvoker = Boolean(viewRows?.[0]?.security_invoker);
   const grantStatements = [
@@ -690,14 +690,14 @@ async function buildIndexSyncSql(
     return `DROP INDEX IF EXISTS ${qualifiedIndex};`;
   }
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT indexdef
      FROM pg_indexes
      WHERE schemaname = '${escapeLiteral(schemaName)}'
@@ -708,7 +708,7 @@ async function buildIndexSyncSql(
 
   const definition = rows?.[0]?.indexdef;
   if (!definition) {
-    throw createHttpError(`Index ${schemaName}.${tableName}.${indexName} não encontrado em Oeiras`, 404);
+    throw createHttpError(`Index ${schemaName}.${tableName}.${indexName} não encontrado no Rayssa`, 404);
   }
 
   const normalizedDefinition = definition
@@ -745,14 +745,14 @@ async function buildPolicySyncSql(
     return dropSql;
   }
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
      FROM pg_policies
      WHERE schemaname = '${escapeLiteral(schemaName)}'
@@ -763,7 +763,7 @@ async function buildPolicySyncSql(
 
   const policy = rows?.[0];
   if (!policy) {
-    throw createHttpError(`Policy ${schemaName}.${tableName}.${policyName} não encontrada em Oeiras`, 404);
+    throw createHttpError(`Policy ${schemaName}.${tableName}.${policyName} não encontrada no Rayssa`, 404);
   }
 
   const roles = normalizeRoles(policy.roles);
@@ -801,14 +801,14 @@ async function buildGrantSyncSql(
   assertSafeIdentifier(tableName, "tableName");
   assertSafeIdentifier(grantee, "grantee");
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT
         c.relkind,
         (
@@ -871,14 +871,14 @@ async function buildFunctionSyncSql(
     );
   }
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT pg_get_functiondef(p.oid) AS definition
      FROM pg_proc p
      JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -890,7 +890,7 @@ async function buildFunctionSyncSql(
 
   const definition = rows?.[0]?.definition as string | null | undefined;
   if (!definition) {
-    throw createHttpError(`Function ${schemaName}.${objectName} nÃ£o encontrada em Oeiras`, 404);
+    throw createHttpError(`Function ${schemaName}.${objectName} nÃ£o encontrada no Rayssa`, 404);
   }
 
   return ensureSqlTerminator(await rewriteTenantSpecificFunctionDefinition(client, functionName, definition));
@@ -905,14 +905,14 @@ async function buildFunctionGrantSyncSql(
   const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
   assertSafeIdentifier(functionName, "functionName");
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT has_function_privilege(
               '${escapeLiteral(grantee)}',
               p.oid,
@@ -985,14 +985,14 @@ async function buildTriggerSyncSql(
     return dropSql;
   }
 
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  if (!oeiras.supabase_access_token) {
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
 
   const rows = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token,
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
     `SELECT pg_get_triggerdef(tg.oid, true) AS definition
      FROM pg_trigger tg
      JOIN pg_class cls ON cls.oid = tg.tgrelid
@@ -1006,7 +1006,7 @@ async function buildTriggerSyncSql(
 
   const definition = rows?.[0]?.definition as string | null | undefined;
   if (!definition) {
-    throw createHttpError(`Trigger ${schemaName}.${tableName}.${triggerName} nÃ£o encontrada em Oeiras`, 404);
+    throw createHttpError(`Trigger ${schemaName}.${tableName}.${triggerName} nÃ£o encontrada no Rayssa`, 404);
   }
 
   if (diffType === "different_definition") {
@@ -1016,10 +1016,147 @@ async function buildTriggerSyncSql(
   return [dropSql, `${definition.trim().replace(/;$/, "")};`].join("\n");
 }
 
+function buildColumnTypeStr(col: {
+  data_type: string;
+  udt_name: string;
+  character_maximum_length?: number | null;
+  numeric_precision?: number | null;
+  numeric_scale?: number | null;
+}): string {
+  const dt = col.data_type.toLowerCase();
+  if (dt === "character varying" || dt === "varchar") {
+    return col.character_maximum_length ? `varchar(${col.character_maximum_length})` : "text";
+  }
+  if (dt === "numeric" || dt === "decimal") {
+    if (col.numeric_precision != null && col.numeric_scale != null) {
+      return `numeric(${col.numeric_precision},${col.numeric_scale})`;
+    }
+    return "numeric";
+  }
+  if (dt === "array") {
+    return `${col.udt_name.replace(/^_/, "")}[]`;
+  }
+  if (dt === "user-defined") {
+    return quoteIdentifier(col.udt_name);
+  }
+  return dt;
+}
+
+async function buildColumnSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: columnName } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+  assertSafeIdentifier(columnName, "columnName");
+
+  if (diffType === "extra_in_tenant") {
+    throw createHttpError(
+      `Remoção automática de colunas não suportada — avalie manualmente: ${schemaName}.${tableName}.${columnName}`,
+      400,
+    );
+  }
+
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT column_name, data_type, udt_name, is_nullable, column_default,
+            character_maximum_length, numeric_precision, numeric_scale
+     FROM information_schema.columns
+     WHERE table_schema = '${escapeLiteral(schemaName)}'
+       AND table_name   = '${escapeLiteral(tableName)}'
+       AND column_name  = '${escapeLiteral(columnName)}'
+     LIMIT 1`,
+  );
+
+  const col = rows?.[0];
+  if (!col) {
+    throw createHttpError(`Column ${schemaName}.${tableName}.${columnName} não encontrada no Rayssa`, 404);
+  }
+
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+  const quotedColumn = quoteIdentifier(columnName);
+
+  if (diffType === "missing_in_tenant") {
+    const typeStr = buildColumnTypeStr(col);
+    const nullableStr = col.is_nullable === "YES" ? "" : " NOT NULL";
+    const defaultStr = col.column_default ? ` DEFAULT ${col.column_default}` : "";
+    return `ALTER TABLE ${qualifiedTable} ADD COLUMN IF NOT EXISTS ${quotedColumn} ${typeStr}${nullableStr}${defaultStr};`;
+  }
+
+  // different_definition: only sync DEFAULT (type changes require manual migration)
+  if (col.column_default) {
+    return `ALTER TABLE ${qualifiedTable} ALTER COLUMN ${quotedColumn} SET DEFAULT ${col.column_default};`;
+  }
+  return `ALTER TABLE ${qualifiedTable} ALTER COLUMN ${quotedColumn} DROP DEFAULT;`;
+}
+
+async function buildConstraintSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  const { head: tableName, remainder: constraintName } = splitQualifiedObjectName(objectName, "objectName");
+  assertSafeIdentifier(tableName, "tableName");
+
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+  const quotedConstraint = quoteIdentifier(constraintName);
+  const dropSql = `ALTER TABLE ${qualifiedTable} DROP CONSTRAINT IF EXISTS ${quotedConstraint};`;
+
+  if (diffType === "extra_in_tenant") {
+    return dropSql;
+  }
+
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT pg_get_constraintdef(con.oid, true) AS definition
+     FROM pg_constraint con
+     JOIN pg_class rel ON rel.oid = con.conrelid
+     JOIN pg_namespace n ON n.oid = rel.relnamespace
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND rel.relname = '${escapeLiteral(tableName)}'
+       AND con.conname = '${escapeLiteral(constraintName)}'
+     LIMIT 1`,
+  );
+
+  const def = rows?.[0]?.definition as string | null | undefined;
+  if (!def) {
+    throw createHttpError(`Constraint ${schemaName}.${tableName}.${constraintName} não encontrada no Rayssa`, 404);
+  }
+
+  // Phase G guard: FK to user_profiles via user_id is a Phase G migration
+  if (def.includes("user_profiles(id)") && constraintName.endsWith("_user_id_fkey")) {
+    throw createHttpError(
+      `${constraintName} é uma FK da Fase G (→ user_profiles) e não pode ser sincronizada automaticamente`,
+      400,
+    );
+  }
+
+  const addSql = `ALTER TABLE ${qualifiedTable} ADD CONSTRAINT ${quotedConstraint} ${def};`;
+  if (diffType === "missing_in_tenant") return addSql;
+  return [dropSql, addSql].join("\n");
+}
+
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
   client: ClientConfig,
-  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger",
+  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger" | "column" | "constraint",
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -1051,6 +1188,14 @@ async function buildSchemaDriftSql(
     return await buildTriggerSyncSql(supabaseAdmin, objectName, schemaName, diffType);
   }
 
+  if (objectType === "column") {
+    return await buildColumnSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  }
+
+  if (objectType === "constraint") {
+    return await buildConstraintSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  }
+
   return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
 }
 
@@ -1062,7 +1207,7 @@ async function applySchemaDriftBatch(
 ) {
   const { operations, mode } = params;
 
-  if (client.tenant_code === "sinpesca-oeiras") {
+  if (client.tenant_code === "sinpesca") {
     throw createHttpError("O tenant de referÃªncia nÃ£o pode ser sincronizado contra ele mesmo", 400);
   }
 
@@ -1088,8 +1233,8 @@ async function applySchemaDriftBatch(
       throw createHttpError("auth_config ainda nÃ£o pode ser processado em lote", 400);
     }
 
-    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger"].includes(objectType)) {
-      throw createHttpError(`Tipo de objeto ainda nÃ£o suportado em lote: ${objectType}`, 400);
+    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger", "column", "constraint"].includes(objectType)) {
+      throw createHttpError(`Tipo de objeto ainda não suportado em lote: ${objectType}`, 400);
     }
 
     if (!["missing_in_tenant", "extra_in_tenant", "different_definition"].includes(diffType)) {
@@ -1180,7 +1325,7 @@ async function applySchemaDrift(
 
   const { objectType, objectName, schema = "public", mode, diffType } = params as ApplySchemaDriftParams;
 
-  if (client.tenant_code === "sinpesca-oeiras") {
+  if (client.tenant_code === "sinpesca") {
     throw createHttpError("O tenant de referência não pode ser sincronizado contra ele mesmo", 400);
   }
 
@@ -1188,7 +1333,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger"].includes(objectType)) {
+  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger", "column", "constraint"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 
@@ -1262,39 +1407,35 @@ async function applySchemaDrift(
 }
 
 async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
-  // 1. Lê OEIRAS UMA ÚNICA VEZ
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  const oeirasMigrations = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token!,
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refMigrations = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token!,
     "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version ASC"
   );
-  const oeirasVersions = (oeirasMigrations || []).map((m: any) => m.version);
-  const latestOeirasVersion = oeirasVersions.at(-1) ?? null;
-  const oeirasTotal = oeirasVersions.length;
+  const refVersions = (refMigrations || []).map((m: any) => m.version);
+  const latestRefVersion = refVersions.at(-1) ?? null;
+  const refTotal = refVersions.length;
 
-  // 2. Lê todos os tenants do Admin (exceto OEIRAS)
   const { data: tenants, error } = await supabaseAdmin
     .from("entidades")
     .select("id, nome_entidade, supabase_url, supabase_access_token")
-    .neq("tenant_code", "sinpesca-oeiras")
+    .neq("tenant_code", "sinpesca")
     .not("supabase_access_token", "is", null);
 
   if (error) throw new Error(`Erro ao buscar tenants: ${error.message}`);
 
-  // 3. Calcula diff para cada tenant (sequencial — evita fan-out)
   const results: Record<string, any> = {};
 
-  // Inclui OEIRAS como sincronizado
-  results[oeiras.id] = {
-    tenantName: oeiras.nome_entidade,
-    latestOeirasVersion,
-    latestTenantVersion: latestOeirasVersion,
+  results[refConfig.id] = {
+    tenantName: refConfig.nome_entidade,
+    latestRefVersion,
+    latestTenantVersion: latestRefVersion,
     pendingCount: 0,
     pending: [],
     hasPending: false,
-    applied: oeirasTotal,
-    total: oeirasTotal,
+    applied: refTotal,
+    total: refTotal,
   };
 
   for (const tenant of tenants ?? []) {
@@ -1312,11 +1453,11 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
       }
 
       const tenantVersionSet = new Set(tenantVersions);
-      const pending = oeirasVersions.filter(v => !tenantVersionSet.has(v));
+      const pending = refVersions.filter(v => !tenantVersionSet.has(v));
 
       results[tenant.id] = {
         tenantName: tenant.nome_entidade,
-        latestOeirasVersion,
+        latestRefVersion,
         latestTenantVersion: tenantVersions.at(-1) ?? null,
         pendingCount: pending.length,
         pending,
@@ -1332,22 +1473,19 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
     }
   }
 
-  return { 
-    success: true, 
-    oeirasVersion: latestOeirasVersion, 
-    oeirasTotal,
-    tenants: results 
+  return {
+    success: true,
+    referenceVersion: latestRefVersion,
+    referenceTotal: refTotal,
+    tenants: results
   };
 }
 
 async function getMigrationsStatus(tenantId: string, clientUrl: string, clientKey: string, supabaseAdmin: SupabaseClient) {
-  // 1. Get Oeiras Config (Fonte de Verdade)
-  const oeiras = await getOeirasConfig(supabaseAdmin);
-  
-  // 2. Read Oeiras migrations via Management API
-  const oeirasMigrations = await runSql(
-    oeiras.supabase_url, 
-    oeiras.supabase_access_token!, 
+  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refMigrations = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token!,
     "SELECT version, name, statements FROM supabase_migrations.schema_migrations ORDER BY version ASC"
   );
 
@@ -1366,7 +1504,7 @@ async function getMigrationsStatus(tenantId: string, clientUrl: string, clientKe
 
   const existingMap = new Map(tenantMigrations?.map((m: any) => [m.version, true]) || []);
 
-  const migrations = (oeirasMigrations || []).map((m: any) => {
+  const migrations = (refMigrations || []).map((m: any) => {
     const isApplied = existingMap.has(m.version);
     return {
       version: m.version,
@@ -1394,16 +1532,14 @@ async function executeMigration(
   tenantId: string, 
   supabaseAdmin: SupabaseClient
 ) {
-  // 1. Get configs
-  const [oeiras, client] = await Promise.all([
-    getOeirasConfig(supabaseAdmin),
+  const [refConfig, client] = await Promise.all([
+    getReferenceConfig(supabaseAdmin),
     getClientConfig(supabaseAdmin, tenantId)
   ]);
 
-  // 2. Fetch all migrations from Oeiras (Ground Truth)
-  const oeirasMigrations = await runSql(
-    oeiras.supabase_url,
-    oeiras.supabase_access_token!,
+  const refMigrations = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token!,
     "SELECT * FROM supabase_migrations.schema_migrations ORDER BY version ASC"
   );
 
@@ -1420,7 +1556,7 @@ async function executeMigration(
   }
 
   const existingSet = new Set(existing?.map((m: any) => m.version));
-  const pending = (oeirasMigrations || []).filter((m: any) => !existingSet.has(m.version));
+  const pending = (refMigrations || []).filter((m: any) => !existingSet.has(m.version));
 
   if (pending.length === 0) return { success: true, message: "Já está atualizado" };
 
@@ -1698,7 +1834,7 @@ interface ClientConfig {
 }
 
 interface ApplySchemaDriftParams {
-  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger';
+  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger' | 'column' | 'constraint';
   objectName: string;
   schema?: string;
   diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';
@@ -1706,7 +1842,7 @@ interface ApplySchemaDriftParams {
 }
 
 interface ApplySchemaDriftOperation {
-  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger';
+  objectType: 'view' | 'index' | 'policy' | 'grant' | 'auth_config' | 'function' | 'function_grant' | 'trigger' | 'column' | 'constraint';
   objectName: string;
   schema?: string;
   diffType: 'missing_in_tenant' | 'extra_in_tenant' | 'different_definition';

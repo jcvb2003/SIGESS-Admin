@@ -63,6 +63,16 @@ function getSyncHelperText(item: SyncableSchemaDrift) {
       ? "1 operação remove a trigger extra para alinhar com o Rayssa."
       : "1 operação recria a trigger com a definição atual do Rayssa.";
   }
+  if (item.objectType === "column") {
+    return item.diffType === "missing_in_tenant"
+      ? "1 operação adiciona a coluna ausente com tipo e default do Rayssa."
+      : "1 operação corrige o DEFAULT da coluna para o valor canônico do Rayssa.";
+  }
+  if (item.objectType === "constraint") {
+    return item.diffType === "extra_in_tenant"
+      ? "1 operação remove a constraint extra para alinhar com o Rayssa."
+      : "1 operação recria a constraint com a definição atual do Rayssa.";
+  }
   if (item.diffType === "extra_in_tenant") {
     return "1 operação remove o objeto extra para alinhar com o Rayssa.";
   }
@@ -88,6 +98,16 @@ function getPreviewDescription(item: SyncableSchemaDrift) {
   if (item.objectType === "trigger") {
     return "O SQL abaixo recria a trigger com a definição real do Rayssa.";
   }
+  if (item.objectType === "column") {
+    return item.diffType === "missing_in_tenant"
+      ? "O SQL abaixo adiciona a coluna com o tipo e default canônicos do Rayssa."
+      : "O SQL abaixo corrige o DEFAULT da coluna para o valor do Rayssa.";
+  }
+  if (item.objectType === "constraint") {
+    return item.diffType === "extra_in_tenant"
+      ? "O SQL abaixo remove a constraint extra no tenant."
+      : "O SQL abaixo recria a constraint com a definição real do Rayssa.";
+  }
   if (item.diffType === "extra_in_tenant") {
     return "O SQL abaixo remove o objeto extra no tenant para alinhá-lo com o Rayssa.";
   }
@@ -110,7 +130,9 @@ export function SchemaDriftCard({
       item.objectType === "auth_config" ||
       item.objectType === "function" ||
       item.objectType === "function_grant" ||
-      item.objectType === "trigger",
+      item.objectType === "trigger" ||
+      item.objectType === "column" ||
+      item.objectType === "constraint",
   );
 
   const syncableByDiffIdentity = new Map<string, SyncableSchemaDrift>();
@@ -137,6 +159,16 @@ export function SchemaDriftCard({
 
     if (item.objectType === "trigger") {
       syncableByDiffIdentity.set(`triggers:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "column") {
+      syncableByDiffIdentity.set(`columns:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "constraint") {
+      syncableByDiffIdentity.set(`constraints:${item.objectName}:${item.diffType}`, item);
       continue;
     }
 

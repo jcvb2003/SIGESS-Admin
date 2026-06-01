@@ -19,6 +19,36 @@ const ISOLATED_ANON_FUNCTION_GRANT_ALLOWLIST = new Set([
   "confirmar_upload_foto(uuid, text)",
 ]);
 
+// Columns that are INTENTIONAL ARCHITECTURAL EXTRAS in isolated tenants.
+// These were added during Fase F polo-scoping and must NOT be auto-removed.
+const INTENTIONAL_EXTRA_COLUMNS = new Set([
+  "financeiro_cobrancas_geradas.tenant_id",
+  "financeiro_cobrancas_geradas.unit_id",
+  "financeiro_config_socio.tenant_id",
+  "financeiro_config_socio.unit_id",
+  "financeiro_dae.tenant_id",
+  "financeiro_dae.unit_id",
+  "financeiro_historico_regime.tenant_id",
+  "financeiro_historico_regime.unit_id",
+  "financeiro_lancamentos.tenant_id",
+  "financeiro_lancamentos.unit_id",
+  "reap.tenant_id",
+  "reap.unit_id",
+  "requerimentos.tenant_id",
+  "requerimentos.unit_id",
+  "tenants.is_active",
+  "user_unit_memberships.role",
+]);
+
+// Constraints that belong to Phase G (FK repoint to user_profiles) or are
+// derived from intentional architectural extras — must NOT be auto-synced.
+const PHASE_G_CONSTRAINTS = new Set([
+  "tenant_users_user_id_fkey",
+  "user_unit_memberships_role_check",
+  "user_unit_memberships_tenant_id_user_id_unit_id_key",
+  "user_unit_memberships_unit_id_fkey",
+]);
+
 function isSupportedDiffType(type: string): type is SupportedDiffType {
   return type === "missing_in_tenant" || type === "extra_in_tenant" || type === "different_definition";
 }
@@ -209,6 +239,55 @@ function buildTriggerDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   };
 }
 
+function buildColumnDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "columns" || !isSupportedDiffType(diff.type)) return null;
+  // Never auto-drop columns — too destructive
+  if (diff.type === "extra_in_tenant") return null;
+  // Skip intentional architectural extras
+  if (INTENTIONAL_EXTRA_COLUMNS.has(diff.key)) return null;
+
+  const source = pickSource(diff) as { table?: string; column?: string } | null;
+  const tableName = source?.table;
+  const columnName = source?.column;
+  if (!tableName || !columnName) return null;
+
+  return {
+    objectType: "column",
+    schema: "public",
+    objectName: diff.key,
+    diffType: diff.type,
+    displayName: `public.${tableName}.${columnName}`,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildConstraintDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "constraints" || !isSupportedDiffType(diff.type)) return null;
+
+  const source = pickSource(diff) as { table?: string; name?: string } | null;
+  const tableName = source?.table;
+  const constraintName = source?.name;
+  if (!tableName || !constraintName) return null;
+
+  // Phase G / architectural extras — never sync
+  if (PHASE_G_CONSTRAINTS.has(constraintName)) return null;
+
+  // Never auto-drop extra constraints derived from intentional columns
+  if (diff.type === "extra_in_tenant") {
+    const isFromExtraColumn = constraintName.includes("_tenant_id_") || constraintName.includes("_unit_id_");
+    if (isFromExtraColumn) return null;
+  }
+
+  return {
+    objectType: "constraint",
+    schema: "public",
+    objectName: `${tableName}.${constraintName}`,
+    diffType: diff.type,
+    displayName: `public.${tableName}.${constraintName}`,
+    relatedDiffCount: 1,
+  };
+}
+
 export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrift[] {
   const syncable = new Map<string, SyncableSchemaDrift>();
 
@@ -221,7 +300,9 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
       buildAuthConfigDrift(diff) ??
       buildFunctionDrift(diff, diffs) ??
       buildFunctionGrantDrift(diff) ??
-      buildTriggerDrift(diff);
+      buildTriggerDrift(diff) ??
+      buildColumnDrift(diff) ??
+      buildConstraintDrift(diff);
 
     if (!drift) continue;
     if (!isAllowedForIsolatedSync(drift)) continue;

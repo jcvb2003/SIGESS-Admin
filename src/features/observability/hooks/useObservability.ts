@@ -33,12 +33,18 @@ function buildOperationsSummary(operations: SchemaDriftOperation[]) {
   const triggerAlign = operations.filter((op) => op.objectType === "trigger").length;
   const grantAlign = operations.filter((op) => op.objectType === "grant").length;
   const authConfigAlign = operations.filter((op) => op.objectType === "auth_config").length;
+  const columnAdd = operations.filter((op) => op.objectType === "column" && op.diffType === "missing_in_tenant").length;
+  const columnDefault = operations.filter((op) => op.objectType === "column" && op.diffType === "different_definition").length;
+  const constraintAlign = operations.filter((op) => op.objectType === "constraint").length;
 
   const lines: string[] = [];
   if (viewAlign > 0) lines.push(`${viewAlign} view${viewAlign > 1 ? "s" : ""} a alinhar`);
   if (functionAlign > 0) lines.push(`${functionAlign} função${functionAlign > 1 ? "ões" : ""} a alinhar`);
   if (functionGrantAlign > 0) lines.push(`${functionGrantAlign} grant${functionGrantAlign > 1 ? "s" : ""} de função a alinhar`);
   if (triggerAlign > 0) lines.push(`${triggerAlign} trigger${triggerAlign > 1 ? "s" : ""} a alinhar`);
+  if (columnAdd > 0) lines.push(`${columnAdd} coluna${columnAdd > 1 ? "s" : ""} a adicionar`);
+  if (columnDefault > 0) lines.push(`${columnDefault} default${columnDefault > 1 ? "s" : ""} a corrigir`);
+  if (constraintAlign > 0) lines.push(`${constraintAlign} constraint${constraintAlign > 1 ? "s" : ""} a alinhar`);
   if (indexCreate > 0) lines.push(`${indexCreate} index${indexCreate > 1 ? "es" : ""} a criar`);
   if (indexRemove > 0) lines.push(`${indexRemove} index${indexRemove > 1 ? "es" : ""} a remover`);
   if (policyRecreate > 0) lines.push(`${policyRecreate} polic${policyRecreate > 1 ? "ies" : "y"} a recriar`);
@@ -64,6 +70,8 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
   const functions = operations.filter((op) => op.objectType === "function");
   const functionGrants = operations.filter((op) => op.objectType === "function_grant");
   const triggers = operations.filter((op) => op.objectType === "trigger");
+  const columns = operations.filter((op) => op.objectType === "column");
+  const constraints = operations.filter((op) => op.objectType === "constraint");
   const grants = operations.filter((op) => op.objectType === "grant");
   const authConfig = operations.filter((op) => op.objectType === "auth_config");
 
@@ -90,6 +98,18 @@ function buildPreviewSql(operations: SchemaDriftOperation[]) {
   if (triggers.length > 0) {
     sections.push(
       `-- TRIGGERS (${triggers.length} a alinhar)\n${triggers.map((op) => op.sql.trim()).join("\n\n")}`,
+    );
+  }
+
+  if (columns.length > 0) {
+    sections.push(
+      `-- COLUMNS (${columns.length} a alinhar)\n${columns.map((op) => op.sql.trim()).join("\n\n")}`,
+    );
+  }
+
+  if (constraints.length > 0) {
+    sections.push(
+      `-- CONSTRAINTS (${constraints.length} a alinhar)\n${constraints.map((op) => op.sql.trim()).join("\n\n")}`,
     );
   }
 
@@ -165,10 +185,12 @@ function sortOperations(operations: SyncableSchemaDrift[]) {
     if (op.objectType === "function") return 1;
     if (op.objectType === "function_grant") return 2;
     if (op.objectType === "trigger") return 3;
-    if (op.objectType === "index") return 4;
-    if (op.objectType === "policy") return 5;
-    if (op.objectType === "grant") return 6;
-    if (op.objectType === "auth_config") return 7;
+    if (op.objectType === "column") return 4;
+    if (op.objectType === "constraint") return 5;
+    if (op.objectType === "index") return 6;
+    if (op.objectType === "policy") return 7;
+    if (op.objectType === "grant") return 8;
+    if (op.objectType === "auth_config") return 9;
     return 99;
   };
 
@@ -259,7 +281,7 @@ export function useObservability() {
     operationsInput:
       | SyncableSchemaDrift[]
       | {
-          objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger";
+          objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint";
           objectName: string;
           schema: string;
           diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

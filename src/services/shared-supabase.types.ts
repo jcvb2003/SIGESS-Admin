@@ -77,7 +77,6 @@ export type Database = {
       }
       configuracao_entidade: {
         Row: {
-          acesso_expira_em: string | null
           cor_primaria: string
           cor_secundaria: string
           cor_sidebar: string
@@ -85,13 +84,11 @@ export type Database = {
           extensao_license_key: string | null
           id: number
           logo_path: string | null
-          max_socios: number | null
           tenant_id: string | null
           unit_id: string | null
           updated_at: string | null
         }
         Insert: {
-          acesso_expira_em?: string | null
           cor_primaria?: string
           cor_secundaria?: string
           cor_sidebar?: string
@@ -99,13 +96,11 @@ export type Database = {
           extensao_license_key?: string | null
           id?: number
           logo_path?: string | null
-          max_socios?: number | null
           tenant_id?: string | null
           unit_id?: string | null
           updated_at?: string | null
         }
         Update: {
-          acesso_expira_em?: string | null
           cor_primaria?: string
           cor_secundaria?: string
           cor_sidebar?: string
@@ -113,7 +108,6 @@ export type Database = {
           extensao_license_key?: string | null
           id?: number
           logo_path?: string | null
-          max_socios?: number | null
           tenant_id?: string | null
           unit_id?: string | null
           updated_at?: string | null
@@ -1812,7 +1806,7 @@ export type Database = {
       }
       is_tenant_owner: { Args: { p_tenant_id: string }; Returns: boolean }
       launch_bulk_contribution: {
-        Args: { p_tipo_cobranca_id: string }
+        Args: { p_tipo_cobranca_id: string; p_unit_id?: string }
         Returns: number
       }
       list_requirements_extended:

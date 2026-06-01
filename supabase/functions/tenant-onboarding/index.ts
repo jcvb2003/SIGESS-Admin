@@ -319,6 +319,7 @@ async function updateJob(
     const { data } = await supabaseAdmin.from('onboarding_jobs').select('current_step').eq('id', jobId).single();
     if (data) updates.current_step = (data.current_step || 0) + stepIncrement;
   }
+  if (updates.entidade_id) { updates.projeto_id = updates.entidade_id; delete updates.entidade_id; }
   await supabaseAdmin.from('onboarding_jobs').update(updates).eq('id', jobId);
 }
 
@@ -372,10 +373,10 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
 
     // 5. Registration
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
-    const entidadeId = await registerTenantInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken, maxSocios, acessoExpiraEm);
+    const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken);
 
     // 6. Finalization
-    await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, entidadeId);
+    await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, projetoId);
     await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
 
     // 7. Finalização
@@ -512,13 +513,13 @@ async function runManagementQuery(projectRef: string, accessToken: string, query
 
 async function fetchReferenceStorageBlueprint(supabaseAdmin: SupabaseClient) {
   const { data: reference, error } = await supabaseAdmin
-    .from("entidades")
+    .from("projetos")
     .select("supabase_url, supabase_access_token")
     .eq("tenant_code", "sinpesca")
     .single();
 
   if (error || !reference?.supabase_access_token || !reference.supabase_url) {
-    throw new Error("Falha ao carregar blueprint de storage do tenant de referência (sinpesca/Rayssa).");
+    throw new Error("Falha ao carregar blueprint de storage do projeto de referência (sinpesca/Rayssa).");
   }
 
   const projectRef = new URL(reference.supabase_url).hostname.split(".")[0];
@@ -654,24 +655,20 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   }
 }
 
-async function registerTenantInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string, maxSocios?: number | null, acessoExpiraEm?: string | null) {
-  const { data: existing } = await admin.from('entidades').select('id').eq('tenant_code', code.toLowerCase()).single();
+async function registerProjectInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string) {
+  const { data: existing } = await admin.from('projetos').select('id').eq('tenant_code', code.toLowerCase()).single();
   if (existing) return existing.id;
 
-  const { data: tenant, error } = await admin.from('entidades').insert({
-    nome_entidade: label,
+  const { data: projeto, error } = await admin.from('projetos').insert({
+    project_name: label,
     tenant_code: code.toLowerCase(),
     supabase_url: url,
     supabase_publishable_key: anon,
     supabase_secret_keys: sr,
     supabase_access_token: pat,
-    assinatura: 'anual',
-    deployment_mode: 'isolated',
-    max_socios: maxSocios ?? null,
-    acesso_expira_em: acessoExpiraEm ?? null,
+    topology: 'isolated_single',
   }).select('id').single();
-  if (error || !tenant) throw new Error("Failed to register tenant: " + (error ? error.message : ""));
+  if (error || !projeto) throw new Error("Failed to register project: " + (error ? error.message : ""));
 
-  // O monitoramento de schema agora é feito via observability (schema_sync_status)
-  return tenant.id;
+  return projeto.id;
 }

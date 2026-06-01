@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { getSharedSupabase, getSharedSupabaseAdmin } from "@/lib/shared-supabase";
 import { handleSupabaseError } from "@/services/error.handler";
+import { proxyAction } from "@/services/projects.service";
 import type {
   SharedTenant,
   TenantUser,
@@ -11,6 +12,14 @@ import type {
 
 // Operações no banco runtime do projeto (shared ou isolated).
 // Não conhece projetos nem clientes do Admin central.
+
+/**
+ * Para projetos isolated: consulta o runtime DB via proxy, descobre o UUID do
+ * tenant runtime e preenche clientes.runtime_tenant_id nas rows ainda nulas.
+ */
+export async function linkIsolatedProjectRuntime(projectId: string): Promise<{ runtime_tenant_id: string }> {
+  return proxyAction(projectId, "get-runtime-tenant-id") as Promise<{ runtime_tenant_id: string }>;
+}
 
 export async function listSharedTenants(): Promise<SharedTenant[]> {
   const { data, error } = await getSharedSupabaseAdmin()

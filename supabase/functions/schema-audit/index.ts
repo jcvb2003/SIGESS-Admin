@@ -74,21 +74,21 @@ serve(async (req: Request) => {
       });
     }
 
-    // Obter todas as entidades
+    // Obter todos os projetos com PAT configurado
     const { data: entidades, error: entError } = await supabase
-      .from('entidades')
-      .select('id, nome_entidade, tenant_code, supabase_url, supabase_access_token')
+      .from('projetos')
+      .select('id, project_name, tenant_code, supabase_url, supabase_access_token')
       .not('supabase_access_token', 'is', null);
 
-    if (entError) throw new Error(`Failed to load tenants: ${entError.message}`);
+    if (entError) throw new Error(`Failed to load projects: ${entError.message}`);
     if (!entidades || entidades.length === 0) {
-      return new Response(JSON.stringify({ message: "No tenants found with PAT" }), {
+      return new Response(JSON.stringify({ message: "No projects found with PAT" }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
     const refTenant = entidades.find(e => e.tenant_code === 'sinpesca');
-    if (!refTenant) throw new Error("Reference tenant (sinpesca/Rayssa) not found");
+    if (!refTenant) throw new Error("Reference project (sinpesca/Rayssa) not found");
 
     const getSnapshot = async (projectRef: string, pat: string) => {
       const dbRows = await runManagementQuery(projectRef, pat, DATABASE_SNAPSHOT_QUERY);

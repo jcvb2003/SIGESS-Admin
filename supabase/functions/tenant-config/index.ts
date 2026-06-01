@@ -53,13 +53,13 @@ serve(async (req: Request) => {
 
     // SELECT explícito — nunca expor supabase_secret_keys nem supabase_access_token
     const { data, error } = await supabase
-      .from("entidades")
-      .select("nome_entidade, supabase_url, supabase_publishable_key, deployment_mode")
+      .from("projetos")
+      .select("project_name, supabase_url, supabase_publishable_key, topology")
       .eq("tenant_code", code)
       .single();
 
     if (error || !data) {
-      return new Response(JSON.stringify({ error: "Entidade não encontrada" }), {
+      return new Response(JSON.stringify({ error: "Projeto não encontrado" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 404,
       });
@@ -67,10 +67,10 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        label: data.nome_entidade,
+        label: data.project_name,
         supabaseUrl: data.supabase_url,
         anonKey: data.supabase_publishable_key,
-        deploymentMode: data.deployment_mode === "shared" ? "shared" : "isolated",
+        deploymentMode: (data.topology as string).startsWith("shared") ? "shared" : "isolated",
       }),
       {
         headers: {

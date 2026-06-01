@@ -44,7 +44,11 @@ SELECT json_build_object(
       ) ORDER BY c.table_name, c.ordinal_position
     )
     FROM information_schema.columns c
+    JOIN information_schema.tables t
+      ON t.table_schema = c.table_schema
+     AND t.table_name = c.table_name
     WHERE c.table_schema = 'public'
+      AND t.table_type = 'BASE TABLE'
   ),
 
   'functions', (

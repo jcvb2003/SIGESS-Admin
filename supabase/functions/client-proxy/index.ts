@@ -292,15 +292,15 @@ async function testClientConnection(clientUrl: string, clientKey: string) {
 
 async function updateClientHealth(supabaseAdmin: SupabaseClient, clientId: string, health: { status: 'valid' | 'broken', error?: string }) {
   const { error } = await supabaseAdmin
-    .from("entidades")
+    .from("projetos")
     .update({
       key_status: health.status,
       last_health_check_at: new Date().toISOString(),
       health_error_detail: health.error || null
     })
     .eq("id", clientId);
-    
-  if (error) console.error("Erro ao salvar status de sa├║de no banco Master:", error);
+
+  if (error) console.error("Erro ao salvar status de saúde no banco Master:", error);
 }
 
 async function validateKeyLazy(supabaseAdmin: SupabaseClient, clientId: string, clientUrl: string, clientKey: string, currentStatus?: string, lastCheck?: string | null) {
@@ -399,11 +399,11 @@ async function healthCheck(
 
 async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
   const { data: reference, error } = await supabaseAdmin
-    .from("entidades")
-    .select("id, nome_entidade, supabase_url, supabase_secret_keys, supabase_access_token")
+    .from("projetos")
+    .select("id, project_name, supabase_url, supabase_secret_keys, supabase_access_token")
     .eq("tenant_code", "sinpesca")
     .maybeSingle();
-  if (error || !reference) throw new Error("Rayssa (referência) não encontrada no cadastro de entidades");
+  if (error || !reference) throw new Error("Rayssa (referência) não encontrada no cadastro de projetos");
   return reference;
 }
 
@@ -1418,17 +1418,17 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
   const refTotal = refVersions.length;
 
   const { data: tenants, error } = await supabaseAdmin
-    .from("entidades")
-    .select("id, nome_entidade, supabase_url, supabase_access_token")
+    .from("projetos")
+    .select("id, project_name, supabase_url, supabase_access_token")
     .neq("tenant_code", "sinpesca")
     .not("supabase_access_token", "is", null);
 
-  if (error) throw new Error(`Erro ao buscar tenants: ${error.message}`);
+  if (error) throw new Error(`Erro ao buscar projetos: ${error.message}`);
 
   const results: Record<string, any> = {};
 
   results[refConfig.id] = {
-    tenantName: refConfig.nome_entidade,
+    tenantName: refConfig.project_name,
     latestRefVersion,
     latestTenantVersion: latestRefVersion,
     pendingCount: 0,
@@ -1456,7 +1456,7 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
       const pending = refVersions.filter(v => !tenantVersionSet.has(v));
 
       results[tenant.id] = {
-        tenantName: tenant.nome_entidade,
+        tenantName: tenant.project_name,
         latestRefVersion,
         latestTenantVersion: tenantVersions.at(-1) ?? null,
         pendingCount: pending.length,
@@ -1465,7 +1465,7 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
       };
     } catch (e) {
       results[tenant.id] = {
-        tenantName: tenant.nome_entidade,
+        tenantName: tenant.project_name,
         error: e instanceof Error ? e.message : String(e),
         hasPending: false,
         pendingCount: 0,
@@ -1821,6 +1821,34 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
   }
 }
 
+async function getRuntimeTenantId(
+  supabaseAdmin: SupabaseClient,
+  projectId: string,
+  clientUrl: string,
+  clientKey: string,
+) {
+  // Query the project's runtime DB for the first tenant UUID
+  const res = await fetch(`${clientUrl}/rest/v1/tenants?select=id&limit=1`, {
+    headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+  });
+  if (!res.ok) throw new Error(`Failed to query runtime tenants (${res.status}): ${await res.text()}`);
+  const rows = await res.json();
+  const runtimeTenantId: string | null = rows?.[0]?.id ?? null;
+
+  if (!runtimeTenantId) throw new Error("No tenant row found in runtime DB");
+
+  // Update clientes that belong to this project and have no runtime_tenant_id yet
+  const { error } = await supabaseAdmin
+    .from("clientes")
+    .update({ runtime_tenant_id: runtimeTenantId })
+    .eq("project_id", projectId)
+    .is("runtime_tenant_id", null);
+
+  if (error) throw error;
+
+  return { runtime_tenant_id: runtimeTenantId };
+}
+
 interface ClientConfig {
   supabase_url: string;
   supabase_secret_keys?: string;
@@ -1977,6 +2005,13 @@ async function handleAction(clientId: string, action: string, params: Record<str
     );
   }
 
+  if (action === "get-runtime-tenant-id") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    return await getRuntimeTenantId(supabaseAdmin, clientId, client.supabase_url, client.supabase_secret_keys);
+  }
+
   const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);
   if (migrationResult) return migrationResult;
 
@@ -2071,18 +2106,32 @@ async function validateAdminSession(req: Request, supabase: SupabaseClient) {
 }
 
 async function getClientConfig(supabase: SupabaseClient, clientId: string) {
-  console.log(`DEBUG: Fetching config for client ${clientId}...`);
-  const { data: client, error } = await supabase
-    .from("entidades")
-    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, acesso_expira_em, max_socios, key_status, last_health_check_at, tenant_code")
+  console.log(`DEBUG: Fetching config for project ${clientId}...`);
+  const { data: projeto, error } = await supabase
+    .from("projetos")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, key_status, last_health_check_at, tenant_code, clientes(acesso_expira_em, max_socios)")
     .eq("id", clientId)
     .single();
 
-  if (error || !client) {
-    console.error(`DEBUG: Error fetching client config: ${error?.message}`);
-    throw createHttpError(`Client reach error: ${error?.message || "Not found"}`, 404);
+  if (error || !projeto) {
+    console.error(`DEBUG: Error fetching project config: ${error?.message}`);
+    throw createHttpError(`Project reach error: ${error?.message || "Not found"}`, 404);
   }
-  return client;
+
+  const clientes = (projeto as any).clientes;
+  const firstCliente = Array.isArray(clientes) ? clientes[0] : null;
+
+  return {
+    supabase_url: projeto.supabase_url,
+    supabase_secret_keys: projeto.supabase_secret_keys,
+    supabase_access_token: projeto.supabase_access_token,
+    supabase_publishable_key: projeto.supabase_publishable_key,
+    key_status: projeto.key_status,
+    last_health_check_at: projeto.last_health_check_at,
+    tenant_code: projeto.tenant_code,
+    acesso_expira_em: firstCliente?.acesso_expira_em ?? null,
+    max_socios: firstCliente?.max_socios ?? null,
+  };
 }
 
 function handleError(err: unknown) {

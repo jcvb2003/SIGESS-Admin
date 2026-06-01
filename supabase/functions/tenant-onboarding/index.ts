@@ -666,7 +666,7 @@ async function registerProjectInCentral(admin: SupabaseClient, label: string, co
     supabase_publishable_key: anon,
     supabase_secret_keys: sr,
     supabase_access_token: pat,
-    topology: 'isolated_single',
+    topology: 'unconfigured',
   }).select('id').single();
   if (error || !projeto) throw new Error("Failed to register project: " + (error ? error.message : ""));
 

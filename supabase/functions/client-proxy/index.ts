@@ -2109,7 +2109,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
   console.log(`DEBUG: Fetching config for project ${clientId}...`);
   const { data: projeto, error } = await supabase
     .from("projetos")
-    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, key_status, last_health_check_at, tenant_code, clientes(acesso_expira_em, max_socios)")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, key_status, last_health_check_at, tenant_code, topology")
     .eq("id", clientId)
     .single();
 
@@ -2118,8 +2118,30 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
     throw createHttpError(`Project reach error: ${error?.message || "Not found"}`, 404);
   }
 
-  const clientes = (projeto as any).clientes;
-  const firstCliente = Array.isArray(clientes) ? clientes[0] : null;
+  // Campos comerciais: só válidos para projetos isolated (1 cliente exato).
+  // Para shared, actions que dependem de limites (sync-trial-limits) devem receber clienteId explícito.
+  let acesso_expira_em: string | null = null;
+  let max_socios: number | null = null;
+
+  const topology = (projeto as any).topology as string ?? "";
+  if (!topology.startsWith("shared")) {
+    const { data: clientes, error: cErr } = await supabase
+      .from("clientes")
+      .select("acesso_expira_em, max_socios")
+      .eq("project_id", clientId)
+      .limit(2);
+
+    if (!cErr && Array.isArray(clientes)) {
+      if (clientes.length > 1) {
+        throw createHttpError(
+          `Projeto ${clientId} tem ${clientes.length} clientes — informe clienteId explícito para actions que dependem de limites comerciais.`,
+          400,
+        );
+      }
+      acesso_expira_em = clientes[0]?.acesso_expira_em ?? null;
+      max_socios = clientes[0]?.max_socios ?? null;
+    }
+  }
 
   return {
     supabase_url: projeto.supabase_url,
@@ -2129,8 +2151,8 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
     key_status: projeto.key_status,
     last_health_check_at: projeto.last_health_check_at,
     tenant_code: projeto.tenant_code,
-    acesso_expira_em: firstCliente?.acesso_expira_em ?? null,
-    max_socios: firstCliente?.max_socios ?? null,
+    acesso_expira_em,
+    max_socios,
   };
 }
 

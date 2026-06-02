@@ -79,7 +79,6 @@ serve(async (req: Request) => {
         supabaseUrl: proj.supabase_url,
         anonKey: proj.supabase_publishable_key,
         deploymentMode: (proj.topology as string ?? "").startsWith("shared") ? "shared" : "isolated",
-        hasPolos: ["isolated_polo", "shared_multi_polo", "shared_hybrid"].includes(proj.topology as string),
       }),
       {
         headers: {

@@ -67,9 +67,9 @@ export async function createSharedTenantForProject(
     if (result.error) throw handleSupabaseError(result.error);
   }
 
-  // Vincula o tenant runtime ao cliente central específico pelo ID exato
+  // Vincula o tenant runtime ao registro central pelo ID exato
   const { error: updateError } = await supabase
-    .from("clientes")
+    .from("tenants")
     .update({ runtime_tenant_id: tenantId })
     .eq("id", clienteId);
 

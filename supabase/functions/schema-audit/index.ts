@@ -77,7 +77,7 @@ serve(async (req: Request) => {
     // Obter todos os projetos com PAT configurado
     const { data: entidades, error: entError } = await supabase
       .from('projetos')
-      .select('id, project_name, tenant_code, supabase_url, supabase_access_token')
+      .select('id, project_name, supabase_url, supabase_access_token')
       .not('supabase_access_token', 'is', null);
 
     if (entError) throw new Error(`Failed to load projects: ${entError.message}`);
@@ -87,8 +87,8 @@ serve(async (req: Request) => {
       });
     }
 
-    const refTenant = entidades.find(e => e.tenant_code === 'sinpesca');
-    if (!refTenant) throw new Error("Reference project (sinpesca/Rayssa) not found");
+    const refTenant = entidades.find(e => e.project_name === 'Rayssa');
+    if (!refTenant) throw new Error("Reference project (Rayssa) not found");
 
     const getSnapshot = async (projectRef: string, pat: string) => {
       const dbRows = await runManagementQuery(projectRef, pat, DATABASE_SNAPSHOT_QUERY);
@@ -111,7 +111,7 @@ serve(async (req: Request) => {
     } catch (error) {
       return new Response(JSON.stringify({
         success: false,
-        error: buildAuditErrorMessage(error, refTenant.tenant_code),
+        error: buildAuditErrorMessage(error, refTenant.project_name),
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -152,22 +152,22 @@ serve(async (req: Request) => {
           }, { onConflict: 'tenant_id' });
 
         if (upsertErr) {
-          console.error(`Failed to upsert sync status for ${tenant.tenant_code}:`, upsertErr);
+          console.error(`Failed to upsert sync status for ${tenant.project_name}:`, upsertErr);
         }
 
         results.push({
           tenantId: tenant.id,
-          tenantCode: tenant.tenant_code,
+          projectName: tenant.project_name,
           totalDiffs: summary.total,
           summary
         });
 
       } catch (err) {
-        console.error(`Error processing tenant ${tenant.tenant_code}:`, err);
+        console.error(`Error processing tenant ${tenant.project_name}:`, err);
         results.push({
           tenantId: tenant.id,
-          tenantCode: tenant.tenant_code,
-          error: buildAuditErrorMessage(err, tenant.tenant_code)
+          projectName: tenant.project_name,
+          error: buildAuditErrorMessage(err, tenant.project_name)
         });
       }
     }

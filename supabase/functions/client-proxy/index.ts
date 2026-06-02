@@ -401,7 +401,7 @@ async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
   const { data: reference, error } = await supabaseAdmin
     .from("projetos")
     .select("id, project_name, supabase_url, supabase_secret_keys, supabase_access_token")
-    .eq("tenant_code", "sinpesca")
+    .eq("project_name", "Rayssa")
     .maybeSingle();
   if (error || !reference) throw new Error("Rayssa (referência) não encontrada no cadastro de projetos");
   return reference;
@@ -1207,8 +1207,8 @@ async function applySchemaDriftBatch(
 ) {
   const { operations, mode } = params;
 
-  if (client.tenant_code === "sinpesca") {
-    throw createHttpError("O tenant de referÃªncia nÃ£o pode ser sincronizado contra ele mesmo", 400);
+  if (clientId === (await getReferenceConfig(supabaseAdmin)).id) {
+    throw createHttpError("O projeto de referência não pode ser sincronizado contra ele mesmo", 400);
   }
 
   if (!client.supabase_access_token) {
@@ -1325,8 +1325,8 @@ async function applySchemaDrift(
 
   const { objectType, objectName, schema = "public", mode, diffType } = params as ApplySchemaDriftParams;
 
-  if (client.tenant_code === "sinpesca") {
-    throw createHttpError("O tenant de referência não pode ser sincronizado contra ele mesmo", 400);
+  if (clientId === (await getReferenceConfig(supabaseAdmin)).id) {
+    throw createHttpError("O projeto de referência não pode ser sincronizado contra ele mesmo", 400);
   }
 
   if (!client.supabase_access_token) {
@@ -1420,7 +1420,7 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
   const { data: tenants, error } = await supabaseAdmin
     .from("projetos")
     .select("id, project_name, supabase_url, supabase_access_token")
-    .neq("tenant_code", "sinpesca")
+    .neq("project_name", "Rayssa")
     .not("supabase_access_token", "is", null);
 
   if (error) throw new Error(`Erro ao buscar projetos: ${error.message}`);
@@ -1837,9 +1837,9 @@ async function getRuntimeTenantId(
 
   if (!runtimeTenantId) throw new Error("No tenant row found in runtime DB");
 
-  // Update clientes that belong to this project and have no runtime_tenant_id yet
+  // Update tenants that belong to this project and have no runtime_tenant_id yet
   const { error } = await supabaseAdmin
-    .from("clientes")
+    .from("tenants")
     .update({ runtime_tenant_id: runtimeTenantId })
     .eq("project_id", projectId)
     .is("runtime_tenant_id", null);
@@ -2109,7 +2109,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
   console.log(`DEBUG: Fetching config for project ${clientId}...`);
   const { data: projeto, error } = await supabase
     .from("projetos")
-    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, key_status, last_health_check_at, tenant_code, topology")
+    .select("supabase_url, supabase_secret_keys, supabase_access_token, supabase_publishable_key, key_status, last_health_check_at, topology")
     .eq("id", clientId)
     .single();
 
@@ -2118,28 +2118,30 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
     throw createHttpError(`Project reach error: ${error?.message || "Not found"}`, 404);
   }
 
-  // Campos comerciais: só válidos para projetos isolated (1 cliente exato).
+  // Campos comerciais + tenant_code: só válidos para projetos isolated (1 tenant exato).
   // Para shared, actions que dependem de limites (sync-trial-limits) devem receber clienteId explícito.
   let acesso_expira_em: string | null = null;
   let max_socios: number | null = null;
+  let tenant_code: string | undefined = undefined;
 
   const topology = (projeto as any).topology as string ?? "";
   if (!topology.startsWith("shared")) {
-    const { data: clientes, error: cErr } = await supabase
-      .from("clientes")
-      .select("acesso_expira_em, max_socios")
+    const { data: tenants, error: cErr } = await supabase
+      .from("tenants")
+      .select("acesso_expira_em, max_socios, tenant_code")
       .eq("project_id", clientId)
       .limit(2);
 
-    if (!cErr && Array.isArray(clientes)) {
-      if (clientes.length > 1) {
+    if (!cErr && Array.isArray(tenants)) {
+      if (tenants.length > 1) {
         throw createHttpError(
-          `Projeto ${clientId} tem ${clientes.length} clientes — informe clienteId explícito para actions que dependem de limites comerciais.`,
+          `Projeto ${clientId} tem ${tenants.length} tenants — informe clienteId explícito para actions que dependem de limites comerciais.`,
           400,
         );
       }
-      acesso_expira_em = clientes[0]?.acesso_expira_em ?? null;
-      max_socios = clientes[0]?.max_socios ?? null;
+      acesso_expira_em = tenants[0]?.acesso_expira_em ?? null;
+      max_socios = tenants[0]?.max_socios ?? null;
+      tenant_code = tenants[0]?.tenant_code ?? undefined;
     }
   }
 
@@ -2150,7 +2152,7 @@ async function getClientConfig(supabase: SupabaseClient, clientId: string) {
     supabase_publishable_key: projeto.supabase_publishable_key,
     key_status: projeto.key_status,
     last_health_check_at: projeto.last_health_check_at,
-    tenant_code: projeto.tenant_code,
+    tenant_code,
     acesso_expira_em,
     max_socios,
   };

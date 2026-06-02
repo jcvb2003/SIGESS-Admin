@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useClients } from "@/features/clients";
 import { proxyAction } from "@/services/clients.service";
-import { getSchemaSyncStatus, runSchemaAudit } from "../services/schema-sync.service";
 import { buildSchemaSyncActionKey } from "../utils/drift-utils";
 import type {
   ExportRun,
@@ -231,28 +230,6 @@ export function useObservability() {
   });
   const exportRuns = queryExports.data ?? [];
   const isLoadingExports = queryExports.isLoading;
-
-  const querySchema = useQuery<TenantSchemaStatus[]>({
-    queryKey: ["global-schema-status"],
-    queryFn: getSchemaSyncStatus,
-    staleTime: 1000 * 60 * 5,
-  });
-  const schemaStatus = querySchema.data ?? [];
-  const isLoadingSchema = querySchema.isLoading;
-
-  const [isAuditingSchema, setIsAuditingSchema] = useState(false);
-  const handleRunSchemaAudit = async () => {
-    setIsAuditingSchema(true);
-    try {
-      await runSchemaAudit();
-      toast.success("Auditoria de Schema finalizada com sucesso.");
-      await queryClient.invalidateQueries({ queryKey: ["global-schema-status"] });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro desconhecido na auditoria.");
-    } finally {
-      setIsAuditingSchema(false);
-    }
-  };
 
   const handleRunAdHocAudit = async () => {
     if (!adHocReferenceId) return;
@@ -502,7 +479,6 @@ export function useObservability() {
   return {
     clients,
     exportRuns,
-    schemaStatus,
     adHocReferenceId,
     setAdHocReferenceId,
     adHocTargetId,
@@ -512,9 +488,7 @@ export function useObservability() {
     handleRunAdHocAudit,
     handleClearAdHoc,
     isLoadingExports,
-    isLoadingSchema,
     isRefreshing,
-    isAuditingSchema,
     isPreparingDrift,
     isApplyingDrift,
     driftPreview,
@@ -522,7 +496,6 @@ export function useObservability() {
     setDriftPreview,
     setDriftApplyResults,
     handleRefresh,
-    handleRunSchemaAudit,
     handlePrepareSchemaSync,
     handleApplySchemaSync,
   };

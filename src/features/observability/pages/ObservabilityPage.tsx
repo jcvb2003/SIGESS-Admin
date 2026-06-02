@@ -30,14 +30,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useObservability } from "../hooks/useObservability";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
-import { buildSchemaSyncActionKey, getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
-import type { SyncableSchemaDrift } from "../types";
 
 export default function ObservabilityPage() {
   const {
     clients,
     exportRuns,
-    schemaStatus,
     adHocReferenceId,
     setAdHocReferenceId,
     adHocTargetId,
@@ -47,9 +44,7 @@ export default function ObservabilityPage() {
     handleRunAdHocAudit,
     handleClearAdHoc,
     isLoadingExports,
-    isLoadingSchema,
     isRefreshing,
-    isAuditingSchema,
     isPreparingDrift,
     isApplyingDrift,
     driftPreview,
@@ -57,74 +52,21 @@ export default function ObservabilityPage() {
     setDriftPreview,
     setDriftApplyResults,
     handleRefresh,
-    handleRunSchemaAudit,
     handlePrepareSchemaSync,
     handleApplySchemaSync,
   } = useObservability();
 
-  const isAdHocMode = adHocResults !== null;
   const displayStatus = useMemo(() => {
-    if (!isAdHocMode) return schemaStatus;
+    if (!adHocResults) return [];
     if (adHocTargetId) return adHocResults.filter((r) => r.tenantId === adHocTargetId);
     return adHocResults;
-  }, [isAdHocMode, adHocResults, adHocTargetId, schemaStatus]);
+  }, [adHocResults, adHocTargetId]);
 
   const referenceName = useMemo(() => {
     if (!adHocReferenceId) return "referência";
     return clients.find((c) => c.id === adHocReferenceId)?.nome_entidade ?? "referência";
   }, [adHocReferenceId, clients]);
 
-  const batchSyncCandidate = useMemo(() => {
-    const candidates = new Map<
-      string,
-      {
-        targets: Array<{ clientId: string; tenantName: string }>;
-        operations: SyncableSchemaDrift[];
-      }
-    >();
-
-    for (const status of schemaStatus) {
-      for (const item of getSyncableSchemaDrifts(status.diffs)) {
-        const targets = getTenantsWithSameSchemaDrift(schemaStatus, item);
-        if (targets.length < 2) continue;
-
-        const groupKey = targets
-          .map((target) => target.clientId)
-          .sort()
-          .join(",");
-
-        const existing = candidates.get(groupKey);
-        if (!existing) {
-          candidates.set(groupKey, {
-            targets,
-            operations: [item],
-          });
-          continue;
-        }
-
-        const operationKey = `${item.objectType}:${item.schema}.${item.objectName}:${item.diffType}`;
-        const alreadyIncluded = existing.operations.some(
-          (operation) =>
-            `${operation.objectType}:${operation.schema}.${operation.objectName}:${operation.diffType}` === operationKey,
-        );
-
-        if (!alreadyIncluded) {
-          existing.operations.push(item);
-        }
-      }
-    }
-
-    return Array.from(candidates.values()).sort((a, b) => {
-      if (b.targets.length !== a.targets.length) return b.targets.length - a.targets.length;
-      if (b.operations.length !== a.operations.length) return b.operations.length - a.operations.length;
-      return a.targets[0]?.tenantName.localeCompare(b.targets[0]?.tenantName ?? "") ?? 0;
-    })[0] ?? null;
-  }, [schemaStatus]);
-
-  const batchSyncActionKey = useMemo(() => {
-    if (!batchSyncCandidate) return null;
-    return buildSchemaSyncActionKey(batchSyncCandidate.targets, batchSyncCandidate.operations);
-  }, [batchSyncCandidate]);
 
   return (
     <MainLayout>
@@ -253,67 +195,17 @@ export default function ObservabilityPage() {
               </div>
             </Card>
 
-            {/* Cabeçalho do modo global (só aparece quando não há ad hoc ativo) */}
-            {!isAdHocMode && (
-              <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-foreground">Cache global de schema</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Resultados da última auditoria profunda contra a referência padrão.
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    {batchSyncCandidate ? (
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          handlePrepareSchemaSync(
-                            batchSyncCandidate.targets,
-                            batchSyncCandidate.operations,
-                            {
-                              title: `Sync em todos os ${batchSyncCandidate.targets.length} tenants`,
-                              description:
-                                "Lote com todas as divergências sincronizáveis compartilhadas por este mesmo grupo de tenants. O apply será executado sequencialmente em todos os alvos.",
-                            },
-                          )
-                        }
-                        disabled={isPreparingDrift === batchSyncActionKey}
-                      >
-                        {isPreparingDrift === batchSyncActionKey ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Rocket className="mr-2 h-4 w-4" />
-                        )}
-                        Preparar sync em todos ({batchSyncCandidate.targets.length})
-                      </Button>
-                    ) : null}
-                    <Button onClick={handleRunSchemaAudit} disabled={isAuditingSchema}>
-                      {isAuditingSchema ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                      Executar Auditoria Profunda
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Banner de modo ad hoc ativo */}
-            {isAdHocMode && (
+            {/* Banner de resultado ativo */}
+            {adHocResults !== null && (
               <div className="rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200">
-                Comparação sob demanda — referência: <strong>{referenceName}</strong>
+                Comparação concluída — referência: <strong>{referenceName}</strong>
                 {adHocTargetId
                   ? ` → ${clients.find((c) => c.id === adHocTargetId)?.nome_entidade ?? adHocTargetId}`
-                  : " → todos os tenants"}
-                . Estes resultados não alteram o cache global.
+                  : ` → ${displayStatus.length} tenant(s)`}
               </div>
             )}
 
-            {isLoadingSchema && !isAdHocMode ? (
-              <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
-                <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Carregando status de schema...</span>
-              </div>
-            ) : isRunningAdHocAudit ? (
+            {isRunningAdHocAudit ? (
               <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
                 <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Executando comparação...</span>

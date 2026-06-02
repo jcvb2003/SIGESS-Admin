@@ -2391,22 +2391,20 @@ CREATE POLICY tenant_users_delete_admins ON public.tenant_users FOR DELETE TO au
 
 CREATE POLICY tenant_users_insert_admins ON public.tenant_users FOR INSERT TO authenticated WITH CHECK (public.is_tenant_owner(tenant_id));
 
-CREATE POLICY tenant_users_select_members ON public.tenant_users FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR (public.is_tenant_owner(tenant_id) AND (NOT (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.user_id = auth.uid()) AND (m.tenant_id = tenant_users.tenant_id) AND (m.is_active = true)))))) OR ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
-   FROM public.tenant_users me
-  WHERE ((me.user_id = auth.uid()) AND (me.tenant_id = tenant_users.tenant_id) AND (me.operator_type = 'presidente'::text) AND (me.is_active = true))))) AND (EXISTS ( SELECT 1
-   FROM (public.user_unit_memberships my_polo
-     JOIN public.user_unit_memberships their_polo ON (((their_polo.unit_id = my_polo.unit_id) AND (their_polo.is_active = true))))
-  WHERE ((my_polo.user_id = auth.uid()) AND (my_polo.tenant_id = tenant_users.tenant_id) AND (my_polo.is_active = true) AND (their_polo.user_id = tenant_users.user_id)))))));
+CREATE POLICY tenant_users_select_members ON public.tenant_users FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 CREATE POLICY tenant_users_update_admins ON public.tenant_users FOR UPDATE TO authenticated USING (public.is_tenant_owner(tenant_id)) WITH CHECK (public.is_tenant_owner(tenant_id));
 
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY tenants_select ON public.tenants FOR SELECT TO authenticated USING ((public.is_tenant_owner(id) OR (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.tenant_id = tenants.id) AND (m.user_id = auth.uid()) AND (m.is_active = true))))));
+CREATE POLICY tenants_select ON public.tenants FOR SELECT TO authenticated USING (
+  EXISTS (
+    SELECT 1 FROM public.tenant_users tu
+    WHERE tu.tenant_id = tenants.id
+      AND tu.user_id = auth.uid()
+      AND tu.is_active = true
+  )
+);
 
 ALTER TABLE public.tipos_cobranca ENABLE ROW LEVEL SECURITY;
 

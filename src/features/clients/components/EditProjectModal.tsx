@@ -15,20 +15,15 @@ import {
 import type { Project, Topology } from "../types";
 import { TOPOLOGY_LABEL } from "../types";
 import { useUpdateProject } from "../hooks/useProjectMutations";
-
-const TOPOLOGIES: Topology[] = [
-  "isolated_single",
-  "isolated_polo",
-  "shared_multi_single",
-  "shared_multi_polo",
-  "shared_hybrid",
-];
+import { getTopologyOptions } from "../lib/topologyTransitions";
 
 interface EditProjectModalProps {
   readonly project: Project;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onUpdated?: (updated: Project) => void;
+  readonly tenantCount?: number;
+  readonly tenantsWithUnits?: number;
 }
 
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -50,7 +45,15 @@ function SectionBox({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-export function EditProjectModal({ project, open, onOpenChange, onUpdated }: EditProjectModalProps) {
+export function EditProjectModal({
+  project,
+  open,
+  onOpenChange,
+  onUpdated,
+  tenantCount = 0,
+  tenantsWithUnits = 0,
+}: EditProjectModalProps) {
+  const topologyOptions = getTopologyOptions(project.topology, tenantCount, tenantsWithUnits);
   const [form, setForm] = useState({
     project_name:             project.project_name,
     topology:                 project.topology as Topology,
@@ -125,9 +128,16 @@ export function EditProjectModal({ project, open, onOpenChange, onUpdated }: Edi
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TOPOLOGIES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {TOPOLOGY_LABEL[t]}
+                  {topologyOptions.map(({ topology, disabled, reason }) => (
+                    <SelectItem key={topology} value={topology} disabled={disabled}>
+                      <div className="flex flex-col gap-0.5">
+                        <span className={disabled ? "text-muted-foreground" : undefined}>
+                          {TOPOLOGY_LABEL[topology]}
+                        </span>
+                        {disabled && reason && (
+                          <span className="text-[10px] text-muted-foreground/70">{reason}</span>
+                        )}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -151,7 +151,9 @@ export default function ProjectDetailPage() {
   const { data: project, isLoading, refetch: refetchProject } = useProjectDetail(id!);
   const { data: clientes = [], refetch: refetchClientes }      = useClientes(id!);
 
-  const isIsolated = project ? isIsolatedTopology(project.topology) : false;
+  const isIsolated       = project ? isIsolatedTopology(project.topology) : false;
+  const tenantCount      = clientes.length;
+  const tenantsWithUnits = clientes.filter((c) => c.supports_units).length;
 
   if (isLoading) {
     return (
@@ -256,6 +258,8 @@ export default function ProjectDetailPage() {
           open={editProjectOpen}
           onOpenChange={setEditProjectOpen}
           onUpdated={() => { refetchProject(); setEditProjectOpen(false); }}
+          tenantCount={tenantCount}
+          tenantsWithUnits={tenantsWithUnits}
         />
 
         <AddClienteDialog

@@ -142,7 +142,7 @@ serve(async (req: Request) => {
         const summary = summarizeDiff(diffs);
 
         results.push({
-          tenantId: tenant.id,
+          projectId: tenant.id,
           projectName: tenant.project_name,
           totalDiffs: summary.total,
           summary,
@@ -151,7 +151,7 @@ serve(async (req: Request) => {
       } catch (err) {
         console.error(`Error processing tenant ${tenant.project_name}:`, err);
         results.push({
-          tenantId: tenant.id,
+          projectId: tenant.id,
           projectName: tenant.project_name,
           error: buildAuditErrorMessage(err, tenant.project_name)
         });

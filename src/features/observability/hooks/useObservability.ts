@@ -246,9 +246,9 @@ export function useObservability() {
       if (data?.error) throw new Error(data.error);
 
       const mapped: ProjectSchemaStatus[] = (data?.results ?? [])
-        .filter((r: any) => !r.error && r.tenantId !== adHocReferenceId)
+        .filter((r: any) => !r.error && r.projectId !== adHocReferenceId)
         .map((r: any) => ({
-          projectId: r.tenantId,
+          projectId: r.projectId,
           projectName: r.projectName,
           checkedAt: new Date().toISOString(),
           totalDiffs: r.totalDiffs ?? 0,

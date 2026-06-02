@@ -14,7 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-
       edge_function_audits: {
         Row: {
           current_version: number | null
@@ -54,79 +53,10 @@ export type Database = {
             foreignKeyName: "edge_function_audits_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "entidades"
+            referencedRelation: "projetos"
             referencedColumns: ["id"]
           },
         ]
-      }
-      entidades: {
-        Row: {
-          acesso_expira_em: string | null
-          assinatura: string
-          data_cadastro: string
-          deployment_mode: string | null
-          email: string | null
-          health_error_detail: string | null
-          id: string
-          key_status: string | null
-          last_health_check_at: string | null
-          logo_url: string | null
-          max_socios: number | null
-          nome_entidade: string
-          shared_project_ref: string | null
-          shared_tenant_id: string | null
-          supabase_access_token: string | null
-          supabase_publishable_key: string
-          supabase_secret_keys: string | null
-          supabase_url: string
-          telefone: string | null
-          tenant_code: string
-        }
-        Insert: {
-          acesso_expira_em?: string | null
-          assinatura?: string
-          data_cadastro?: string
-          deployment_mode?: string | null
-          email?: string | null
-          health_error_detail?: string | null
-          id?: string
-          key_status?: string | null
-          last_health_check_at?: string | null
-          logo_url?: string | null
-          max_socios?: number | null
-          nome_entidade: string
-          shared_project_ref?: string | null
-          shared_tenant_id?: string | null
-          supabase_access_token?: string | null
-          supabase_publishable_key: string
-          supabase_secret_keys?: string | null
-          supabase_url: string
-          telefone?: string | null
-          tenant_code: string
-        }
-        Update: {
-          acesso_expira_em?: string | null
-          assinatura?: string
-          data_cadastro?: string
-          deployment_mode?: string | null
-          email?: string | null
-          health_error_detail?: string | null
-          id?: string
-          key_status?: string | null
-          last_health_check_at?: string | null
-          logo_url?: string | null
-          max_socios?: number | null
-          nome_entidade?: string
-          shared_project_ref?: string | null
-          shared_tenant_id?: string | null
-          supabase_access_token?: string | null
-          supabase_publishable_key?: string
-          supabase_secret_keys?: string | null
-          supabase_url?: string
-          telefone?: string | null
-          tenant_code?: string
-        }
-        Relationships: []
       }
       export_runs: {
         Row: {
@@ -136,13 +66,13 @@ export type Database = {
           file_path: string | null
           file_size_bytes: number | null
           id: string
-          run_id: string | null
+          run_id: string
           skip_reason: string | null
-          status: string | null
-          tabela: string | null
-          tenant_code: string | null
+          status: string
+          tabela: string
+          tenant_code: string
           tenant_id: string | null
-          tenant_name: string | null
+          tenant_name: string
         }
         Insert: {
           checksum?: string | null
@@ -151,13 +81,13 @@ export type Database = {
           file_path?: string | null
           file_size_bytes?: number | null
           id?: string
-          run_id?: string | null
+          run_id: string
           skip_reason?: string | null
-          status?: string | null
-          tabela?: string | null
-          tenant_code?: string | null
+          status: string
+          tabela: string
+          tenant_code: string
           tenant_id?: string | null
-          tenant_name?: string | null
+          tenant_name: string
         }
         Update: {
           checksum?: string | null
@@ -166,20 +96,20 @@ export type Database = {
           file_path?: string | null
           file_size_bytes?: number | null
           id?: string
-          run_id?: string | null
+          run_id?: string
           skip_reason?: string | null
-          status?: string | null
-          tabela?: string | null
-          tenant_code?: string | null
+          status?: string
+          tabela?: string
+          tenant_code?: string
           tenant_id?: string | null
-          tenant_name?: string | null
+          tenant_name?: string
         }
         Relationships: [
           {
             foreignKeyName: "export_runs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "entidades"
+            referencedRelation: "projetos"
             referencedColumns: ["id"]
           },
         ]
@@ -253,13 +183,13 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           current_step: number | null
-          entidade_id: string | null
           error_detail: string | null
           id: string
           project_ref: string
+          projeto_id: string | null
           status: string | null
           supabase_account_id: string | null
-          tenant_code: string
+          tenant_code: string | null
           tenant_label: string
           total_steps: number | null
         }
@@ -268,13 +198,13 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           current_step?: number | null
-          entidade_id?: string | null
           error_detail?: string | null
           id?: string
           project_ref: string
+          projeto_id?: string | null
           status?: string | null
           supabase_account_id?: string | null
-          tenant_code: string
+          tenant_code?: string | null
           tenant_label: string
           total_steps?: number | null
         }
@@ -283,22 +213,22 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           current_step?: number | null
-          entidade_id?: string | null
           error_detail?: string | null
           id?: string
           project_ref?: string
+          projeto_id?: string | null
           status?: string | null
           supabase_account_id?: string | null
-          tenant_code?: string
+          tenant_code?: string | null
           tenant_label?: string
           total_steps?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "onboarding_jobs_entidade_id_fkey"
-            columns: ["entidade_id"]
+            foreignKeyName: "onboarding_jobs_projeto_id_fkey"
+            columns: ["projeto_id"]
             isOneToOne: false
-            referencedRelation: "entidades"
+            referencedRelation: "projetos"
             referencedColumns: ["id"]
           },
           {
@@ -316,6 +246,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      projetos: {
+        Row: {
+          data_cadastro: string
+          health_error_detail: string | null
+          id: string
+          key_status: string
+          last_health_check_at: string | null
+          project_name: string
+          supabase_access_token: string | null
+          supabase_account_id: string | null
+          supabase_publishable_key: string
+          supabase_secret_keys: string | null
+          supabase_url: string
+          topology: string
+        }
+        Insert: {
+          data_cadastro?: string
+          health_error_detail?: string | null
+          id?: string
+          key_status?: string
+          last_health_check_at?: string | null
+          project_name: string
+          supabase_access_token?: string | null
+          supabase_account_id?: string | null
+          supabase_publishable_key: string
+          supabase_secret_keys?: string | null
+          supabase_url: string
+          topology?: string
+        }
+        Update: {
+          data_cadastro?: string
+          health_error_detail?: string | null
+          id?: string
+          key_status?: string
+          last_health_check_at?: string | null
+          project_name?: string
+          supabase_access_token?: string | null
+          supabase_account_id?: string | null
+          supabase_publishable_key?: string
+          supabase_secret_keys?: string | null
+          supabase_url?: string
+          topology?: string
+        }
+        Relationships: []
       }
       schema_migrations: {
         Row: {
@@ -359,42 +334,7 @@ export type Database = {
             foreignKeyName: "schema_migrations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
-            referencedRelation: "entidades"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      schema_sync_status: {
-        Row: {
-          checked_at: string | null
-          diffs: Json | null
-          id: string
-          summary: Json | null
-          tenant_id: string | null
-          total_diffs: number | null
-        }
-        Insert: {
-          checked_at?: string | null
-          diffs?: Json | null
-          id?: string
-          summary?: Json | null
-          tenant_id?: string | null
-          total_diffs?: number | null
-        }
-        Update: {
-          checked_at?: string | null
-          diffs?: Json | null
-          id?: string
-          summary?: Json | null
-          tenant_id?: string | null
-          total_diffs?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "schema_sync_status_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: true
-            referencedRelation: "entidades"
+            referencedRelation: "projetos"
             referencedColumns: ["id"]
           },
         ]
@@ -480,6 +420,77 @@ export type Database = {
         }
         Relationships: []
       }
+      tenants: {
+        Row: {
+          acesso_expira_em: string | null
+          assinatura: string
+          cnpj_cpf: string | null
+          created_at: string
+          data_cadastro: string
+          email: string | null
+          id: string
+          logo_url: string | null
+          max_socios: number
+          nome_abreviado: string | null
+          nome_entidade: string
+          project_id: string
+          runtime_tenant_id: string | null
+          status: string
+          supports_units: boolean
+          telefone: string | null
+          tenant_code: string
+          updated_at: string
+        }
+        Insert: {
+          acesso_expira_em?: string | null
+          assinatura?: string
+          cnpj_cpf?: string | null
+          created_at?: string
+          data_cadastro?: string
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          max_socios?: number
+          nome_abreviado?: string | null
+          nome_entidade: string
+          project_id: string
+          runtime_tenant_id?: string | null
+          status?: string
+          supports_units?: boolean
+          telefone?: string | null
+          tenant_code: string
+          updated_at?: string
+        }
+        Update: {
+          acesso_expira_em?: string | null
+          assinatura?: string
+          cnpj_cpf?: string | null
+          created_at?: string
+          data_cadastro?: string
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          max_socios?: number
+          nome_abreviado?: string | null
+          nome_entidade?: string
+          project_id?: string
+          runtime_tenant_id?: string | null
+          status?: string
+          supports_units?: boolean
+          telefone?: string | null
+          tenant_code?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projetos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       supabase_accounts_safe: {
@@ -530,16 +541,60 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_identity_public: {
+        Row: {
+          logo_url: string | null
+          name: string | null
+          short_name: string | null
+          tenant_code: string | null
+        }
+        Insert: {
+          logo_url?: string | null
+          name?: string | null
+          short_name?: string | null
+          tenant_code?: string | null
+        }
+        Update: {
+          logo_url?: string | null
+          name?: string | null
+          short_name?: string | null
+          tenant_code?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_and_use_license: {
-        Args: { p_fingerprint: string; p_key: string; p_usage_type?: string }
+        Args: {
+          p_device_name?: string
+          p_fingerprint: string
+          p_key: string
+          p_usage_type?: string
+        }
         Returns: Json
+      }
+      deactivate_device: {
+        Args: { p_fingerprint: string; p_key: string }
+        Returns: Json
+      }
+      get_all_backups: {
+        Args: never
+        Returns: {
+          created_at: string
+          metadata: Json
+          name: string
+        }[]
       }
       get_license_status: {
-        Args: { p_fingerprint: string; p_key: string; p_usage_type?: string }
+        Args: {
+          p_device_name?: string
+          p_fingerprint: string
+          p_key: string
+          p_usage_type?: string
+        }
         Returns: Json
       }
+      get_tenant_config: { Args: { p_code: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -563,27 +618,31 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type PublicSchema = DatabaseWithoutInternals[Extract<keyof DatabaseWithoutInternals, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof (DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Views"])
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? (DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
-        PublicSchema["Views"])
-    ? (PublicSchema["Tables"] &
-        PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -591,20 +650,24 @@ export type Tables<
     : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"]
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -612,20 +675,24 @@ export type TablesInsert<
     : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"]
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -633,31 +700,37 @@ export type TablesUpdate<
     : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof PublicSchema["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicEnumNameOrOptions["schema"]]["Enums"]
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
-    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof PublicSchema["CompositeTypes"]
+    | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
-    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
 export const Constants = {

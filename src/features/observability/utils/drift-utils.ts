@@ -1,4 +1,4 @@
-import type { SchemaDiff, TenantSchemaStatus } from "../model/schema-comparator";
+import type { SchemaDiff } from "../model/schema-comparator";
 import type { SyncableSchemaDrift } from "../types";
 
 type SupportedDiffType = "missing_in_tenant" | "extra_in_tenant" | "different_definition";
@@ -323,26 +323,6 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
   }
 
   return Array.from(syncable.values());
-}
-
-export function getTenantsWithSameSchemaDrift(
-  allStatus: TenantSchemaStatus[],
-  target: Pick<SyncableSchemaDrift, "objectType" | "schema" | "objectName" | "diffType">,
-) {
-  return allStatus
-    .filter((status) =>
-      getSyncableSchemaDrifts(status.diffs).some(
-        (item) =>
-          item.objectType === target.objectType &&
-          item.schema === target.schema &&
-          item.objectName === target.objectName &&
-          item.diffType === target.diffType,
-      ),
-    )
-    .map((status) => ({
-      clientId: status.tenantId,
-      tenantName: status.tenantName,
-    }));
 }
 
 export function buildSchemaSyncActionKey(

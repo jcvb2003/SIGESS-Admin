@@ -1,5 +1,3 @@
-import type { Client } from "@/features/clients";
-
 export type ExportRun = {
   id: string;
   run_id: string | null;
@@ -11,10 +9,6 @@ export type ExportRun = {
   file_size_bytes: number | null;
   error_detail: string | null;
   executed_at: string | null;
-};
-
-export type TenantSnapshot = {
-  client: Client;
 };
 
 export type SyncableSchemaDrift = {

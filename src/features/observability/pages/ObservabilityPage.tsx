@@ -150,7 +150,7 @@ export default function ObservabilityPage() {
                         <SelectValue placeholder="Escolher referência..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {clients.map((c) => (
+                        {Array.from(new Map(clients.map((c) => [c.project_id, c])).values()).map((c) => (
                           <SelectItem key={c.project_id} value={c.project_id}>
                             {c.nome_entidade ?? c.tenant_code}
                           </SelectItem>
@@ -169,7 +169,7 @@ export default function ObservabilityPage() {
                         <SelectValue placeholder="Todos os tenants" />
                       </SelectTrigger>
                       <SelectContent>
-                        {clients
+                        {Array.from(new Map(clients.map((c) => [c.project_id, c])).values())
                           .filter((c) => c.project_id !== adHocReferenceId)
                           .map((c) => (
                             <SelectItem key={c.project_id} value={c.project_id}>

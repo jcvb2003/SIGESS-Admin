@@ -64,7 +64,7 @@ export default function ObservabilityPage() {
 
   const referenceName = useMemo(() => {
     if (!adHocReferenceId) return "referência";
-    return clients.find((c) => c.id === adHocReferenceId)?.nome_entidade ?? "referência";
+    return clients.find((c) => c.project_id === adHocReferenceId)?.nome_entidade ?? "referência";
   }, [adHocReferenceId, clients]);
 
 
@@ -151,7 +151,7 @@ export default function ObservabilityPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {clients.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
+                          <SelectItem key={c.project_id} value={c.project_id}>
                             {c.nome_entidade ?? c.tenant_code}
                           </SelectItem>
                         ))}
@@ -170,9 +170,9 @@ export default function ObservabilityPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {clients
-                          .filter((c) => c.id !== adHocReferenceId)
+                          .filter((c) => c.project_id !== adHocReferenceId)
                           .map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
+                            <SelectItem key={c.project_id} value={c.project_id}>
                               {c.nome_entidade ?? c.tenant_code}
                             </SelectItem>
                           ))}
@@ -200,7 +200,7 @@ export default function ObservabilityPage() {
               <div className="rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200">
                 Comparação concluída — referência: <strong>{referenceName}</strong>
                 {adHocTargetId
-                  ? ` → ${clients.find((c) => c.id === adHocTargetId)?.nome_entidade ?? adHocTargetId}`
+                  ? ` → ${clients.find((c) => c.project_id === adHocTargetId)?.nome_entidade ?? adHocTargetId}`
                   : ` → ${displayStatus.length} tenant(s)`}
               </div>
             )}

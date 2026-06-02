@@ -12,7 +12,10 @@ export async function runSchemaAudit(referenceProjectId: string, targetProjectId
   error?: string;
 }> {
   const { data, error } = await supabase.functions.invoke('schema-audit', {
-    body: { referenceProjectId, ...(targetProjectId ? { targetProjectId } : {}) },
+    body: {
+      referenceProjectId,
+      ...(targetProjectId ? { targetProjectId } : {}),
+    },
   });
 
   if (error) throw new Error(`Erro ao invocar auditoria: ${error.message}`);

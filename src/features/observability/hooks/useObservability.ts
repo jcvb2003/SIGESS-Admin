@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useClients } from "@/features/clients";
@@ -237,7 +237,10 @@ export function useObservability() {
     setAdHocResults(null);
     try {
       const { data, error } = await supabase.functions.invoke("schema-audit", {
-        body: { referenceProjectId: adHocReferenceId },
+        body: {
+          referenceProjectId: adHocReferenceId,
+          ...(adHocTargetId ? { targetProjectId: adHocTargetId } : {}),
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -272,8 +275,8 @@ export function useObservability() {
     setIsRefreshing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: ["clients"] });
-      await queryClient.invalidateQueries({ queryKey: ["global-schema-status"] });
       await queryClient.invalidateQueries({ queryKey: ["global-export-runs"] });
+      handleClearAdHoc();
       toast.success("Observabilidade atualizada.");
     } finally {
       setIsRefreshing(false);
@@ -470,7 +473,6 @@ export function useObservability() {
           ? `Apply concluido: ${successCount} sucesso(s), ${failureCount} falha(s).`
           : "Apply finalizado. Rode uma auditoria para confirmar.";
       toast.success(message);
-      await queryClient.invalidateQueries({ queryKey: ["global-schema-status"] });
     } else if (failureCount > 0) {
       toast.error("Nenhum tenant foi sincronizado. Revise o relatorio do apply.");
     }

@@ -72,6 +72,8 @@ serve(async (req: Request) => {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const referenceProjectId: string | undefined =
       typeof body?.referenceProjectId === "string" ? body.referenceProjectId : undefined;
+    const targetProjectId: string | undefined =
+      typeof body?.targetProjectId === "string" ? body.targetProjectId : undefined;
 
     const refId = referenceProjectId ?? Deno.env.get("REFERENCE_PROJECT_ID");
     if (!refId) throw new Error("referenceProjectId obrigatório (ou REFERENCE_PROJECT_ID nos secrets)");
@@ -120,7 +122,9 @@ serve(async (req: Request) => {
 
     if (!refSnap.db) throw new Error("Falha ao carregar snapshot da referência");
 
-    const targets = projetos.filter(p => p.id !== refId);
+    const targets = projetos.filter(p =>
+      p.id !== refId && (!targetProjectId || p.id === targetProjectId)
+    );
     const results = [];
 
     for (const tenant of targets) {

@@ -98,7 +98,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
           // Runtime falhou, mas registro central foi criado.
           // O link pode ser refeito via Bloco 5 (get-runtime-tenant-id proxy action).
           toast.warning(
-            `Cliente criado, mas o tenant runtime não foi inicializado: ${
+            `Tenant criado, mas o vínculo runtime não foi inicializado: ${
               runtimeError instanceof Error ? runtimeError.message : "erro desconhecido"
             }. Acesse o projeto para resolver.`,
           );
@@ -233,7 +233,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
                   onChange={(e) => update("acesso_expira_em", e.target.value)}
                 />
               </FieldRow>
-              <FieldRow label="Limite de Sócios" hint="0 = ilimitado">
+              <FieldRow label="Limite de Sócios" hint="0 = bloqueia acesso imediatamente">
                 <Input
                   type="number"
                   min={0}

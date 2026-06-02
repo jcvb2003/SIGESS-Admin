@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, X, Loader2, Rocket, Shield, AlertCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ const STEPS: Record<string, string> = {
 
 export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDialogProps>) {
   const queryClient = useQueryClient();
+  const navigate    = useNavigate();
   const { data: accounts = [] } = useSupabaseAccounts();
 
   const [projectCode, setProjectCode]         = useState("");
@@ -292,7 +294,17 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
                   </div>
                 )}
 
-                {isDone && <Button onClick={handleClose} className="w-full">Ver projeto</Button>}
+                {isDone && (
+                  <Button
+                    onClick={() => {
+                      handleClose();
+                      if (job.entidade_id) navigate(`/clients/${job.entidade_id}`);
+                    }}
+                    className="w-full"
+                  >
+                    Ver projeto
+                  </Button>
+                )}
                 {isFailed && (
                   <div className="flex flex-col gap-2">
                     <Button onClick={() => void handleStart()} className="w-full">

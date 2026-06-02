@@ -6,4 +6,3 @@ export * from "./components/TablesTab";
 export * from "./components/UsersTab";
 export * from "./components/UnitsTab";
 export * from "./components/DeleteClientDialog";
-export * from "./components/AddTenantDialog";

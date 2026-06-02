@@ -270,7 +270,7 @@ export function EditClienteModal({
                   onChange={(e) => update("acesso_expira_em", e.target.value)}
                 />
               </FieldRow>
-              <FieldRow label="Limite de Sócios" hint="0 = ilimitado">
+              <FieldRow label="Limite de Sócios" hint="0 = bloqueia acesso imediatamente">
                 <Input
                   type="number"
                   min={0}

@@ -30,7 +30,7 @@ export type SchemaDriftOperation = {
 };
 
 export type SchemaDriftPreview = {
-  targets: Array<{ clientId: string; tenantName: string }>;
+  targets: Array<{ projectId: string; projectName: string }>;
   title: string;
   description: string;
   operations: SchemaDriftOperation[];
@@ -38,8 +38,8 @@ export type SchemaDriftPreview = {
 };
 
 export type SchemaDriftApplyResult = {
-  clientId: string;
-  tenantName: string;
+  projectId: string;
+  projectName: string;
   status: "success" | "failed";
   error?: string;
 };

@@ -61,7 +61,7 @@ export default function ObservabilityPage() {
 
   const displayStatus = useMemo(() => {
     if (!adHocResults) return [];
-    if (adHocTargetId) return adHocResults.filter((r) => r.tenantId === adHocTargetId);
+    if (adHocTargetId) return adHocResults.filter((r) => r.projectId === adHocTargetId);
     return adHocResults;
   }, [adHocResults, adHocTargetId]);
 
@@ -78,7 +78,7 @@ export default function ObservabilityPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Observabilidade</h1>
             <p className="text-muted-foreground">
-              Monitoramento em tempo real da saúde, schema e integridade dos dados de todos os tenants.
+              Monitoramento em tempo real da saúde, schema e integridade dos dados de todos os projetos.
             </p>
           </div>
           <Button 
@@ -204,7 +204,7 @@ export default function ObservabilityPage() {
                 Comparação concluída — referência: <strong>{referenceName}</strong>
                 {adHocTargetId
                   ? ` → ${projects.find((p) => p.id === adHocTargetId)?.project_name ?? adHocTargetId}`
-                  : ` → ${displayStatus.length} tenant(s)`}
+                  : ` → ${displayStatus.length} projeto(s)`}
               </div>
             )}
 
@@ -217,7 +217,7 @@ export default function ObservabilityPage() {
               <div className="space-y-4">
                 {displayStatus.map((status) => (
                   <SchemaDriftCard
-                    key={status.tenantId}
+                    key={status.projectId}
                     status={status}
                     schemaStatus={displayStatus}
                     isPreparingDrift={isPreparingDrift}
@@ -249,8 +249,8 @@ export default function ObservabilityPage() {
                   {(() => {
                     if (!driftPreview) return "";
                     return driftPreview.targets.length === 1
-                      ? driftPreview.targets[0].tenantName
-                      : `${driftPreview.targets.length} tenants`;
+                      ? driftPreview.targets[0].projectName
+                      : `${driftPreview.targets.length} projetos`;
                   })()}
                 </strong>{" "}
                 para alinhar <code>{driftPreview?.title ?? ""}</code>.
@@ -273,7 +273,7 @@ export default function ObservabilityPage() {
                         variant="outline"
                         className="border-emerald-300 bg-background/70 text-emerald-800 dark:border-emerald-900 dark:bg-slate-950/40 dark:text-emerald-200"
                       >
-                        {target.tenantName}
+                        {target.projectName}
                       </Badge>
                     ))}
                   </div>
@@ -290,7 +290,7 @@ export default function ObservabilityPage() {
                         className="flex flex-col gap-2 rounded-md border border-border/50 bg-secondary/10 p-3 sm:flex-row sm:items-start sm:justify-between"
                       >
                         <div className="min-w-0">
-                          <p className="font-medium text-foreground">{result.tenantName}</p>
+                          <p className="font-medium text-foreground">{result.projectName}</p>
                           {result.error ? (
                             <p className="mt-1 break-all font-mono text-xs text-destructive/90">
                               {result.error}
@@ -343,8 +343,8 @@ export default function ObservabilityPage() {
                     <Rocket className="mr-2 h-4 w-4" />
                   )}
                   {driftPreview?.targets.length && driftPreview.targets.length > 1
-                    ? `Aplicar em ${driftPreview.targets.length} tenants`
-                    : "Aplicar no tenant"}
+                    ? `Aplicar em ${driftPreview.targets.length} projetos`
+                    : "Aplicar no projeto"}
                 </Button>
               ) : null}
             </DialogFooter>

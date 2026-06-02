@@ -12,9 +12,9 @@ import type {
   SchemaDriftOperation,
   SyncableSchemaDrift,
 } from "../types";
-import type { TenantSchemaStatus } from "../model/schema-comparator";
+import type { ProjectSchemaStatus } from "../model/schema-comparator";
 
-type DriftTarget = { clientId: string; tenantName: string };
+type DriftTarget = { projectId: string; projectName: string };
 
 function buildOperationsSummary(operations: SchemaDriftOperation[]) {
   const indexCreate = operations.filter((op) => op.objectType === "index" && op.diffType !== "extra_in_tenant").length;
@@ -211,7 +211,7 @@ export function useObservability() {
   // Ad hoc comparison state
   const [adHocReferenceId, setAdHocReferenceId] = useState<string | null>(null);
   const [adHocTargetId, setAdHocTargetId] = useState<string | null>(null);
-  const [adHocResults, setAdHocResults] = useState<TenantSchemaStatus[] | null>(null);
+  const [adHocResults, setAdHocResults] = useState<ProjectSchemaStatus[] | null>(null);
   const [isRunningAdHocAudit, setIsRunningAdHocAudit] = useState(false);
 
   const queryExports = useQuery<ExportRun[]>({
@@ -245,11 +245,11 @@ export function useObservability() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const mapped: TenantSchemaStatus[] = (data?.results ?? [])
+      const mapped: ProjectSchemaStatus[] = (data?.results ?? [])
         .filter((r: any) => !r.error && r.tenantId !== adHocReferenceId)
         .map((r: any) => ({
-          tenantId: r.tenantId,
-          tenantName: r.projectName,
+          projectId: r.tenantId,
+          projectName: r.projectName,
           checkedAt: new Date().toISOString(),
           totalDiffs: r.totalDiffs ?? 0,
           diffs: r.diffs ?? [],
@@ -324,7 +324,7 @@ export function useObservability() {
       const authConfigOps = operationsToPrepare.filter((operation) => operation.objectType === "auth_config");
 
       if (batchOps.length > 0) {
-        const data = await proxyAction(primaryTarget.clientId, "apply-schema-drift", {
+        const data = await proxyAction(primaryTarget.projectId, "apply-schema-drift", {
           operations: batchOps.map((operation) => ({
             objectType: operation.objectType,
             objectName: operation.objectName,
@@ -353,7 +353,7 @@ export function useObservability() {
       }
 
       for (const operation of authConfigOps) {
-        const data = await proxyAction(primaryTarget.clientId, "apply-schema-drift", {
+        const data = await proxyAction(primaryTarget.projectId, "apply-schema-drift", {
           objectType: operation.objectType,
           objectName: operation.objectName,
           schema: operation.schema,
@@ -415,7 +415,7 @@ export function useObservability() {
 
       if (batchOps.length > 0) {
         try {
-          await proxyAction(target.clientId, "apply-schema-drift", {
+          await proxyAction(target.projectId, "apply-schema-drift", {
             operations: batchOps.map((operation) => ({
               objectType: operation.objectType,
               objectName: operation.objectName,
@@ -434,7 +434,7 @@ export function useObservability() {
 
       for (const operation of authConfigOps) {
         try {
-          await proxyAction(target.clientId, "apply-schema-drift", {
+          await proxyAction(target.projectId, "apply-schema-drift", {
             objectType: operation.objectType,
             objectName: operation.objectName,
             schema: operation.schema,
@@ -450,11 +450,11 @@ export function useObservability() {
       }
 
       if (failures.length === 0) {
-        results.push({ clientId: target.clientId, tenantName: target.tenantName, status: "success" });
+        results.push({ projectId: target.projectId, projectName: target.projectName, status: "success" });
       } else {
         results.push({
-          clientId: target.clientId,
-          tenantName: target.tenantName,
+          projectId: target.projectId,
+          projectName: target.projectName,
           status: "failed",
           error: failures.join(" | "),
         });

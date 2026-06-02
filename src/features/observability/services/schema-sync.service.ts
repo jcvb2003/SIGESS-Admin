@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 export async function runSchemaAudit(referenceProjectId: string, targetProjectId?: string): Promise<{
   success: boolean;
   results?: Array<{
-    tenantId: string;
+    projectId: string;
     projectName: string;
     totalDiffs: number;
     diffs: unknown[];

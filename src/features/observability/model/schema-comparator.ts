@@ -427,14 +427,17 @@ export interface DiffSummary {
   byCategory: Record<string, number>;
 }
 
-export interface TenantSchemaStatus {
-  tenantId: string;
-  tenantName: string;
+export interface ProjectSchemaStatus {
+  projectId: string;
+  projectName: string;
   checkedAt: string;
   totalDiffs: number;
   diffs: SchemaDiff[];
   summary: DiffSummary;
 }
+
+/** @deprecated use ProjectSchemaStatus */
+export type TenantSchemaStatus = ProjectSchemaStatus;
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();

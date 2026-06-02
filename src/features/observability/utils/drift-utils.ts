@@ -326,10 +326,10 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
 }
 
 export function buildSchemaSyncActionKey(
-  targets: Array<{ clientId: string; tenantName: string }>,
+  targets: Array<{ projectId: string; projectName: string }>,
   operations: Array<Pick<SyncableSchemaDrift, "objectType" | "schema" | "objectName" | "diffType">>,
 ) {
-  const normalizedTargets = [...targets].map((target) => target.clientId).sort().join(",");
+  const normalizedTargets = [...targets].map((target) => target.projectId).sort().join(",");
   const normalizedOperations = [...operations]
     .map((operation) => `${operation.objectType}:${operation.schema}.${operation.objectName}:${operation.diffType}`)
     .sort()

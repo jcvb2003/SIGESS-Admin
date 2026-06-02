@@ -2,18 +2,18 @@ import { Loader2, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { TenantSchemaStatus } from "../model/schema-comparator";
+import type { ProjectSchemaStatus } from "../model/schema-comparator";
 import type { SyncableSchemaDrift } from "../types";
 import { formatDateTime } from "../utils/format-utils";
 import { buildSchemaSyncActionKey, getSyncableSchemaDrifts } from "../utils/drift-utils";
 
 interface SchemaDriftCardProps {
-  readonly status: TenantSchemaStatus;
-  readonly schemaStatus: TenantSchemaStatus[];
+  readonly status: ProjectSchemaStatus;
+  readonly schemaStatus: ProjectSchemaStatus[];
   readonly isPreparingDrift: string | null;
   readonly referenceName?: string;
   readonly onPrepareSync: (
-    targets: Array<{ clientId: string; tenantName: string }>,
+    targets: Array<{ projectId: string; projectName: string }>,
     operations:
       | SyncableSchemaDrift[]
       | {
@@ -37,7 +37,7 @@ interface SchemaDriftCardProps {
 }
 
 function buildSingleActionKey(
-  target: { clientId: string; tenantName: string },
+  target: { projectId: string; projectName: string },
   operations: SyncableSchemaDrift[],
 ) {
   return buildSchemaSyncActionKey([target], operations);
@@ -123,7 +123,7 @@ export function SchemaDriftCard({
   onPrepareSync,
 }: SchemaDriftCardProps) {
   const syncableDrifts = getSyncableSchemaDrifts(status.diffs);
-  const singleTarget = { clientId: status.tenantId, tenantName: status.tenantName };
+  const singleTarget = { projectId: status.projectId, projectName: status.projectName };
   const tenantLevelOperations = syncableDrifts.filter(
     (item) =>
       item.objectType === "index" ||
@@ -191,7 +191,7 @@ export function SchemaDriftCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-foreground">{status.tenantName}</h3>
+            <h3 className="font-semibold text-foreground">{status.projectName}</h3>
             {status.totalDiffs === 0 ? (
               <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                 100% Sincronizado
@@ -224,7 +224,7 @@ export function SchemaDriftCard({
                 disabled={isPreparingDrift === buildSingleActionKey(singleTarget, tenantLevelOperations)}
                 onClick={() =>
                   onPrepareSync([singleTarget], tenantLevelOperations, {
-                    title: `Sync do tenant ${status.tenantName}`,
+                    title: `Sync do projeto ${status.projectName}`,
                     description:
                       "Preview agrupado por tipo: functions, triggers, grants e demais objetos em ordem segura de execução.",
                   })

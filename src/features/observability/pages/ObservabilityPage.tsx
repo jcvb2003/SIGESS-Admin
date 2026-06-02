@@ -1,12 +1,7 @@
 import {
-  AlertTriangle,
-  Database,
-  Globe2,
   Loader2,
   RefreshCw,
   Rocket,
-  ShieldCheck,
-  KeyRound,
 } from "lucide-react";
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -25,8 +20,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useObservability } from "../hooks/useObservability";
-import { TenantCard } from "../components/TenantCard";
-import { ReferenceCard } from "../components/ReferenceCard";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 import { buildSchemaSyncActionKey, getSyncableSchemaDrifts, getTenantsWithSameSchemaDrift } from "../utils/drift-utils";
@@ -37,8 +30,6 @@ export default function ObservabilityPage() {
     clients,
     exportRuns,
     schemaStatus,
-    snapshots,
-    overview,
     isLoadingClients,
     isLoadingExports,
     isLoadingSchema,
@@ -133,58 +124,11 @@ export default function ObservabilityPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 divide-x divide-y divide-border/40 rounded-xl border border-border/50 sm:grid-cols-4 sm:divide-y-0">
-          {[
-            { label: "Monitorados", value: overview.total, icon: Globe2, color: "text-primary", bg: "bg-primary/10" },
-            { label: "Saudáveis", value: overview.healthy, icon: ShieldCheck, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-            { label: "Com problema", value: overview.total - overview.healthy, icon: AlertTriangle, color: overview.total - overview.healthy > 0 ? "text-destructive" : "text-muted-foreground", bg: overview.total - overview.healthy > 0 ? "bg-destructive/10" : "bg-muted/40" },
-            { label: "Config pública OK", value: `${overview.publicConfigOk}/${overview.total}`, icon: KeyRound, color: overview.publicConfigOk === overview.total ? "text-sky-500" : "text-amber-500", bg: overview.publicConfigOk === overview.total ? "bg-sky-500/10" : "bg-amber-500/10" },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="flex items-center gap-3 px-5 py-4">
-              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${bg}`}>
-                <Icon className={`h-4 w-4 ${color}`} />
-              </div>
-              <div>
-                <p className={`text-xl font-bold leading-none ${color}`}>{value}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs defaultValue="exports" className="space-y-6">
           <TabsList className="bg-secondary/60">
-            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="exports">Exportação (JSONL)</TabsTrigger>
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            {isLoadingClients ? (
-              <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
-                <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Carregando tenants...</span>
-              </div>
-            ) : (
-              <>
-                {(() => {
-                  const ref = clients.find(c => c.tenant_code === 'sinpesca');
-                  return ref ? <ReferenceCard client={ref} /> : null;
-                })()}
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {snapshots
-                    .filter(s => s.client.tenant_code !== 'sinpesca')
-                    .map((snapshot) => (
-                      <TenantCard
-                        key={snapshot.client.id}
-                        snapshot={snapshot}
-                        schemaStatus={schemaStatus}
-                      />
-                    ))}
-                </div>
-              </>
-            )}
-          </TabsContent>
 
           <TabsContent value="exports" className="space-y-4">
             {isLoadingExports ? (

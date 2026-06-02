@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -8,7 +8,6 @@ import { getSchemaSyncStatus, runSchemaAudit } from "../services/schema-sync.ser
 import { buildSchemaSyncActionKey } from "../utils/drift-utils";
 import type {
   ExportRun,
-  TenantSnapshot,
   SchemaDriftPreview,
   SchemaDriftApplyResult,
   SchemaDriftOperation,
@@ -210,11 +209,6 @@ export function useObservability() {
   const [isApplyingDrift, setIsApplyingDrift] = useState(false);
   const [driftApplyResults, setDriftApplyResults] = useState<SchemaDriftApplyResult[]>([]);
 
-  const snapshots = useMemo<TenantSnapshot[]>(
-    () => clients.map((client) => ({ client })),
-    [clients],
-  );
-
   const queryExports = useQuery<ExportRun[]>({
     queryKey: ["global-export-runs"],
     queryFn: async () => {
@@ -253,16 +247,6 @@ export function useObservability() {
       setIsAuditingSchema(false);
     }
   };
-
-  const overview = useMemo(() => {
-    const healthy = snapshots.filter((item) => item.client.key_status === "valid").length;
-    const publicConfigOk = clients.filter((c) => !!(c.tenant_code && c.supabase_publishable_key)).length;
-    return {
-      total: clients.length,
-      healthy,
-      publicConfigOk,
-    };
-  }, [snapshots, clients]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -472,8 +456,6 @@ export function useObservability() {
     clients,
     exportRuns,
     schemaStatus,
-    snapshots,
-    overview,
     isLoadingClients,
     isLoadingExports,
     isLoadingSchema,

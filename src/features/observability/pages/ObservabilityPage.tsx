@@ -30,7 +30,6 @@ export default function ObservabilityPage() {
     clients,
     exportRuns,
     schemaStatus,
-    isLoadingClients,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,

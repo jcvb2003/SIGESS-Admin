@@ -202,7 +202,7 @@ function sortOperations(operations: SyncableSchemaDrift[]) {
 
 export function useObservability() {
   const queryClient = useQueryClient();
-  const { data: clients = [], isLoading: isLoadingClients } = useClients();
+  const { data: clients = [] } = useClients();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [driftPreview, setDriftPreview] = useState<SchemaDriftPreview | null>(null);
   const [isPreparingDrift, setIsPreparingDrift] = useState<string | null>(null);
@@ -456,7 +456,6 @@ export function useObservability() {
     clients,
     exportRuns,
     schemaStatus,
-    isLoadingClients,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,

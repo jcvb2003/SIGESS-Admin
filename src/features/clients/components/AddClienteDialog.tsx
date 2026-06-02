@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { CheckCircle2, Link, Loader2, UserPlus, AlertCircle, SkipForward } from "lucide-react";
 import { toast } from "sonner";
-import { createSharedTenantForProject, linkIsolatedProjectRuntime } from "@/services/runtime-tenants.service";
+import {
+  createSharedTenantForProject,
+  linkIsolatedProjectRuntime,
+  syncIsolatedProjectLicense,
+} from "@/services/runtime-tenants.service";
 import {
   Dialog,
   DialogContent,
@@ -115,9 +119,11 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
       // Shared: cria tenant runtime diretamente
       if (!isIsolated) {
         try {
-          await createSharedTenantForProject(result.id, {
+          await createSharedTenantForProject(project, result.id, {
             name: result.nome_entidade,
             code: result.tenant_code,
+            acesso_expira_em: result.acesso_expira_em,
+            max_socios: result.max_socios,
           });
           toast.success(`Tenant "${result.nome_entidade}" criado com sucesso.`);
           onCreated?.(result.id);
@@ -156,6 +162,10 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
       await updateCliente.mutateAsync({
         id: createdCliente.id,
         input: { runtime_tenant_id: foundRuntimeId },
+      });
+      await syncIsolatedProjectLicense(project.id, {
+        acesso_expira_em: createdCliente.acesso_expira_em,
+        max_socios: createdCliente.max_socios,
       });
       toast.success(`Tenant "${createdCliente.nome_entidade}" vinculado ao runtime com sucesso.`);
       onCreated?.(createdCliente.id);

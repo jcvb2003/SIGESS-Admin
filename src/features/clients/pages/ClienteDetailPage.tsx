@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjectDetail } from "../hooks/useProjectDetail";
 import { useClienteDetail } from "../hooks/useClienteDetail";
 import { EditClienteModal } from "../components/EditClienteModal";
-import { UsersTab, UnitsTab } from "@/features/clients";
+import { SharedUsersTab, UsersTab, UnitsTab } from "@/features/clients";
 import type { Cliente, Project } from "../types";
 
 function hasPolos(topology: Project["topology"]): boolean {
@@ -212,18 +212,31 @@ export default function ClienteDetailPage() {
 
             {showUsers && (
               <TabsContent value="users">
-                <UsersTab
-                  clientId={projectId!}
-                  connectionError={null}
-                  onUsersLoaded={() => {}}
-                />
+                {project.topology === "shared_multi_single" ? (
+                  cliente.runtime_tenant_id ? (
+                    <SharedUsersTab project={project} tenantId={cliente.runtime_tenant_id} showGestor={showUnits} />
+                  ) : (
+                    <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
+                      <Users className="h-7 w-7 text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground">
+                        Este tenant ainda não possui um ID runtime associado.
+                      </p>
+                    </Card>
+                  )
+                ) : (
+                  <UsersTab
+                    clientId={projectId!}
+                    connectionError={null}
+                    onUsersLoaded={() => {}}
+                  />
+                )}
               </TabsContent>
             )}
 
             {showUnits && (
               <TabsContent value="units">
                 {cliente.runtime_tenant_id ? (
-                  <UnitsTab tenantId={cliente.runtime_tenant_id} />
+                  <UnitsTab project={project} tenantId={cliente.runtime_tenant_id} />
                 ) : (
                   <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
                     <Building2 className="h-7 w-7 text-muted-foreground/40" />

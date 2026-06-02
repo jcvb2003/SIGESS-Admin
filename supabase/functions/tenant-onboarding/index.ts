@@ -4,8 +4,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // @ts-expect-error: Deno-specific URL imports
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-// @ts-expect-error: Deno-specific URL imports
-import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const EMAIL_INVITE_TEMPLATE = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -434,6 +432,7 @@ function sanitizeInitialSchemaSql(sql: string) {
     .replace(/^CREATE SCHEMA IF NOT EXISTS public;\s*$/gim, "")
     .replace(/^ALTER SCHEMA public OWNER TO .*?;\s*$/gim, "")
     .replace(/^COMMENT ON SCHEMA public IS .*?;\s*$/gim, "")
+    .replace(/\bextensions\.gin_trgm_ops\b/g, "public.gin_trgm_ops")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -466,9 +465,6 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
     await fetchSqlFromStorage(supabaseAdmin, 'initial_schema.sql')
   );
   await runQuery(initialSchema);
-
-  const seed = await fetchSqlFromStorage(supabaseAdmin, 'seed.sql');
-  await runQuery(seed);
 
   return { success: true };
 }
@@ -585,16 +581,12 @@ function decodeBase64Utf8(value: string) {
 }
 
 async function deployManageUserFunction(projectRef: string, accessToken: string) {
-  const zip = new JSZip();
-  zip.file("index.ts", decodeBase64Utf8(MANAGE_USER_FUNCTION_SOURCE_B64));
-
-  const archive = await zip.generateAsync({
-    type: "uint8array",
-    compression: "DEFLATE",
-  });
-
   const form = new FormData();
-  form.append("file", new Blob([archive], { type: "application/zip" }), "manage-user.zip");
+  form.append(
+    "file",
+    new Blob([decodeBase64Utf8(MANAGE_USER_FUNCTION_SOURCE_B64)], { type: "application/typescript" }),
+    "index.ts",
+  );
   form.append("metadata", JSON.stringify({
     name: "manage-user",
     entrypoint_path: "index.ts",
@@ -632,28 +624,6 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   if (!userId) return;
 
   await client.auth.admin.updateUserById(userId, { app_metadata: { role: "admin" } });
-
-  // Vincular owner ao tenant e unidade criados pelo seed
-  const { data: tenant } = await client.from("tenants").select("id").limit(1).maybeSingle();
-  const { data: unit } = await client.from("tenant_units").select("id").limit(1).maybeSingle();
-
-  if (tenant?.id && unit?.id) {
-    const { error: tuError } = await client.from("tenant_users").insert({
-      tenant_id: tenant.id,
-      user_id: userId,
-      tenant_role: "owner",
-      is_active: true,
-    });
-    if (tuError && !tuError.message.includes("duplicate")) throw tuError;
-
-    const { error: umError } = await client.from("user_unit_memberships").insert({
-      tenant_id: tenant.id,
-      user_id: userId,
-      unit_id: unit.id,
-      is_active: true,
-    });
-    if (umError && !umError.message.includes("duplicate")) throw umError;
-  }
 }
 
 async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string) {

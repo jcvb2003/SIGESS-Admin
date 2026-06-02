@@ -4,5 +4,6 @@ export * from "./components/HealthCheckCard";
 export * from "./components/MigrationsTab";
 export * from "./components/TablesTab";
 export * from "./components/UsersTab";
+export * from "./components/SharedUsersTab";
 export * from "./components/UnitsTab";
 export * from "./components/DeleteClientDialog";

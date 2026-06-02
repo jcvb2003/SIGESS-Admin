@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import type { OperatorType, TenantUnit, TenantUser, UserUnitMembership } from "../types";
+import type { OperatorType, Project, TenantUnit, TenantUser, UserUnitMembership } from "../types";
 import {
   createSharedTenantAdmin,
   createSharedTenantOperatorWithMembership,
@@ -56,6 +56,7 @@ import {
 } from "@/services/clients.service";
 
 interface UnitsTabProps {
+  readonly project: Project;
   readonly tenantId: string;
 }
 
@@ -94,7 +95,7 @@ const OPERATOR_TYPE_LABEL: Record<OperatorType, string> = {
   auxiliar: "Auxiliar",
 };
 
-export function UnitsTab({ tenantId }: UnitsTabProps) {
+export function UnitsTab({ project, tenantId }: UnitsTabProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -118,9 +119,9 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   const usersKey       = useMemo(() => ["shared-tenant-users",       tenantId], [tenantId]);
   const membershipsKey = useMemo(() => ["shared-tenant-memberships", tenantId], [tenantId]);
 
-  const { data: units       = [], isLoading: loadingUnits }       = useQuery({ queryKey: unitsKey,       queryFn: () => listSharedTenantUnits(tenantId),  enabled: Boolean(tenantId) });
-  const { data: tenantUsers = [], isLoading: loadingUsers }       = useQuery({ queryKey: usersKey,       queryFn: () => listSharedTenantUsers(tenantId),  enabled: Boolean(tenantId) });
-  const { data: memberships = [], isLoading: loadingMemberships } = useQuery({ queryKey: membershipsKey, queryFn: () => listSharedMemberships(tenantId),  enabled: Boolean(tenantId) });
+  const { data: units       = [], isLoading: loadingUnits }       = useQuery({ queryKey: unitsKey,       queryFn: () => listSharedTenantUnits(project, tenantId),  enabled: Boolean(tenantId) });
+  const { data: tenantUsers = [], isLoading: loadingUsers }       = useQuery({ queryKey: usersKey,       queryFn: () => listSharedTenantUsers(project, tenantId),  enabled: Boolean(tenantId) });
+  const { data: memberships = [], isLoading: loadingMemberships } = useQuery({ queryKey: membershipsKey, queryFn: () => listSharedMemberships(project, tenantId),  enabled: Boolean(tenantId) });
 
   const isLoading = loadingUnits || loadingUsers || loadingMemberships;
 
@@ -141,20 +142,20 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
 
   const createUnitMutation = useMutation({
     mutationFn: (payload: UnitFormState) =>
-      createSharedTenantUnit({ tenant_id: tenantId, code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null, is_active: true }),
+      createSharedTenantUnit(project, { tenant_id: tenantId, code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null, is_active: true }),
     onSuccess: () => { toast({ title: "Polo criado" }); queryClient.invalidateQueries({ queryKey: unitsKey }); handleCloseUnit(); },
     onError: (e) => toast({ title: "Erro ao criar polo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
 
   const updateUnitMutation = useMutation({
     mutationFn: (payload: UnitFormState) =>
-      updateSharedTenantUnit(editingUnit!.id, { code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null }),
+      updateSharedTenantUnit(project, editingUnit!.id, { code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null }),
     onSuccess: () => { toast({ title: "Polo atualizado" }); queryClient.invalidateQueries({ queryKey: unitsKey }); handleCloseUnit(); },
     onError: (e) => toast({ title: "Erro ao atualizar polo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
 
   const deleteUnitMutation = useMutation({
-    mutationFn: (unitId: string) => deleteSharedTenantUnit(unitId),
+    mutationFn: (unitId: string) => deleteSharedTenantUnit(project, unitId),
     onSuccess: () => { toast({ title: "Polo removido" }); queryClient.invalidateQueries({ queryKey: unitsKey }); setPendingDeleteUnit(null); },
     onError: (e) => toast({ title: "Erro ao remover polo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
@@ -164,6 +165,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   const createOperatorMutation = useMutation({
     mutationFn: () =>
       createSharedTenantOperatorWithMembership({
+        project,
         tenantId,
         unitId: operatorTargetUnit!.id,
         email: operatorForm.email,
@@ -182,14 +184,14 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   });
 
   const deleteOperatorMutation = useMutation({
-    mutationFn: (user: TenantUser) => deleteSharedTenantUser({ tenantId, tenantUserId: user.id, authUserId: user.user_id }),
+    mutationFn: (user: TenantUser) => deleteSharedTenantUser({ project, tenantId, tenantUserId: user.id, authUserId: user.user_id }),
     onSuccess: () => { toast({ title: "Operador removido" }); invalidateAll(); setPendingDeleteOperator(null); },
     onError: (e) => toast({ title: "Erro ao remover operador", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
 
   const updateOperatorMutation = useMutation({
     mutationFn: (input: { id: string; patch: Partial<Pick<TenantUser, "operator_type" | "is_active">> }) =>
-      updateSharedTenantUser(input.id, input.patch),
+      updateSharedTenantUser(project, input.id, input.patch),
     onSuccess: () => { toast({ title: "Operador atualizado" }); queryClient.invalidateQueries({ queryKey: usersKey }); },
     onError: (e) => toast({ title: "Erro ao atualizar operador", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
@@ -197,7 +199,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   // ── Gestor mutations ──
 
   const createGestorMutation = useMutation({
-    mutationFn: () => createSharedTenantAdmin({ tenantId, email: gestorForm.email, nome: gestorForm.nome, password: gestorForm.password, autoConfirm: gestorForm.autoConfirm }),
+    mutationFn: () => createSharedTenantAdmin({ project, tenantId, email: gestorForm.email, nome: gestorForm.nome, password: gestorForm.password, autoConfirm: gestorForm.autoConfirm }),
     onSuccess: async () => {
       toast({ title: "Gestor criado" });
       await queryClient.invalidateQueries({ queryKey: usersKey });
@@ -208,7 +210,7 @@ export function UnitsTab({ tenantId }: UnitsTabProps) {
   });
 
   const deleteGestorMutation = useMutation({
-    mutationFn: (user: TenantUser) => deleteSharedTenantUser({ tenantId, tenantUserId: user.id, authUserId: user.user_id }),
+    mutationFn: (user: TenantUser) => deleteSharedTenantUser({ project, tenantId, tenantUserId: user.id, authUserId: user.user_id }),
     onSuccess: async () => { toast({ title: "Gestor removido" }); await queryClient.invalidateQueries({ queryKey: usersKey }); setPendingDeleteGestor(null); },
     onError: (e) => toast({ title: "Erro ao remover gestor", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });

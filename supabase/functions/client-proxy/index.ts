@@ -1688,7 +1688,26 @@ async function syncLicenseConfig(
 
   if (Object.keys(configUpdates).length === 0) return;
 
-  await fetch(`${clientUrl}/rest/v1/configuracao_entidade?id=eq.1`, {
+  const tenantRes = await fetch(`${clientUrl}/rest/v1/tenants?select=id&limit=2`, {
+    headers: {
+      apikey: clientKey,
+      Authorization: `Bearer ${clientKey}`,
+    },
+  });
+
+  if (!tenantRes.ok) {
+    throw new Error(`Failed to query runtime tenants (${tenantRes.status}): ${await tenantRes.text()}`);
+  }
+
+  const runtimeTenants = await tenantRes.json() as Array<{ id?: string | null }>;
+  if (runtimeTenants.length === 0 || !runtimeTenants[0]?.id) {
+    throw new Error("Runtime tenant not found for license sync.");
+  }
+  if (runtimeTenants.length > 1) {
+    throw new Error("Projeto possui mais de um tenant runtime; sincronização isolated exige tenant explícito.");
+  }
+
+  const patchRes = await fetch(`${clientUrl}/rest/v1/tenants?id=eq.${runtimeTenants[0].id}`, {
     method: "PATCH",
     headers: {
       apikey: clientKey,
@@ -1697,6 +1716,10 @@ async function syncLicenseConfig(
     },
     body: JSON.stringify(configUpdates)
   });
+
+  if (!patchRes.ok) {
+    throw new Error(`Failed to sync tenant license (${patchRes.status}): ${await patchRes.text()}`);
+  }
 }
 
 async function syncTrialLimits(

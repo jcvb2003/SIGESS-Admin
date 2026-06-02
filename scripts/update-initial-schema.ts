@@ -32,6 +32,7 @@ function sanitizeInitialSchema(sql: string) {
     .replace(/^CREATE SCHEMA IF NOT EXISTS public;\s*$/gim, '')
     .replace(/^ALTER SCHEMA public OWNER TO .*?;\s*$/gim, '')
     .replace(/^COMMENT ON SCHEMA public IS .*?;\s*$/gim, '')
+    .replace(/\bextensions\.gin_trgm_ops\b/g, 'public.gin_trgm_ops')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 

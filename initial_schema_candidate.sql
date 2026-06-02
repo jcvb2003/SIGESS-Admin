@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -1839,11 +1841,11 @@ CREATE INDEX idx_regime_socio ON public.financeiro_historico_regime USING btree 
 
 CREATE INDEX idx_socios_birth_month ON public.socios USING btree (EXTRACT(month FROM data_de_nascimento));
 
-CREATE INDEX idx_socios_codigo_socio_trgm ON public.socios USING gin (codigo_do_socio extensions.gin_trgm_ops);
+CREATE INDEX idx_socios_codigo_socio_trgm ON public.socios USING gin (codigo_do_socio public.gin_trgm_ops);
 
-CREATE INDEX idx_socios_cpf_trgm ON public.socios USING gin (cpf extensions.gin_trgm_ops);
+CREATE INDEX idx_socios_cpf_trgm ON public.socios USING gin (cpf public.gin_trgm_ops);
 
-CREATE INDEX idx_socios_nome_trgm ON public.socios USING gin (nome extensions.gin_trgm_ops);
+CREATE INDEX idx_socios_nome_trgm ON public.socios USING gin (nome public.gin_trgm_ops);
 
 CREATE INDEX idx_tipos_cobranca_ativo ON public.tipos_cobranca USING btree (ativo);
 

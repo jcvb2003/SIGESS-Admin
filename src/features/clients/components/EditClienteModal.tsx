@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import type { Cliente, Project } from "../types";
 import { useUpdateCliente, useDeleteCliente } from "../hooks/useClienteMutations";
+import { syncIsolatedProjectLicense, syncSharedTenantLicense } from "@/services/runtime-tenants.service";
 
 interface EditClienteModalProps {
   readonly cliente: Cliente;
@@ -121,6 +122,19 @@ export function EditClienteModal({
           supports_units:   showSupportsUnits ? form.supports_units : cliente.supports_units,
         },
       });
+      if (project.topology.startsWith("shared")) {
+        if (result.runtime_tenant_id) {
+          await syncSharedTenantLicense(project, result.runtime_tenant_id, {
+            acesso_expira_em: result.acesso_expira_em,
+            max_socios: result.max_socios,
+          });
+        }
+      } else {
+        await syncIsolatedProjectLicense(project.id, {
+          acesso_expira_em: result.acesso_expira_em,
+          max_socios: result.max_socios,
+        });
+      }
       toast.success("Tenant atualizado com sucesso");
       onUpdated?.(result);
       onOpenChange(false);

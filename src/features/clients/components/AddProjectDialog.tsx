@@ -48,7 +48,6 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
   const navigate    = useNavigate();
   const { data: accounts = [] } = useSupabaseAccounts();
 
-  const [projectCode, setProjectCode]         = useState("");
   const [projectName, setProjectName]         = useState("");
   const [projectRef, setProjectRef]           = useState("");
   const [supabaseAccountId, setSupabaseAccountId] = useState("");
@@ -71,13 +70,12 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
 
   const handleStart = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!projectCode || !projectName || !projectRef || !supabaseAccountId) return;
+    if (!projectName || !projectRef || !supabaseAccountId) return;
 
     setIsStarting(true);
     setJobId(null);
     try {
       const response = await startProjectOnboarding({
-        tenantCode:   projectCode,
         tenantLabel:  projectName,
         projectRef,
         supabaseAccountId,
@@ -93,7 +91,6 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
   const handleClose = () => {
     if (job?.status === "completed") {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey });
-      setProjectCode("");
       setProjectName("");
       setProjectRef("");
       setSupabaseAccountId("");
@@ -168,19 +165,7 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
                   required
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="projectCode">Código</Label>
-                <Input
-                  id="projectCode"
-                  placeholder="Ex: sinpesca-breves"
-                  value={projectCode}
-                  onChange={(e) => setProjectCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                  required
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Apenas letras minúsculas, números e hífen. Identificador único global.
-                </p>
-              </div>
+
             </div>
 
             <div className="space-y-3 rounded-lg border border-border/50 bg-secondary/20 p-4">
@@ -218,7 +203,7 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
               <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>
               <Button
                 type="submit"
-                disabled={isStarting || !supabaseAccountId || !projectName || !projectCode || !projectRef}
+                disabled={isStarting || !supabaseAccountId || !projectName || !projectRef}
               >
                 {isStarting
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -75,10 +75,10 @@ export async function proxyAction(
 }
 
 export async function startProjectOnboarding(payload: {
-  tenantCode: string;
   tenantLabel: string;
   projectRef: string;
   supabaseAccountId: string;
+  tenantCode?: string;
   adminEmail?: string;
   maxSocios?: number | null;
   acessoExpiraEm?: string | null;

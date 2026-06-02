@@ -25,8 +25,9 @@ function hasPolos(topology: Project["topology"]): boolean {
   );
 }
 
-function isSharedTopology(topology: Project["topology"]): boolean {
-  return topology.startsWith("shared");
+function hasUsers(topology: Project["topology"]): boolean {
+  // shared_multi_polo e shared_hybrid gerenciam usuários via polo, não pelo tenant diretamente
+  return topology !== "shared_multi_polo" && topology !== "shared_hybrid";
 }
 
 // ── Commercial info card ──────────────────────────────────────────────────────
@@ -146,8 +147,8 @@ export default function ClienteDetailPage() {
   }
 
   const showUnits  = hasPolos(project.topology);
-  const isShared   = isSharedTopology(project.topology);
-  const defaultTab = showUnits ? "units" : "users";
+  const showUsers  = hasUsers(project.topology);
+  const defaultTab = showUsers ? "users" : "units";
 
   return (
     <MainLayout>
@@ -195,7 +196,7 @@ export default function ClienteDetailPage() {
         {project.topology !== "unconfigured" && (
           <Tabs defaultValue={defaultTab} className="space-y-4">
             <TabsList className="bg-secondary/50">
-              {!isShared && (
+              {showUsers && (
                 <TabsTrigger value="users" className="gap-2">
                   <Users className="h-4 w-4" />
                   Usuários
@@ -209,7 +210,7 @@ export default function ClienteDetailPage() {
               )}
             </TabsList>
 
-            {!isShared && (
+            {showUsers && (
               <TabsContent value="users">
                 <UsersTab
                   clientId={projectId!}

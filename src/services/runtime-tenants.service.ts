@@ -14,8 +14,8 @@ import type {
 // Não conhece projetos nem clientes do Admin central.
 
 /**
- * Para projetos isolated: consulta o runtime DB via proxy, descobre o UUID do
- * tenant runtime e preenche clientes.runtime_tenant_id nas rows ainda nulas.
+ * Para projetos isolated: consulta o runtime DB via proxy e descobre o UUID do
+ * tenant runtime, para ser gravado em tenants.runtime_tenant_id.
  */
 export async function linkIsolatedProjectRuntime(projectId: string): Promise<{ runtime_tenant_id: string }> {
   return proxyAction(projectId, "get-runtime-tenant-id") as Promise<{ runtime_tenant_id: string }>;

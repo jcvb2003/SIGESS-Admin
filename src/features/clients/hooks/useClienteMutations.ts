@@ -1,40 +1,47 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createCliente, updateCliente, deleteCliente } from "@/services/commercial-tenants.service";
-import type { ClienteUpdate } from "@/features/clients/types";
-import { clientesQueryKey } from "./useClientes";
+import { createTenant, updateTenant, deleteTenant } from "@/services/commercial-tenants.service";
+import type { TenantUpdate } from "@/features/clients/types";
+import { tenantsQueryKey } from "./useClientes";
 import { projectDetailQueryKey } from "./useProjectDetail";
 
-function useClientesInvalidation(projectId: string) {
+function useTenantsInvalidation(projectId: string) {
   const queryClient = useQueryClient();
   return () => {
-    queryClient.invalidateQueries({ queryKey: clientesQueryKey(projectId) });
+    queryClient.invalidateQueries({ queryKey: tenantsQueryKey(projectId) });
     queryClient.invalidateQueries({ queryKey: projectDetailQueryKey(projectId) });
   };
 }
 
-// project_id é injetado pelo hook — o caller não passa, evitando divergência silenciosa
-export function useCreateCliente(projectId: string) {
-  const invalidate = useClientesInvalidation(projectId);
+export function useCreateTenant(projectId: string) {
+  const invalidate = useTenantsInvalidation(projectId);
   return useMutation({
-    mutationFn: (input: Omit<Parameters<typeof createCliente>[0], "project_id">) =>
-      createCliente({ ...input, project_id: projectId }),
+    mutationFn: (input: Omit<Parameters<typeof createTenant>[0], "project_id">) =>
+      createTenant({ ...input, project_id: projectId }),
     onSuccess: invalidate,
   });
 }
 
-export function useUpdateCliente(projectId: string) {
-  const invalidate = useClientesInvalidation(projectId);
+export function useUpdateTenant(projectId: string) {
+  const invalidate = useTenantsInvalidation(projectId);
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: ClienteUpdate }) =>
-      updateCliente(id, input),
+    mutationFn: ({ id, input }: { id: string; input: TenantUpdate }) =>
+      updateTenant(id, input),
     onSuccess: invalidate,
   });
 }
 
-export function useDeleteCliente(projectId: string) {
-  const invalidate = useClientesInvalidation(projectId);
+export function useDeleteTenant(projectId: string) {
+  const invalidate = useTenantsInvalidation(projectId);
   return useMutation({
-    mutationFn: (id: string) => deleteCliente(id),
+    mutationFn: (id: string) => deleteTenant(id),
     onSuccess: invalidate,
   });
 }
+
+// Aliases de compatibilidade
+/** @deprecated use useCreateTenant */
+export const useCreateCliente = useCreateTenant;
+/** @deprecated use useUpdateTenant */
+export const useUpdateCliente = useUpdateTenant;
+/** @deprecated use useDeleteTenant */
+export const useDeleteCliente = useDeleteTenant;

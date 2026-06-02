@@ -1,12 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { listClientesByProject } from "@/services/commercial-tenants.service";
+import { listTenantsByProject } from "@/services/commercial-tenants.service";
 
-export const clientesQueryKey = (projectId: string) => ["clientes", projectId] as const;
+export const tenantsQueryKey = (projectId: string) => ["tenants", projectId] as const;
 
-export function useClientes(projectId: string) {
+/** @deprecated use tenantsQueryKey */
+export const clientesQueryKey = tenantsQueryKey;
+
+export function useTenants(projectId: string) {
   return useQuery({
-    queryKey: clientesQueryKey(projectId),
-    queryFn: () => listClientesByProject(projectId),
+    queryKey: tenantsQueryKey(projectId),
+    queryFn: () => listTenantsByProject(projectId),
     enabled: Boolean(projectId),
   });
 }
+
+/** @deprecated use useTenants */
+export const useClientes = useTenants;

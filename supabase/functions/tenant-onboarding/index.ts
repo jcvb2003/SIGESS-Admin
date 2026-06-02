@@ -215,7 +215,6 @@ interface OnboardingPayload {
   tenantLabel: string;
   projectRef: string;
   supabaseAccountId: string;
-  tenantCode?: string;
   adminEmail?: string;
   maxSocios?: number | null;
   acessoExpiraEm?: string | null;
@@ -270,18 +269,10 @@ serve(async (req: Request) => {
     if (!payload.tenantLabel || !payload.projectRef || !payload.supabaseAccountId) {
       throw new Error("Missing required payload fields");
     }
-    if (!payload.tenantCode) {
-      payload.tenantCode = payload.tenantLabel
-        .toLowerCase()
-        .normalize("NFD").replace(/[̀-ͯ]/g, "")
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-    }
 
     const { data: job, error: jobError } = await supabaseAdmin
       .from("onboarding_jobs")
       .insert({
-        tenant_code: payload.tenantCode,
         tenant_label: payload.tenantLabel,
         project_ref: payload.projectRef,
         admin_email: payload.adminEmail || null,
@@ -333,7 +324,7 @@ async function updateJob(
 // --- Main background processing ---
 async function processOnboarding(jobId: string, payload: OnboardingPayload, supabaseAdmin: SupabaseClient) {
   try {
-    const { projectRef, tenantCode, tenantLabel, adminEmail, supabaseAccountId, maxSocios, acessoExpiraEm } = payload;
+    const { projectRef, tenantLabel, adminEmail, supabaseAccountId, maxSocios, acessoExpiraEm } = payload;
     const projectUrl = `https://${projectRef}.supabase.co`;
 
     const { data: settingsData } = await supabaseAdmin.from("system_settings").select("key, value");
@@ -380,7 +371,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
 
     // 5. Registration
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
-    const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, tenantCode, projectUrl, anonKey, serviceRoleKey, managementToken);
+    const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
 
     // 6. Finalization
     await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, projetoId);
@@ -662,13 +653,12 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   }
 }
 
-async function registerProjectInCentral(admin: SupabaseClient, label: string, code: string, url: string, anon: string, sr: string, pat: string) {
-  const { data: existing } = await admin.from('projetos').select('id').eq('tenant_code', code.toLowerCase()).single();
+async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string) {
+  const { data: existing } = await admin.from('projetos').select('id').eq('supabase_url', url).single();
   if (existing) return existing.id;
 
   const { data: projeto, error } = await admin.from('projetos').insert({
     project_name: label,
-    tenant_code: code.toLowerCase(),
     supabase_url: url,
     supabase_publishable_key: anon,
     supabase_secret_keys: sr,

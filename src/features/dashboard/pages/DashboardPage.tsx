@@ -99,7 +99,7 @@ export default function DashboardPage() {
                           {project.project_name}
                         </p>
                         <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-                          {project.tenant_code}
+                          {TOPOLOGY_LABEL[project.topology]}
                         </p>
                       </div>
                     </div>

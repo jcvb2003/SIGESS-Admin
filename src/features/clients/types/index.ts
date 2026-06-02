@@ -21,12 +21,12 @@ export const TOPOLOGY_LABEL: Record<Topology, string> = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Project — representa o projeto Supabase (infraestrutura)
+// tenant_code removido — identificador de tenant vive somente em Tenant
 // ─────────────────────────────────────────────────────────────────────────────
 export interface Project {
   id: string;
   project_name: string;
   topology: Topology;
-  tenant_code: string;                // compatibilidade temporária — Web/tenant-config ainda depende
   supabase_url: string;
   supabase_publishable_key: string;
   supabase_secret_keys: string | null;
@@ -41,16 +41,16 @@ export interface Project {
 export type ProjectUpdate = Partial<Omit<Project, "id" | "data_cadastro">>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cliente — representa o tenant/cliente comercial dentro de um projeto
+// Tenant — identidade operacional/comercial dentro de um projeto
 // ─────────────────────────────────────────────────────────────────────────────
-export interface Cliente {
+export interface Tenant {
   id: string;
   project_id: string;
   nome_entidade: string;
   nome_abreviado: string | null;
-  tenant_code: string;                // fonte canônica para o Admin
-  runtime_tenant_id: string | null;   // UUID do tenant no banco runtime do projeto
-  supports_units: boolean;            // se este tenant tem polos (relevante em shared_hybrid)
+  tenant_code: string;
+  runtime_tenant_id: string | null;
+  supports_units: boolean;
   email: string | null;
   telefone: string | null;
   cnpj_cpf: string | null;
@@ -64,13 +64,13 @@ export interface Cliente {
   updated_at: string;
 }
 
-export type ClienteCreate = Omit<Cliente, "id" | "data_cadastro" | "created_at" | "updated_at">;
-export type ClienteUpdate = Partial<Omit<ClienteCreate, "project_id">>;
+export type TenantCreate = Omit<Tenant, "id" | "data_cadastro" | "created_at" | "updated_at">;
+export type TenantUpdate = Partial<Omit<TenantCreate, "project_id">>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ClienteComProjeto — shape usado nas listagens (clientes JOIN projetos)
+// TenantComProjeto — shape usado nas listagens (tenants JOIN projetos)
 // ─────────────────────────────────────────────────────────────────────────────
-export interface ClienteComProjeto extends Cliente {
+export interface TenantComProjeto extends Tenant {
   projetos: Pick<Project,
     | "id"
     | "project_name"
@@ -84,14 +84,23 @@ export interface ClienteComProjeto extends Cliente {
   >;
 }
 
+// Aliases de compatibilidade — remover após limpar os últimos usos
+/** @deprecated use Tenant */
+export type Cliente = Tenant;
+/** @deprecated use TenantCreate */
+export type ClienteCreate = TenantCreate;
+/** @deprecated use TenantUpdate */
+export type ClienteUpdate = TenantUpdate;
+/** @deprecated use TenantComProjeto */
+export type ClienteComProjeto = TenantComProjeto;
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Legado — manter somente os tipos, não as queries. Remover depois da migração
-// completa da UI.
+// Legado — tipos do modelo anterior (entidades/Client). Não usar em código novo.
 // ─────────────────────────────────────────────────────────────────────────────
-/** @deprecated Usar Project + Cliente */
+/** @deprecated Usar Project + Tenant */
 export type SharedMode = "polo" | "multi" | "multi_polo" | "hybrid";
 
-/** @deprecated Usar Project + Cliente */
+/** @deprecated Usar Project + Tenant */
 export interface Client {
   id: string;
   nome_entidade: string;
@@ -117,9 +126,9 @@ export interface Client {
   health_error_detail: string | null;
 }
 
-/** @deprecated Usar ProjectUpdate / ClienteCreate */
+/** @deprecated Usar ProjectUpdate / TenantCreate */
 export type ClientCreate = Omit<Client, "id" | "data_cadastro">;
-/** @deprecated Usar ProjectUpdate / ClienteUpdate */
+/** @deprecated Usar ProjectUpdate / TenantUpdate */
 export type ClientUpdate = Partial<ClientCreate>;
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,12 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { getCliente } from "@/services/commercial-tenants.service";
+import { getTenant } from "@/services/commercial-tenants.service";
 
-export const clienteDetailQueryKey = (id: string) => ["clientes", id] as const;
+export const tenantDetailQueryKey = (id: string) => ["tenants", id] as const;
 
-export function useClienteDetail(id: string) {
+/** @deprecated use tenantDetailQueryKey */
+export const clienteDetailQueryKey = tenantDetailQueryKey;
+
+export function useTenantDetail(id: string) {
   return useQuery({
-    queryKey: clienteDetailQueryKey(id),
-    queryFn: () => getCliente(id),
+    queryKey: tenantDetailQueryKey(id),
+    queryFn: () => getTenant(id),
     enabled: Boolean(id),
   });
 }
+
+/** @deprecated use useTenantDetail */
+export const useClienteDetail = useTenantDetail;

@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { listClientesCountsByProject } from "@/services/commercial-tenants.service";
+import { listTenantCountsByProject } from "@/services/commercial-tenants.service";
 
-export const clientCountsByProjectQueryKey = ["clientes-counts-by-project"] as const;
+export const tenantCountsByProjectQueryKey = ["tenants-counts-by-project"] as const;
 
-export function useClientCountsByProject() {
+/** @deprecated use tenantCountsByProjectQueryKey */
+export const clientCountsByProjectQueryKey = tenantCountsByProjectQueryKey;
+
+export function useTenantCountsByProject() {
   return useQuery({
-    queryKey: clientCountsByProjectQueryKey,
-    queryFn: listClientesCountsByProject,
+    queryKey: tenantCountsByProjectQueryKey,
+    queryFn: listTenantCountsByProject,
   });
 }
+
+/** @deprecated use useTenantCountsByProject */
+export const useClientCountsByProject = useTenantCountsByProject;

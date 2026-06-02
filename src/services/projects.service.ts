@@ -3,7 +3,7 @@ import { handleSupabaseError } from "@/services/error.handler";
 import type { Project, ProjectUpdate } from "@/features/clients/types";
 
 const PROJECT_SELECT =
-  "id, project_name, topology, tenant_code, supabase_url, supabase_publishable_key, supabase_secret_keys, supabase_access_token, supabase_account_id, key_status, last_health_check_at, health_error_detail, data_cadastro";
+  "id, project_name, topology, supabase_url, supabase_publishable_key, supabase_secret_keys, supabase_access_token, supabase_account_id, key_status, last_health_check_at, health_error_detail, data_cadastro";
 
 export async function listProjects(): Promise<Project[]> {
   const { data, error } = await supabase

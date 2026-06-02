@@ -42,10 +42,6 @@ function InfraCard({ project }: { project: Project }) {
           <p className="text-[10px] text-muted-foreground">Project Ref</p>
           <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs">{extractProjectRef(project)}</code>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] text-muted-foreground">Código</p>
-          <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs">{project.tenant_code}</code>
-        </div>
         <div className="col-span-2 space-y-1">
           <p className="text-[10px] text-muted-foreground">Arquitetura</p>
           <div className="flex items-center gap-1.5">

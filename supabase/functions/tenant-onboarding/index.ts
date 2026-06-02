@@ -367,15 +367,18 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
     }
 
-    // 5. Registration
+    // 5. Seed initial data
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
+    await seedInitialData(projectUrl, serviceRoleKey, tenantLabel);
+
+    // 6. Registration
     const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
 
-    // 6. Finalization
+    // 7. Finalization
     await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, projetoId);
     await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
 
-    // 7. Finalização
+    // 8. Finalização
     await updateJob(supabaseAdmin, jobId, "completed", 1);
   } catch (error) {
     console.error(`[Job ${jobId}] Failed:`, error);
@@ -624,6 +627,36 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   if (!userId) return;
 
   await client.auth.admin.updateUserById(userId, { app_metadata: { role: "admin" } });
+}
+
+async function seedInitialData(url: string, serviceKey: string, tenantLabel: string) {
+  const client = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
+
+  const { data: tenant } = await client.from("tenants").select("id").limit(1).maybeSingle();
+  if (!tenant) return;
+
+  const { data: unit } = await client.from("tenant_units").select("id").eq("tenant_id", tenant.id).limit(1).maybeSingle();
+  if (!unit) return;
+
+  await client.from("entidade").upsert(
+    { tenant_id: tenant.id, unit_id: unit.id, nome_entidade: tenantLabel },
+    { onConflict: "tenant_id,unit_id", ignoreDuplicates: true }
+  );
+
+  await client.from("configuracao_entidade").upsert(
+    { tenant_id: tenant.id, unit_id: unit.id },
+    { onConflict: "tenant_id,unit_id", ignoreDuplicates: true }
+  );
+
+  await client.from("parametros").upsert(
+    { tenant_id: tenant.id, unit_id: unit.id },
+    { onConflict: "tenant_id,unit_id", ignoreDuplicates: true }
+  );
+
+  await client.from("parametros_financeiros").upsert(
+    { tenant_id: tenant.id, unit_id: unit.id },
+    { onConflict: "tenant_id,unit_id", ignoreDuplicates: true }
+  );
 }
 
 async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string) {

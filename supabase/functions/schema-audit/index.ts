@@ -74,6 +74,11 @@ serve(async (req: Request) => {
       });
     }
 
+    // Aceita referenceProjectId no body para modo ad hoc (fallback para env)
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const referenceProjectId: string | undefined =
+      typeof body?.referenceProjectId === "string" ? body.referenceProjectId : undefined;
+
     // Obter todos os projetos com PAT configurado
     const { data: entidades, error: entError } = await supabase
       .from('projetos')
@@ -87,10 +92,10 @@ serve(async (req: Request) => {
       });
     }
 
-    const refId = Deno.env.get("REFERENCE_PROJECT_ID");
+    const refId = referenceProjectId ?? Deno.env.get("REFERENCE_PROJECT_ID");
     if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
     const refTenant = entidades.find(e => e.id === refId);
-    if (!refTenant) throw new Error("Projeto de referência não encontrado (REFERENCE_PROJECT_ID inválido)");
+    if (!refTenant) throw new Error(`Projeto de referência não encontrado (id: ${refId})`);
 
     const getSnapshot = async (projectRef: string, pat: string) => {
       const dbRows = await runManagementQuery(projectRef, pat, DATABASE_SNAPSHOT_QUERY);

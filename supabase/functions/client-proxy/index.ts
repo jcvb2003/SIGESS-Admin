@@ -397,8 +397,8 @@ async function healthCheck(
   };
 }
 
-async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
-  const refId = Deno.env.get("REFERENCE_PROJECT_ID");
+async function getReferenceConfig(supabaseAdmin: SupabaseClient, referenceProjectId?: string) {
+  const refId = referenceProjectId ?? Deno.env.get("REFERENCE_PROJECT_ID");
   if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
 
   const { data: reference, error } = await supabaseAdmin
@@ -406,7 +406,7 @@ async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
     .select("id, project_name, supabase_url, supabase_secret_keys, supabase_access_token")
     .eq("id", refId)
     .single();
-  if (error || !reference) throw new Error("Projeto de referência não encontrado (REFERENCE_PROJECT_ID inválido)");
+  if (error || !reference) throw new Error(`Projeto de referência não encontrado (id: ${refId})`);
   return reference;
 }
 
@@ -465,12 +465,13 @@ async function patchProjectAuthConfig(projectUrl: string, accessToken: string, p
 async function buildAuthConfigSyncPlan(
   supabaseAdmin: SupabaseClient,
   objectName: string,
+  referenceProjectId?: string,
 ) {
   if (!CANONICAL_AUTH_CONFIG_FIELDS.has(objectName)) {
     throw createHttpError(`Campo auth_config ainda nÃ£o suportado: ${objectName}`, 400);
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
@@ -488,11 +489,12 @@ async function buildViewSyncSql(
   supabaseAdmin: SupabaseClient,
   objectName: string,
   schemaName: string,
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(objectName, "objectName");
   assertSafeIdentifier(schemaName, "schema");
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
@@ -682,6 +684,7 @@ async function buildIndexSyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: indexName } = splitQualifiedObjectName(objectName, "objectName");
@@ -693,7 +696,7 @@ async function buildIndexSyncSql(
     return `DROP INDEX IF EXISTS ${qualifiedIndex};`;
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
@@ -736,6 +739,7 @@ async function buildPolicySyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: policyName } = splitQualifiedObjectName(objectName, "objectName");
@@ -748,7 +752,7 @@ async function buildPolicySyncSql(
     return dropSql;
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
@@ -798,13 +802,14 @@ async function buildGrantSyncSql(
   supabaseAdmin: SupabaseClient,
   objectName: string,
   schemaName: string,
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: grantee } = splitQualifiedObjectName(objectName, "objectName");
   assertSafeIdentifier(tableName, "tableName");
   assertSafeIdentifier(grantee, "grantee");
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
@@ -855,6 +860,7 @@ async function buildFunctionSyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { functionName, identityArgs } = splitFunctionSignature(objectName, "objectName");
@@ -874,7 +880,7 @@ async function buildFunctionSyncSql(
     );
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
@@ -903,12 +909,13 @@ async function buildFunctionGrantSyncSql(
   supabaseAdmin: SupabaseClient,
   objectName: string,
   schemaName: string,
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
   assertSafeIdentifier(functionName, "functionName");
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
@@ -952,6 +959,7 @@ async function buildFunctionGrantSyncSqlSafe(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { functionName, identityArgs, grantee } = splitFunctionGrantObjectName(objectName);
@@ -967,7 +975,7 @@ async function buildFunctionGrantSyncSqlSafe(
     ].join("\n");
   }
 
-  return await buildFunctionGrantSyncSql(supabaseAdmin, objectName, schemaName);
+  return await buildFunctionGrantSyncSql(supabaseAdmin, objectName, schemaName, referenceProjectId);
 }
 
 async function buildTriggerSyncSql(
@@ -975,6 +983,7 @@ async function buildTriggerSyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: triggerName } = splitQualifiedObjectName(objectName, "objectName");
@@ -988,7 +997,7 @@ async function buildTriggerSyncSql(
     return dropSql;
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referÃªncia ausente", 500);
   }
@@ -1050,6 +1059,7 @@ async function buildColumnSyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: columnName } = splitQualifiedObjectName(objectName, "objectName");
@@ -1063,7 +1073,7 @@ async function buildColumnSyncSql(
     );
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
@@ -1107,6 +1117,7 @@ async function buildConstraintSyncSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   assertSafeIdentifier(schemaName, "schema");
   const { head: tableName, remainder: constraintName } = splitQualifiedObjectName(objectName, "objectName");
@@ -1120,7 +1131,7 @@ async function buildConstraintSyncSql(
     return dropSql;
   }
 
-  const refConfig = await getReferenceConfig(supabaseAdmin);
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
   if (!refConfig.supabase_access_token) {
     throw createHttpError("PAT do tenant de referência ausente", 500);
   }
@@ -1163,43 +1174,44 @@ async function buildSchemaDriftSql(
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
 ) {
   if (objectType === "view") {
     if (diffType === "extra_in_tenant") {
       throw createHttpError("Views extras ainda não são suportadas pelo sync assistido", 400);
     }
-    return await buildViewSyncSql(supabaseAdmin, objectName, schemaName);
+    return await buildViewSyncSql(supabaseAdmin, objectName, schemaName, referenceProjectId);
   }
 
   if (objectType === "index") {
-    return await buildIndexSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildIndexSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
   if (objectType === "grant") {
-    return await buildGrantSyncSql(supabaseAdmin, objectName, schemaName);
+    return await buildGrantSyncSql(supabaseAdmin, objectName, schemaName, referenceProjectId);
   }
 
   if (objectType === "function") {
-    return await buildFunctionSyncSql(supabaseAdmin, client, objectName, schemaName, diffType);
+    return await buildFunctionSyncSql(supabaseAdmin, client, objectName, schemaName, diffType, referenceProjectId);
   }
 
   if (objectType === "function_grant") {
-    return await buildFunctionGrantSyncSqlSafe(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildFunctionGrantSyncSqlSafe(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
   if (objectType === "trigger") {
-    return await buildTriggerSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildTriggerSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
   if (objectType === "column") {
-    return await buildColumnSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildColumnSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
   if (objectType === "constraint") {
-    return await buildConstraintSyncSql(supabaseAdmin, objectName, schemaName, diffType);
+    return await buildConstraintSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
-  return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType);
+  return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
 }
 
 async function applySchemaDriftBatch(
@@ -1207,10 +1219,11 @@ async function applySchemaDriftBatch(
   client: ClientConfig,
   supabaseAdmin: SupabaseClient,
   params: ApplySchemaDriftBatchParams,
+  referenceProjectId?: string,
 ) {
   const { operations, mode } = params;
 
-  if (clientId === (await getReferenceConfig(supabaseAdmin)).id) {
+  if (clientId === (await getReferenceConfig(supabaseAdmin, referenceProjectId)).id) {
     throw createHttpError("O projeto de referência não pode ser sincronizado contra ele mesmo", 400);
   }
 
@@ -1256,6 +1269,7 @@ async function applySchemaDriftBatch(
       objectName,
       schema,
       diffType,
+      referenceProjectId,
     );
 
     const normalizedSql = ensureSqlTerminator(sql)
@@ -1317,18 +1331,21 @@ async function applySchemaDrift(
   supabaseAdmin: SupabaseClient,
   params: Record<string, unknown>,
 ) {
+  const referenceProjectId = typeof params.referenceProjectId === "string" ? params.referenceProjectId : undefined;
+
   if (Array.isArray(params.operations)) {
     return await applySchemaDriftBatch(
       clientId,
       client,
       supabaseAdmin,
       params as unknown as ApplySchemaDriftBatchParams,
+      referenceProjectId,
     );
   }
 
   const { objectType, objectName, schema = "public", mode, diffType } = params as ApplySchemaDriftParams;
 
-  if (clientId === (await getReferenceConfig(supabaseAdmin)).id) {
+  if (clientId === (await getReferenceConfig(supabaseAdmin, referenceProjectId)).id) {
     throw createHttpError("O projeto de referência não pode ser sincronizado contra ele mesmo", 400);
   }
 
@@ -1354,7 +1371,7 @@ async function applySchemaDrift(
   }
 
   if (objectType === "auth_config") {
-    const plan = await buildAuthConfigSyncPlan(supabaseAdmin, objectName);
+    const plan = await buildAuthConfigSyncPlan(supabaseAdmin, objectName, referenceProjectId);
 
     if (mode === "dry-run") {
       return { success: true, mode, objectType, objectName, schema, diffType, sql: plan.preview };
@@ -1385,6 +1402,7 @@ async function applySchemaDrift(
     objectName,
     schema,
     diffType,
+    referenceProjectId,
   );
 
   if (mode === "dry-run") {

@@ -129,7 +129,7 @@ export default function ObservabilityPage() {
                       Selecione uma referência e um alvo para comparação sob demanda. Sem seleção, usa o cache global.
                     </p>
                   </div>
-                  {isAdHocMode && (
+                  {adHocResults !== null && (
                     <Button variant="ghost" size="sm" onClick={handleClearAdHoc} className="text-muted-foreground">
                       <X className="mr-1 h-3 w-3" />
                       Limpar

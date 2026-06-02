@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { useProjects } from "@/features/clients";
+import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useObservability } from "../hooks/useObservability";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";

@@ -377,8 +377,9 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
                   <p className="mt-1 text-[11px] text-muted-foreground">{linkError}</p>
                 )}
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  O tenant foi criado no Admin, mas o vínculo com o banco runtime
-                  precisará ser feito manualmente pelo painel do projeto.
+                  O cadastro comercial foi criado com sucesso.
+                  O vínculo operacional com o tenant runtime está pendente
+                  e pode ser resolvido pelo painel do projeto.
                 </p>
               </div>
             </div>

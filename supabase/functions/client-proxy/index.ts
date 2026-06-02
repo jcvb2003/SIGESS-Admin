@@ -398,12 +398,15 @@ async function healthCheck(
 }
 
 async function getReferenceConfig(supabaseAdmin: SupabaseClient) {
+  const refId = Deno.env.get("REFERENCE_PROJECT_ID");
+  if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
+
   const { data: reference, error } = await supabaseAdmin
     .from("projetos")
     .select("id, project_name, supabase_url, supabase_secret_keys, supabase_access_token")
-    .eq("project_name", "Rayssa")
-    .maybeSingle();
-  if (error || !reference) throw new Error("Rayssa (referência) não encontrada no cadastro de projetos");
+    .eq("id", refId)
+    .single();
+  if (error || !reference) throw new Error("Projeto de referência não encontrado (REFERENCE_PROJECT_ID inválido)");
   return reference;
 }
 
@@ -1417,10 +1420,11 @@ async function getAllMigrationsStatus(supabaseAdmin: SupabaseClient) {
   const latestRefVersion = refVersions.at(-1) ?? null;
   const refTotal = refVersions.length;
 
+  const refId = Deno.env.get("REFERENCE_PROJECT_ID") ?? "";
   const { data: tenants, error } = await supabaseAdmin
     .from("projetos")
     .select("id, project_name, supabase_url, supabase_access_token")
-    .neq("project_name", "Rayssa")
+    .neq("id", refId)
     .not("supabase_access_token", "is", null);
 
   if (error) throw new Error(`Erro ao buscar projetos: ${error.message}`);

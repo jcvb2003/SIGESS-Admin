@@ -510,15 +510,17 @@ async function runManagementQuery(projectRef: string, accessToken: string, query
 }
 
 async function fetchReferenceStorageBlueprint(supabaseAdmin: SupabaseClient) {
-  // Projeto de referência identificado pelo project_name canônico "Rayssa"
+  const refId = Deno.env.get("REFERENCE_PROJECT_ID");
+  if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
+
   const { data: reference, error } = await supabaseAdmin
     .from("projetos")
     .select("supabase_url, supabase_access_token")
-    .eq("project_name", "Rayssa")
+    .eq("id", refId)
     .single();
 
   if (error || !reference?.supabase_access_token || !reference.supabase_url) {
-    throw new Error("Falha ao carregar blueprint de storage do projeto de referência (Rayssa).");
+    throw new Error("Falha ao carregar blueprint de storage do projeto de referência (REFERENCE_PROJECT_ID).");
   }
 
   const projectRef = new URL(reference.supabase_url).hostname.split(".")[0];

@@ -87,8 +87,10 @@ serve(async (req: Request) => {
       });
     }
 
-    const refTenant = entidades.find(e => e.project_name === 'Rayssa');
-    if (!refTenant) throw new Error("Reference project (Rayssa) not found");
+    const refId = Deno.env.get("REFERENCE_PROJECT_ID");
+    if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
+    const refTenant = entidades.find(e => e.id === refId);
+    if (!refTenant) throw new Error("Projeto de referência não encontrado (REFERENCE_PROJECT_ID inválido)");
 
     const getSnapshot = async (projectRef: string, pat: string) => {
       const dbRows = await runManagementQuery(projectRef, pat, DATABASE_SNAPSHOT_QUERY);

@@ -367,9 +367,9 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
     }
 
-    // 5. Seed initial data
+    // 5. Seed initial data + sync license limits
     await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
-    await seedInitialData(projectUrl, serviceRoleKey, tenantLabel);
+    await seedInitialData(projectUrl, serviceRoleKey, tenantLabel, maxSocios ?? null, acessoExpiraEm ?? null);
 
     // 6. Registration
     const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
@@ -629,7 +629,13 @@ async function createAdminUser(url: string, key: string, email: string, pass: st
   await client.auth.admin.updateUserById(userId, { app_metadata: { role: "admin" } });
 }
 
-async function seedInitialData(url: string, serviceKey: string, tenantLabel: string) {
+async function seedInitialData(
+  url: string,
+  serviceKey: string,
+  tenantLabel: string,
+  maxSocios: number | null,
+  acessoExpiraEm: string | null,
+) {
   const client = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
   const { data: tenant } = await client.from("tenants").select("id").limit(1).maybeSingle();
@@ -644,8 +650,13 @@ async function seedInitialData(url: string, serviceKey: string, tenantLabel: str
   );
 
   await client.from("configuracao_entidade").upsert(
-    { tenant_id: tenant.id, unit_id: unit.id },
-    { onConflict: "tenant_id,unit_id", ignoreDuplicates: true }
+    {
+      tenant_id: tenant.id,
+      unit_id: unit.id,
+      ...(maxSocios !== null ? { max_socios: maxSocios } : {}),
+      ...(acessoExpiraEm !== null ? { acesso_expira_em: acessoExpiraEm } : {}),
+    },
+    { onConflict: "tenant_id,unit_id", ignoreDuplicates: false }
   );
 
   await client.from("parametros").upsert(

@@ -27,11 +27,14 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { useProjects } from "@/features/clients";
 import { useObservability } from "../hooks/useObservability";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 
 export default function ObservabilityPage() {
+  const { data: projects = [] } = useProjects();
+
   const {
     clients,
     exportRuns,
@@ -64,8 +67,8 @@ export default function ObservabilityPage() {
 
   const referenceName = useMemo(() => {
     if (!adHocReferenceId) return "referência";
-    return clients.find((c) => c.project_id === adHocReferenceId)?.nome_entidade ?? "referência";
-  }, [adHocReferenceId, clients]);
+    return projects.find((p) => p.id === adHocReferenceId)?.project_name ?? "referência";
+  }, [adHocReferenceId, projects]);
 
 
   return (
@@ -150,9 +153,9 @@ export default function ObservabilityPage() {
                         <SelectValue placeholder="Escolher referência..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from(new Map(clients.map((c) => [c.project_id, c])).values()).map((c) => (
-                          <SelectItem key={c.project_id} value={c.project_id}>
-                            {c.nome_entidade ?? c.tenant_code}
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.project_name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -166,14 +169,14 @@ export default function ObservabilityPage() {
                       disabled={!adHocReferenceId}
                     >
                       <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Todos os tenants" />
+                        <SelectValue placeholder="Todos os projetos" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from(new Map(clients.map((c) => [c.project_id, c])).values())
-                          .filter((c) => c.project_id !== adHocReferenceId)
-                          .map((c) => (
-                            <SelectItem key={c.project_id} value={c.project_id}>
-                              {c.nome_entidade ?? c.tenant_code}
+                        {projects
+                          .filter((p) => p.id !== adHocReferenceId)
+                          .map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.project_name}
                             </SelectItem>
                           ))}
                       </SelectContent>
@@ -200,7 +203,7 @@ export default function ObservabilityPage() {
               <div className="rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200">
                 Comparação concluída — referência: <strong>{referenceName}</strong>
                 {adHocTargetId
-                  ? ` → ${clients.find((c) => c.project_id === adHocTargetId)?.nome_entidade ?? adHocTargetId}`
+                  ? ` → ${projects.find((p) => p.id === adHocTargetId)?.project_name ?? adHocTargetId}`
                   : ` → ${displayStatus.length} tenant(s)`}
               </div>
             )}

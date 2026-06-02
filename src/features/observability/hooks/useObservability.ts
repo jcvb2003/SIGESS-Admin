@@ -13,7 +13,7 @@ import type {
   SchemaDriftOperation,
   SyncableSchemaDrift,
 } from "../types";
-import { TenantSchemaStatus } from "../model/schema-comparator";
+import type { TenantSchemaStatus } from "../model/schema-comparator";
 
 type DriftTarget = { clientId: string; tenantName: string };
 
@@ -209,6 +209,12 @@ export function useObservability() {
   const [isApplyingDrift, setIsApplyingDrift] = useState(false);
   const [driftApplyResults, setDriftApplyResults] = useState<SchemaDriftApplyResult[]>([]);
 
+  // Ad hoc comparison state
+  const [adHocReferenceId, setAdHocReferenceId] = useState<string | null>(null);
+  const [adHocTargetId, setAdHocTargetId] = useState<string | null>(null);
+  const [adHocResults, setAdHocResults] = useState<TenantSchemaStatus[] | null>(null);
+  const [isRunningAdHocAudit, setIsRunningAdHocAudit] = useState(false);
+
   const queryExports = useQuery<ExportRun[]>({
     queryKey: ["global-export-runs"],
     queryFn: async () => {
@@ -246,6 +252,43 @@ export function useObservability() {
     } finally {
       setIsAuditingSchema(false);
     }
+  };
+
+  const handleRunAdHocAudit = async () => {
+    if (!adHocReferenceId) return;
+    setIsRunningAdHocAudit(true);
+    setAdHocResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("schema-audit", {
+        body: { referenceProjectId: adHocReferenceId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const mapped: TenantSchemaStatus[] = (data?.results ?? [])
+        .filter((r: any) => !r.error && r.tenantId !== adHocReferenceId)
+        .map((r: any) => ({
+          tenantId: r.tenantId,
+          tenantName: r.projectName,
+          checkedAt: new Date().toISOString(),
+          totalDiffs: r.totalDiffs ?? 0,
+          diffs: r.diffs ?? [],
+          summary: r.summary ?? { total: 0, byCategory: {} },
+        }));
+
+      setAdHocResults(mapped);
+      toast.success("Comparação concluída.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro na comparação ad hoc");
+    } finally {
+      setIsRunningAdHocAudit(false);
+    }
+  };
+
+  const handleClearAdHoc = () => {
+    setAdHocReferenceId(null);
+    setAdHocTargetId(null);
+    setAdHocResults(null);
   };
 
   const handleRefresh = async () => {
@@ -309,6 +352,7 @@ export function useObservability() {
             diffType: operation.diffType,
           })),
           mode: "dry-run",
+          ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
         });
 
         if (!data?.sql) {
@@ -335,6 +379,7 @@ export function useObservability() {
           schema: operation.schema,
           diffType: operation.diffType,
           mode: "dry-run",
+          ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
         });
 
         if (!data?.sql) {
@@ -398,6 +443,7 @@ export function useObservability() {
               diffType: operation.diffType,
             })),
             mode: "apply",
+            ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
           });
         } catch (err) {
           failures.push(
@@ -414,6 +460,7 @@ export function useObservability() {
             schema: operation.schema,
             diffType: operation.diffType,
             mode: "apply",
+            ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
           });
         } catch (err) {
           failures.push(
@@ -456,6 +503,14 @@ export function useObservability() {
     clients,
     exportRuns,
     schemaStatus,
+    adHocReferenceId,
+    setAdHocReferenceId,
+    adHocTargetId,
+    setAdHocTargetId,
+    adHocResults,
+    isRunningAdHocAudit,
+    handleRunAdHocAudit,
+    handleClearAdHoc,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,

@@ -11,6 +11,7 @@ interface SchemaDriftCardProps {
   readonly status: TenantSchemaStatus;
   readonly schemaStatus: TenantSchemaStatus[];
   readonly isPreparingDrift: string | null;
+  readonly referenceName?: string;
   readonly onPrepareSync: (
     targets: Array<{ clientId: string; tenantName: string }>,
     operations:
@@ -42,82 +43,83 @@ function buildSingleActionKey(
   return buildSchemaSyncActionKey([target], operations);
 }
 
-function getSyncHelperText(item: SyncableSchemaDrift) {
+function getSyncHelperText(item: SyncableSchemaDrift, ref: string) {
   if (item.objectType === "view") {
     return `1 operação alinha ${item.relatedDiffCount} divergência(s) derivada(s).`;
   }
   if (item.objectType === "function") {
-    return "1 operação recria a função com a definição atual do Rayssa.";
+    return `1 operação recria a função com a definição atual de ${ref}.`;
   }
   if (item.objectType === "grant") {
-    return "1 operação revoga e reaplica os privilégios conforme Rayssa.";
+    return `1 operação revoga e reaplica os privilégios conforme ${ref}.`;
   }
   if (item.objectType === "function_grant") {
-    return "1 operação revoga e reaplica o EXECUTE da função conforme Rayssa.";
+    return `1 operação revoga e reaplica o EXECUTE da função conforme ${ref}.`;
   }
   if (item.objectType === "auth_config") {
-    return "1 operação reaplica o campo canônico do template conforme Rayssa.";
+    return `1 operação reaplica o campo canônico do template conforme ${ref}.`;
   }
   if (item.objectType === "trigger") {
     return item.diffType === "extra_in_tenant"
-      ? "1 operação remove a trigger extra para alinhar com o Rayssa."
-      : "1 operação recria a trigger com a definição atual do Rayssa.";
+      ? `1 operação remove a trigger extra para alinhar com ${ref}.`
+      : `1 operação recria a trigger com a definição atual de ${ref}.`;
   }
   if (item.objectType === "column") {
     return item.diffType === "missing_in_tenant"
-      ? "1 operação adiciona a coluna ausente com tipo e default do Rayssa."
-      : "1 operação corrige o DEFAULT da coluna para o valor canônico do Rayssa.";
+      ? `1 operação adiciona a coluna ausente com tipo e default de ${ref}.`
+      : `1 operação corrige o DEFAULT da coluna para o valor canônico de ${ref}.`;
   }
   if (item.objectType === "constraint") {
     return item.diffType === "extra_in_tenant"
-      ? "1 operação remove a constraint extra para alinhar com o Rayssa."
-      : "1 operação recria a constraint com a definição atual do Rayssa.";
+      ? `1 operação remove a constraint extra para alinhar com ${ref}.`
+      : `1 operação recria a constraint com a definição atual de ${ref}.`;
   }
   if (item.diffType === "extra_in_tenant") {
-    return "1 operação remove o objeto extra para alinhar com o Rayssa.";
+    return `1 operação remove o objeto extra para alinhar com ${ref}.`;
   }
-  return "1 operação recria o objeto com a definição do Rayssa.";
+  return `1 operação recria o objeto com a definição de ${ref}.`;
 }
 
-function getPreviewDescription(item: SyncableSchemaDrift) {
+function getPreviewDescription(item: SyncableSchemaDrift, ref: string) {
   if (item.objectType === "view") {
-    return "O SQL abaixo é derivado do estado real do Rayssa e alinha a view com suas colunas e grants relacionados.";
+    return `O SQL abaixo é derivado do estado real de ${ref} e alinha a view com suas colunas e grants relacionados.`;
   }
   if (item.objectType === "function") {
-    return "O SQL abaixo recria a função a partir da definição real do Rayssa.";
+    return `O SQL abaixo recria a função a partir da definição real de ${ref}.`;
   }
   if (item.objectType === "grant") {
-    return "O preview abaixo revoga tudo no tenant e reaplica apenas os privilégios existentes em Rayssa.";
+    return `O preview abaixo revoga tudo no tenant e reaplica apenas os privilégios existentes em ${ref}.`;
   }
   if (item.objectType === "function_grant") {
-    return "O preview abaixo revoga o EXECUTE atual e reaplica apenas o que existe em Rayssa para essa função.";
+    return `O preview abaixo revoga o EXECUTE atual e reaplica apenas o que existe em ${ref} para essa função.`;
   }
   if (item.objectType === "auth_config") {
-    return "O preview abaixo mostra o campo de auth que será sincronizado a partir da configuração canônica do Rayssa.";
+    return `O preview abaixo mostra o campo de auth que será sincronizado a partir da configuração canônica de ${ref}.`;
   }
   if (item.objectType === "trigger") {
-    return "O SQL abaixo recria a trigger com a definição real do Rayssa.";
+    return `O SQL abaixo recria a trigger com a definição real de ${ref}.`;
   }
   if (item.objectType === "column") {
     return item.diffType === "missing_in_tenant"
-      ? "O SQL abaixo adiciona a coluna com o tipo e default canônicos do Rayssa."
-      : "O SQL abaixo corrige o DEFAULT da coluna para o valor do Rayssa.";
+      ? `O SQL abaixo adiciona a coluna com o tipo e default canônicos de ${ref}.`
+      : `O SQL abaixo corrige o DEFAULT da coluna para o valor de ${ref}.`;
   }
   if (item.objectType === "constraint") {
     return item.diffType === "extra_in_tenant"
       ? "O SQL abaixo remove a constraint extra no tenant."
-      : "O SQL abaixo recria a constraint com a definição real do Rayssa.";
+      : `O SQL abaixo recria a constraint com a definição real de ${ref}.`;
   }
   if (item.diffType === "extra_in_tenant") {
-    return "O SQL abaixo remove o objeto extra no tenant para alinhá-lo com o Rayssa.";
+    return `O SQL abaixo remove o objeto extra no tenant para alinhá-lo com ${ref}.`;
   }
-  return "O SQL abaixo recria o objeto com a definição atual do Rayssa.";
+  return `O SQL abaixo recria o objeto com a definição atual de ${ref}.`;
 }
 
 export function SchemaDriftCard({
   status,
   schemaStatus: _schemaStatus,
   isPreparingDrift,
+  referenceName = "referência",
   onPrepareSync,
 }: SchemaDriftCardProps) {
   const syncableDrifts = getSyncableSchemaDrifts(status.diffs);
@@ -274,7 +276,7 @@ export function SchemaDriftCard({
 
                     {syncableItem ? (
                       <div className="mt-3 flex flex-col gap-2 rounded-md border border-sky-200/70 bg-sky-50/60 p-3 dark:border-sky-900/50 dark:bg-sky-950/20 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs text-sky-800 dark:text-sky-200">{getSyncHelperText(syncableItem)}</p>
+                        <p className="text-xs text-sky-800 dark:text-sky-200">{getSyncHelperText(syncableItem, referenceName)}</p>
                         <Button
                           variant="outline"
                           size="sm"
@@ -283,7 +285,7 @@ export function SchemaDriftCard({
                           onClick={() =>
                             onPrepareSync([singleTarget], syncableItem, {
                               title: syncableItem.displayName,
-                              description: getPreviewDescription(syncableItem),
+                              description: getPreviewDescription(syncableItem, referenceName),
                             })
                           }
                         >
@@ -300,7 +302,7 @@ export function SchemaDriftCard({
                     {diff.type === "different_definition" && (
                       <div className="mt-3 grid grid-cols-2 gap-4 rounded-md bg-secondary/20 p-2 font-mono text-xs">
                         <div>
-                          <p className="mb-1 font-semibold text-muted-foreground">Rayssa (Ref)</p>
+                          <p className="mb-1 font-semibold text-muted-foreground">{referenceName} (Ref)</p>
                           <pre className="overflow-x-auto whitespace-pre-wrap break-all text-emerald-600 dark:text-emerald-400">
                             {typeof diff.reference_value === "object"
                               ? JSON.stringify(diff.reference_value, null, 2)

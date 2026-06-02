@@ -2,6 +2,7 @@ import {
   Loader2,
   RefreshCw,
   Rocket,
+  X,
 } from "lucide-react";
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -17,6 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useObservability } from "../hooks/useObservability";
@@ -30,6 +38,14 @@ export default function ObservabilityPage() {
     clients,
     exportRuns,
     schemaStatus,
+    adHocReferenceId,
+    setAdHocReferenceId,
+    adHocTargetId,
+    setAdHocTargetId,
+    adHocResults,
+    isRunningAdHocAudit,
+    handleRunAdHocAudit,
+    handleClearAdHoc,
     isLoadingExports,
     isLoadingSchema,
     isRefreshing,
@@ -45,6 +61,18 @@ export default function ObservabilityPage() {
     handlePrepareSchemaSync,
     handleApplySchemaSync,
   } = useObservability();
+
+  const isAdHocMode = adHocResults !== null;
+  const displayStatus = useMemo(() => {
+    if (!isAdHocMode) return schemaStatus;
+    if (adHocTargetId) return adHocResults.filter((r) => r.tenantId === adHocTargetId);
+    return adHocResults;
+  }, [isAdHocMode, adHocResults, adHocTargetId, schemaStatus]);
+
+  const referenceName = useMemo(() => {
+    if (!adHocReferenceId) return "referência";
+    return clients.find((c) => c.id === adHocReferenceId)?.nome_entidade ?? "referência";
+  }, [adHocReferenceId, clients]);
 
   const batchSyncCandidate = useMemo(() => {
     const candidates = new Map<
@@ -149,61 +177,157 @@ export default function ObservabilityPage() {
           </TabsContent>
 
           <TabsContent value="schema" className="space-y-4">
-            <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">Schema Real (Rayssa vs Tenants)</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Compara fisicamente as tabelas, funções, policies, auth e triggers com a referência (Rayssa).
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  {batchSyncCandidate ? (
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        handlePrepareSchemaSync(
-                          batchSyncCandidate.targets,
-                          batchSyncCandidate.operations,
-                          {
-                            title: `Sync em todos os ${batchSyncCandidate.targets.length} tenants`,
-                            description:
-                              "Lote com todas as divergências sincronizáveis compartilhadas por este mesmo grupo de tenants. O apply será executado sequencialmente em todos os alvos.",
-                          },
-                        )
-                      }
-                      disabled={isPreparingDrift === batchSyncActionKey}
-                    >
-                      {isPreparingDrift === batchSyncActionKey ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Rocket className="mr-2 h-4 w-4" />
-                      )}
-                      Preparar sync em todos ({batchSyncCandidate.targets.length})
+            {/* Seletor de comparação */}
+            <Card className="p-5">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Comparação configurável</p>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione uma referência e um alvo para comparação sob demanda. Sem seleção, usa o cache global.
+                    </p>
+                  </div>
+                  {isAdHocMode && (
+                    <Button variant="ghost" size="sm" onClick={handleClearAdHoc} className="text-muted-foreground">
+                      <X className="mr-1 h-3 w-3" />
+                      Limpar
                     </Button>
-                  ) : null}
-                  <Button onClick={handleRunSchemaAudit} disabled={isAuditingSchema}>
-                    {isAuditingSchema ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                    Executar Auditoria Profunda
+                  )}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-muted-foreground">Referência</p>
+                    <Select
+                      value={adHocReferenceId ?? ""}
+                      onValueChange={(v) => {
+                        setAdHocReferenceId(v || null);
+                        if (v === adHocTargetId) setAdHocTargetId(null);
+                      }}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Escolher referência..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome_entidade ?? c.tenant_code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-muted-foreground">Alvo (opcional — vazio = todos)</p>
+                    <Select
+                      value={adHocTargetId ?? ""}
+                      onValueChange={(v) => setAdHocTargetId(v || null)}
+                      disabled={!adHocReferenceId}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Todos os tenants" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients
+                          .filter((c) => c.id !== adHocReferenceId)
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.nome_entidade ?? c.tenant_code}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleRunAdHocAudit}
+                    disabled={!adHocReferenceId || isRunningAdHocAudit}
+                    className="sm:w-auto"
+                  >
+                    {isRunningAdHocAudit ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Rocket className="mr-2 h-4 w-4" />
+                    )}
+                    Comparar
                   </Button>
                 </div>
               </div>
             </Card>
 
-            {isLoadingSchema ? (
+            {/* Cabeçalho do modo global (só aparece quando não há ad hoc ativo) */}
+            {!isAdHocMode && (
+              <Card className="border-dashed border-primary/30 bg-primary/5 p-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Cache global de schema</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Resultados da última auditoria profunda contra a referência padrão.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {batchSyncCandidate ? (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          handlePrepareSchemaSync(
+                            batchSyncCandidate.targets,
+                            batchSyncCandidate.operations,
+                            {
+                              title: `Sync em todos os ${batchSyncCandidate.targets.length} tenants`,
+                              description:
+                                "Lote com todas as divergências sincronizáveis compartilhadas por este mesmo grupo de tenants. O apply será executado sequencialmente em todos os alvos.",
+                            },
+                          )
+                        }
+                        disabled={isPreparingDrift === batchSyncActionKey}
+                      >
+                        {isPreparingDrift === batchSyncActionKey ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Rocket className="mr-2 h-4 w-4" />
+                        )}
+                        Preparar sync em todos ({batchSyncCandidate.targets.length})
+                      </Button>
+                    ) : null}
+                    <Button onClick={handleRunSchemaAudit} disabled={isAuditingSchema}>
+                      {isAuditingSchema ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                      Executar Auditoria Profunda
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Banner de modo ad hoc ativo */}
+            {isAdHocMode && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200">
+                Comparação sob demanda — referência: <strong>{referenceName}</strong>
+                {adHocTargetId
+                  ? ` → ${clients.find((c) => c.id === adHocTargetId)?.nome_entidade ?? adHocTargetId}`
+                  : " → todos os tenants"}
+                . Estes resultados não alteram o cache global.
+              </div>
+            )}
+
+            {isLoadingSchema && !isAdHocMode ? (
               <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
                 <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Carregando status de schema...</span>
               </div>
+            ) : isRunningAdHocAudit ? (
+              <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
+                <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Executando comparação...</span>
+              </div>
             ) : (
               <div className="space-y-4">
-                {schemaStatus.map((status) => (
-                  <SchemaDriftCard 
-                    key={status.tenantId} 
-                    status={status} 
-                    schemaStatus={schemaStatus}
+                {displayStatus.map((status) => (
+                  <SchemaDriftCard
+                    key={status.tenantId}
+                    status={status}
+                    schemaStatus={displayStatus}
                     isPreparingDrift={isPreparingDrift}
                     onPrepareSync={handlePrepareSchemaSync}
+                    referenceName={referenceName}
                   />
                 ))}
               </div>
@@ -241,7 +365,7 @@ export default function ObservabilityPage() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="rounded-md border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-slate-300">
                 {driftPreview?.description ??
-                  "O SQL abaixo é derivado do estado real do Rayssa. Para views, as colunas e grants relacionados são alinhados pela mesma operação."}
+                  `O SQL abaixo é derivado do estado real de ${referenceName}. Para views, as colunas e grants relacionados são alinhados pela mesma operação.`}
               </div>
               
               {driftPreview && driftPreview.targets.length > 1 && (

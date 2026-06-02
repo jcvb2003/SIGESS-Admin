@@ -96,7 +96,8 @@ begin
 
   select count(*) into v_count
   from public.socios
-  where situacao != 'Excluído' and unit_id = new.unit_id;
+  where situacao != 'Excluído'
+    and tenant_id = v_tenant_id;
 
   if v_count >= v_limit and (
     tg_op = 'INSERT' or
@@ -2392,6 +2393,8 @@ CREATE POLICY tenant_users_delete_admins ON public.tenant_users FOR DELETE TO au
 CREATE POLICY tenant_users_insert_admins ON public.tenant_users FOR INSERT TO authenticated WITH CHECK (public.is_tenant_owner(tenant_id));
 
 CREATE POLICY tenant_users_select_members ON public.tenant_users FOR SELECT TO authenticated USING (user_id = auth.uid());
+
+CREATE POLICY tenant_users_select_owner ON public.tenant_users FOR SELECT TO authenticated USING (public.is_tenant_owner(tenant_id));
 
 CREATE POLICY tenant_users_update_admins ON public.tenant_users FOR UPDATE TO authenticated USING (public.is_tenant_owner(tenant_id)) WITH CHECK (public.is_tenant_owner(tenant_id));
 

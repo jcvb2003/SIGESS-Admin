@@ -14,12 +14,13 @@ export function IntegrationSettings() {
 
   useEffect(() => {
     if (settings && settings.length > 0) {
-      const s = Object.fromEntries(settings.map((st) => [st.key, st.value]));
-      if (Object.keys(localSettings).length === 0) {
-        setLocalSettings(s);
-      }
+      setLocalSettings((prev) =>
+        Object.keys(prev).length === 0
+          ? Object.fromEntries(settings.map((st) => [st.key, st.value]))
+          : prev
+      );
     }
-  }, [settings, localSettings]);
+  }, [settings]);
 
   const handleSave = async (e: React.FormEvent, key: string) => {
     e.preventDefault();

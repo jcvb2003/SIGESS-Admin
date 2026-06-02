@@ -111,6 +111,91 @@ export async function listSharedTenants(project: RuntimeProjectConnection): Prom
   return (data || []) as SharedTenant[];
 }
 
+async function ensureSharedRuntimeScopeRows(input: {
+  project: RuntimeProjectConnection;
+  tenantId: string;
+  unitId: string;
+  entityName?: string | null;
+}) {
+  const sharedAdmin = getProjectRuntimeSupabaseAdmin(input.project);
+
+  const [{ data: existingEntity }, { data: existingConfig }, { data: existingParametros }, { data: existingFinanceiros }] =
+    await Promise.all([
+      sharedAdmin
+        .from("entidade")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      sharedAdmin
+        .from("configuracao_entidade")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      sharedAdmin
+        .from("parametros")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      sharedAdmin
+        .from("parametros_financeiros")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const inserts = [];
+
+  if (!existingEntity) {
+    inserts.push(
+      sharedAdmin.from("entidade").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+        nome_entidade: input.entityName ?? null,
+      }),
+    );
+  }
+
+  if (!existingConfig) {
+    inserts.push(
+      sharedAdmin.from("configuracao_entidade").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  if (!existingParametros) {
+    inserts.push(
+      sharedAdmin.from("parametros").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  if (!existingFinanceiros) {
+    inserts.push(
+      sharedAdmin.from("parametros_financeiros").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  const results = await Promise.all(inserts);
+  for (const result of results) {
+    if (result.error) throw handleSupabaseError(result.error);
+  }
+}
+
 export async function createSharedTenantForProject(
   project: RuntimeProjectConnection,
   clienteId: string,           // ID do registro em `clientes` a ser vinculado
@@ -144,15 +229,12 @@ export async function createSharedTenantForProject(
 
   const unitId = unit.id;
 
-  const seedResults = await Promise.all([
-    sharedAdmin.from("configuracao_entidade").insert({ tenant_id: tenantId, unit_id: unitId }),
-    sharedAdmin.from("parametros").insert({ tenant_id: tenantId, unit_id: unitId }),
-    sharedAdmin.from("parametros_financeiros").insert({ tenant_id: tenantId, unit_id: unitId }),
-  ]);
-
-  for (const result of seedResults) {
-    if (result.error) throw handleSupabaseError(result.error);
-  }
+  await ensureSharedRuntimeScopeRows({
+    project,
+    tenantId,
+    unitId,
+    entityName: input.name,
+  });
 
   // Vincula o tenant runtime ao registro central pelo ID exato
   const { error: updateError } = await supabase
@@ -203,6 +285,11 @@ export async function createSharedTenantUnit(
     .single();
 
   if (error) throw handleSupabaseError(error);
+  await ensureSharedRuntimeScopeRows({
+    project,
+    tenantId: input.tenant_id,
+    unitId: data.id,
+  });
   return data as TenantUnit;
 }
 

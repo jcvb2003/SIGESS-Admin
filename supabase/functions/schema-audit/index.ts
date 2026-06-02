@@ -147,26 +147,29 @@ serve(async (req: Request) => {
 
         const summary = summarizeDiff(diffs);
 
-        // Atualizar banco
-        const { error: upsertErr } = await supabase
-          .from('schema_sync_status')
-          .upsert({
-            tenant_id: tenant.id,
-            checked_at: new Date().toISOString(),
-            total_diffs: summary.total,
-            diffs: diffs,
-            summary: summary
-          }, { onConflict: 'tenant_id' });
+        // Só persiste no cache global quando for auditoria padrão (sem referência ad hoc)
+        if (!referenceProjectId) {
+          const { error: upsertErr } = await supabase
+            .from('schema_sync_status')
+            .upsert({
+              tenant_id: tenant.id,
+              checked_at: new Date().toISOString(),
+              total_diffs: summary.total,
+              diffs: diffs,
+              summary: summary
+            }, { onConflict: 'tenant_id' });
 
-        if (upsertErr) {
-          console.error(`Failed to upsert sync status for ${tenant.project_name}:`, upsertErr);
+          if (upsertErr) {
+            console.error(`Failed to upsert sync status for ${tenant.project_name}:`, upsertErr);
+          }
         }
 
         results.push({
           tenantId: tenant.id,
           projectName: tenant.project_name,
           totalDiffs: summary.total,
-          summary
+          summary,
+          diffs: referenceProjectId ? diffs : undefined,
         });
 
       } catch (err) {

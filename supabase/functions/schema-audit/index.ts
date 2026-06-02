@@ -152,12 +152,12 @@ serve(async (req: Request) => {
           const { error: upsertErr } = await supabase
             .from('schema_sync_status')
             .upsert({
-              tenant_id: tenant.id,
+              projeto_id: tenant.id,
               checked_at: new Date().toISOString(),
               total_diffs: summary.total,
               diffs: diffs,
               summary: summary
-            }, { onConflict: 'tenant_id' });
+            }, { onConflict: 'projeto_id' });
 
           if (upsertErr) {
             console.error(`Failed to upsert sync status for ${tenant.project_name}:`, upsertErr);

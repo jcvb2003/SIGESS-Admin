@@ -22,12 +22,12 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
   const { data, error } = await supabase
     .from('schema_sync_status')
     .select(`
-      tenant_id,
+      projeto_id,
       checked_at,
       total_diffs,
       diffs,
       summary,
-      entidades ( nome_entidade, tenant_code, deployment_mode )
+      projetos ( project_name )
     `)
     .order('checked_at', { ascending: false });
 
@@ -35,14 +35,12 @@ export async function getSchemaSyncStatus(): Promise<TenantSchemaStatus[]> {
     throw new Error(`Erro ao carregar status de sync: ${error.message}`);
   }
 
-  return (data || [])
-    .filter((row) => row.entidades?.deployment_mode === 'isolated')
-    .map(row => ({
-    tenantId: row.tenant_id,
-    tenantName: row.entidades?.nome_entidade || row.entidades?.tenant_code || 'Unknown',
+  return (data || []).map((row: any) => ({
+    tenantId: row.projeto_id,
+    tenantName: (row.projetos as any)?.project_name || row.projeto_id || 'Unknown',
     checkedAt: row.checked_at,
     totalDiffs: row.total_diffs,
     diffs: row.diffs,
-    summary: row.summary
+    summary: row.summary,
   }));
 }

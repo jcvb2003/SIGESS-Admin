@@ -35,7 +35,7 @@ const FORBIDDEN_PATTERNS: RegExp[] = [
 ];
 
 function sanitizeInitialSchema(sql: string): string {
-  return sql
+  const cleaned = sql
     .replace(/^CREATE SCHEMA public;\s*$/gim, '')
     .replace(/^CREATE SCHEMA IF NOT EXISTS public;\s*$/gim, '')
     .replace(/^ALTER SCHEMA public OWNER TO .*?;\s*$/gim, '')
@@ -43,6 +43,14 @@ function sanitizeInitialSchema(sql: string): string {
     .replace(/\bextensions\.gin_trgm_ops\b/g, 'public.gin_trgm_ops')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  const needsPgTrgm =
+    cleaned.includes('public.gin_trgm_ops') &&
+    !/CREATE EXTENSION IF NOT EXISTS pg_trgm/i.test(cleaned);
+
+  return needsPgTrgm
+    ? `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n\n${cleaned}`
+    : cleaned;
 }
 
 function validateSchema(sql: string): void {

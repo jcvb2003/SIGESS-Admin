@@ -12,7 +12,7 @@ export type ExportRun = {
 };
 
 export type SyncableSchemaDrift = {
-  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
@@ -21,7 +21,7 @@ export type SyncableSchemaDrift = {
 };
 
 export type SchemaDriftOperation = {
-  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

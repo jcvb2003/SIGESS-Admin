@@ -40,6 +40,8 @@ const SHARED_GOVERNANCE_TABLES = new Set([
   "user_unit_memberships",
 ]);
 
+const EXTENSION_APPLY_ALLOWLIST = new Set(["pg_trgm"]);
+
 const ISOLATED_ANON_TABLE_GRANT_ALLOWLIST = new Set([
   "foto_upload_tokens",
 ]);
@@ -605,13 +607,6 @@ async function rewriteTenantSpecificFunctionDefinition(
   functionName: string,
   definition: string,
 ) {
-  if (functionName === "get_payments_by_period_paginated") {
-    return definition.replace(
-      /\(p_unit_id\s+IS\s+NULL\s+OR\s+s\.unit_id\s*=\s*p_unit_id\)/g,
-      "(p_unit_id IS NULL OR fl.unit_id = p_unit_id)",
-    );
-  }
-
   if (functionName === "update_extension_license") {
     return definition.replace(
       /COALESCE\s*\(\s*p_unit_id\s*,\s*'[^']+'\s*::uuid\s*\)/g,
@@ -1167,10 +1162,169 @@ async function buildConstraintSyncSql(
   return [dropSql, addSql].join("\n");
 }
 
+async function buildRlsStateSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  assertSafeIdentifier(objectName, "tableName");
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)}`;
+
+  if (diffType === "extra_in_tenant") {
+    throw createHttpError(
+      `Desabilitação automática de RLS não suportada — avalie manualmente: ${schemaName}.${objectName}`,
+      400,
+    );
+  }
+
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT c.relrowsecurity, c.relforcerowsecurity
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND c.relname = '${escapeLiteral(objectName)}'
+     LIMIT 1`,
+  );
+
+  const row = rows?.[0];
+  if (!row) {
+    throw createHttpError(`Tabela ${schemaName}.${objectName} não encontrada na referência`, 404);
+  }
+
+  const parts: string[] = [];
+  if (row.relrowsecurity) {
+    parts.push(`ALTER TABLE ${qualifiedTable} ENABLE ROW LEVEL SECURITY;`);
+  }
+  if (row.relforcerowsecurity) {
+    parts.push(`ALTER TABLE ${qualifiedTable} FORCE ROW LEVEL SECURITY;`);
+  }
+  return parts.join("\n") || `-- RLS state already aligned for ${objectName}`;
+}
+
+function buildExtensionSyncSql(
+  objectName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+) {
+  if (diffType === "extra_in_tenant") {
+    throw createHttpError(
+      `Remoção automática de extensão não suportada — avalie manualmente: ${objectName}`,
+      400,
+    );
+  }
+
+  if (diffType === "different_definition") {
+    throw createHttpError(
+      `Atualização de versão de extensão não suportada automaticamente: ${objectName}. Avalie o impacto antes de atualizar manualmente via Dashboard do Supabase.`,
+      400,
+    );
+  }
+
+  if (!EXTENSION_APPLY_ALLOWLIST.has(objectName)) {
+    throw createHttpError(
+      `Extensão "${objectName}" não está na allowlist de sync automático. Instale manualmente via Dashboard do Supabase se necessário.`,
+      400,
+    );
+  }
+
+  return `CREATE EXTENSION IF NOT EXISTS ${quoteIdentifier(objectName)} WITH SCHEMA public;`;
+}
+
+async function buildTableSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  assertSafeIdentifier(objectName, "tableName");
+
+  if (diffType === "extra_in_tenant") {
+    throw createHttpError(
+      `DROP TABLE automático não suportado — avalie manualmente: ${schemaName}.${objectName}`,
+      400,
+    );
+  }
+
+  if (diffType === "different_definition") {
+    throw createHttpError(
+      `Divergências internas de tabela devem ser sincronizadas via columns/constraints: ${schemaName}.${objectName}`,
+      400,
+    );
+  }
+
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const colRows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT column_name, data_type, udt_name, is_nullable, column_default,
+            character_maximum_length, numeric_precision, numeric_scale
+     FROM information_schema.columns
+     WHERE table_schema = '${escapeLiteral(schemaName)}'
+       AND table_name   = '${escapeLiteral(objectName)}'
+     ORDER BY ordinal_position`,
+  );
+
+  if (!colRows || colRows.length === 0) {
+    throw createHttpError(`Tabela ${schemaName}.${objectName} não encontrada na referência`, 404);
+  }
+
+  const pkRows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT kcu.column_name
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+      AND tc.table_name = kcu.table_name
+     WHERE tc.table_schema = '${escapeLiteral(schemaName)}'
+       AND tc.table_name   = '${escapeLiteral(objectName)}'
+       AND tc.constraint_type = 'PRIMARY KEY'
+     ORDER BY kcu.ordinal_position`,
+  );
+
+  const pkColumns = (pkRows || []).map((r: any) => r.column_name as string);
+  const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)}`;
+
+  const columnDefs = colRows.map((col: any) => {
+    if (col.data_type?.toLowerCase() === "user-defined") {
+      throw createHttpError(
+        `Coluna "${col.column_name}" da tabela "${objectName}" usa tipo USER-DEFINED (${col.udt_name}) — crie o tipo manualmente no tenant antes de sincronizar esta tabela.`,
+        400,
+      );
+    }
+    const typeStr = buildColumnTypeStr(col);
+    const nullStr = col.is_nullable === "YES" ? "" : " NOT NULL";
+    const defaultStr = col.column_default ? ` DEFAULT ${col.column_default}` : "";
+    return `  ${quoteIdentifier(col.column_name)} ${typeStr}${nullStr}${defaultStr}`;
+  });
+
+  if (pkColumns.length > 0) {
+    columnDefs.push(`  PRIMARY KEY (${pkColumns.map((c: string) => quoteIdentifier(c)).join(", ")})`);
+  }
+
+  return [`CREATE TABLE IF NOT EXISTS ${qualifiedTable} (`, columnDefs.join(",\n"), `);`].join("\n");
+}
+
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
   client: ClientConfig,
-  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger" | "column" | "constraint",
+  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table",
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -1211,6 +1365,18 @@ async function buildSchemaDriftSql(
     return await buildConstraintSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
 
+  if (objectType === "rls_state") {
+    return await buildRlsStateSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
+  }
+
+  if (objectType === "extensions") {
+    return buildExtensionSyncSql(objectName, diffType);
+  }
+
+  if (objectType === "table") {
+    return await buildTableSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
+  }
+
   return await buildPolicySyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
 }
 
@@ -1249,7 +1415,7 @@ async function applySchemaDriftBatch(
       throw createHttpError("auth_config ainda nÃ£o pode ser processado em lote", 400);
     }
 
-    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger", "column", "constraint"].includes(objectType)) {
+    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table"].includes(objectType)) {
       throw createHttpError(`Tipo de objeto ainda não suportado em lote: ${objectType}`, 400);
     }
 
@@ -1353,7 +1519,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger", "column", "constraint"].includes(objectType)) {
+  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 

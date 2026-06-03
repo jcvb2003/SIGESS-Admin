@@ -274,6 +274,61 @@ function buildColumnDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   };
 }
 
+function buildTableDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "tables" || !isSupportedDiffType(diff.type)) return null;
+  // Never surface extra tables for auto-removal
+  if (diff.type === "extra_in_tenant") return null;
+
+  // diff.key is the table name directly (tables are compared as a string array)
+  const tableName = diff.key;
+  return {
+    objectType: "table",
+    schema: "public",
+    objectName: tableName,
+    diffType: diff.type,
+    displayName: `public.${tableName}`,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildRlsStateDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "rls_state" || !isSupportedDiffType(diff.type)) return null;
+  // Never surface "RLS enabled in tenant but not in reference" for auto-apply
+  if (diff.type === "extra_in_tenant") return null;
+
+  const source = pickSource(diff) as { table?: string } | null;
+  const tableName = source?.table ?? diff.key;
+  if (!tableName) return null;
+
+  return {
+    objectType: "rls_state",
+    schema: "public",
+    objectName: tableName,
+    diffType: diff.type,
+    displayName: `public.${tableName} (RLS)`,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildExtensionsDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "extensions" || !isSupportedDiffType(diff.type)) return null;
+  // Never surface removal of extensions
+  if (diff.type === "extra_in_tenant") return null;
+
+  const source = pickSource(diff) as { name?: string } | null;
+  const extName = source?.name ?? diff.key;
+  if (!extName) return null;
+
+  return {
+    objectType: "extensions",
+    schema: "public",
+    objectName: extName,
+    diffType: diff.type,
+    displayName: `extension: ${extName}`,
+    relatedDiffCount: 1,
+  };
+}
+
 function buildConstraintDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   if (diff.category !== "constraints" || !isSupportedDiffType(diff.type)) return null;
 
@@ -306,6 +361,9 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
 
   for (const diff of diffs) {
     const drift =
+      buildTableDrift(diff) ??
+      buildRlsStateDrift(diff) ??
+      buildExtensionsDrift(diff) ??
       buildViewDrift(diff, diffs) ??
       buildIndexDrift(diff) ??
       buildPolicyDrift(diff) ??

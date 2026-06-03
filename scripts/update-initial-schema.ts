@@ -4,30 +4,38 @@ import path from 'path';
 import { execSync } from 'child_process';
 import fs from 'fs';
 
-// Carrega variaveis de ambiente do .env da pasta Admin
 dotenv.config({ path: path.join(process.cwd(), '.env') });
 
 const ADMIN_URL = process.env.VITE_SUPABASE_URL;
 const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-const RAYSSA_DB_URL = process.env.RAYSSA_DATABASE_URL;
 
-if (!ADMIN_URL || !ADMIN_KEY) {
-  console.error('Erro: VITE_SUPABASE_URL ou VITE_SUPABASE_SERVICE_ROLE_KEY nao definidos no .env');
-  process.exit(1);
-}
-
-if (!RAYSSA_DB_URL) {
-  console.error('Erro: RAYSSA_DATABASE_URL nao definido no .env');
-  console.log('Exemplo: RAYSSA_DATABASE_URL=postgresql://postgres.jmahgvgtjstklabwkkit:[PASSWORD]@aws-1-us-west-2.pooler.supabase.com:5432/postgres');
-  process.exit(1);
-}
+// Fonte neutra: preferir BASELINE_DATABASE_URL; aceitar RAYSSA_DATABASE_URL como legado
+const BASELINE_DB_URL = process.env.BASELINE_DATABASE_URL ?? process.env.RAYSSA_DATABASE_URL;
 
 const CANDIDATE_FILE = 'initial_schema_candidate.sql';
 const OFFICIAL_FILE = 'initial_schema.sql';
 const BUCKET_NAME = 'migrations';
 
-function sanitizeInitialSchema(sql: string) {
-  const cleanedSql = sql
+// Objetos críticos que devem estar presentes no baseline
+const REQUIRED_OBJECTS = [
+  'is_tenant_owner',
+  'check_member_limit',
+  'tenants_select',
+  'parametros_financeiros_select',
+  'user_unit_memberships',
+  'tenant_users',
+  'get_finance_audit_log_v1',
+];
+
+// Padrões que não devem aparecer no baseline
+const FORBIDDEN_PATTERNS: RegExp[] = [
+  /schema_migrations/i,
+  /supabase_migrations/i,
+  /app_metadata.*role.*admin/i,
+];
+
+function sanitizeInitialSchema(sql: string): string {
+  return sql
     .replace(/^CREATE SCHEMA public;\s*$/gim, '')
     .replace(/^CREATE SCHEMA IF NOT EXISTS public;\s*$/gim, '')
     .replace(/^ALTER SCHEMA public OWNER TO .*?;\s*$/gim, '')
@@ -35,64 +43,115 @@ function sanitizeInitialSchema(sql: string) {
     .replace(/\bextensions\.gin_trgm_ops\b/g, 'public.gin_trgm_ops')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
 
-  const needsPgTrgm =
-    cleanedSql.includes('public.gin_trgm_ops') &&
-    !/CREATE EXTENSION IF NOT EXISTS pg_trgm/i.test(cleanedSql);
+function validateSchema(sql: string): void {
+  const errors: string[] = [];
 
-  if (!needsPgTrgm) {
-    return cleanedSql;
+  if (sql.length < 5000) {
+    errors.push(`Schema muito curto (${sql.length} bytes) — dump provavelmente falhou`);
   }
 
-  return `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n\n${cleanedSql}`;
+  for (const pattern of FORBIDDEN_PATTERNS) {
+    if (pattern.test(sql)) {
+      errors.push(`Padrao proibido encontrado: ${pattern}`);
+    }
+  }
+
+  for (const obj of REQUIRED_OBJECTS) {
+    if (!sql.includes(obj)) {
+      errors.push(`Objeto critico ausente: ${obj}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Validacao falhou:\n${errors.map((e) => `  - ${e}`).join('\n')}`);
+  }
+}
+
+function showDiff(candidatePath: string, officialPath: string): void {
+  if (!fs.existsSync(officialPath)) {
+    console.log('Nenhum schema oficial existente para comparar.');
+    return;
+  }
+  try {
+    const diff = execSync(`git diff --no-index --stat "${officialPath}" "${candidatePath}"`, {
+      encoding: 'utf-8',
+    });
+    console.log('\nDiff contra schema oficial:\n' + diff);
+  } catch (e: any) {
+    // git diff sai com codigo 1 quando ha diferencas — comportamento normal
+    if (e.stdout) console.log('\nDiff contra schema oficial:\n' + e.stdout);
+  }
 }
 
 async function updateInitialSchema() {
   const args = process.argv.slice(2);
   const promote = args.includes('--promote');
 
-  try {
-    console.log('Gerando dump do schema de Rayssa (sinpesca — baseline canônico)...');
+  if (!ADMIN_URL || !ADMIN_KEY) {
+    console.error('Erro: VITE_SUPABASE_URL ou VITE_SUPABASE_SERVICE_ROLE_KEY nao definidos');
+    process.exit(1);
+  }
 
-    // --schema-only: apenas estrutura
+  if (!BASELINE_DB_URL) {
+    console.error('Erro: BASELINE_DATABASE_URL (ou RAYSSA_DATABASE_URL) nao definido no .env');
+    console.log('Exemplo: BASELINE_DATABASE_URL=postgresql://postgres.<ref>:[SENHA]@<host>:5432/postgres');
+    process.exit(1);
+  }
+
+  if (!process.env.BASELINE_DATABASE_URL && process.env.RAYSSA_DATABASE_URL) {
+    console.warn('Aviso: usando RAYSSA_DATABASE_URL como fonte. Defina BASELINE_DATABASE_URL no .env para remover esta dependencia.');
+  }
+
+  try {
+    console.log('Gerando dump do schema baseline...');
+
+    // --no-comments: remove cabecalhos de comentario gerados pelo pg_dump
+    // --schema-only: apenas estrutura, sem dados
     // --no-owner: remove comandos de owner
-    // --no-privileges: remove GRANTs, pois o onboarding aplica os seus proprios
+    // --no-privileges: remove GRANTs (onboarding aplica os seus proprios)
     // --schema=public: foca apenas no dominio do sistema
-    const dumpCommand = `pg_dump "${RAYSSA_DB_URL}" --schema-only --no-owner --no-privileges --schema=public`;
+    const dumpCommand = [
+      `pg_dump "${BASELINE_DB_URL}"`,
+      '--schema-only',
+      '--no-owner',
+      '--no-privileges',
+      '--no-comments',
+      '--schema=public',
+    ].join(' ');
+
     const dump = execSync(dumpCommand, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 50 });
 
-    console.log('Limpando metadados de migracoes e extensoes desnecessarias...');
+    console.log('Filtrando blocos de migracoes...');
 
     const blocks = dump.split(/\n\s*\n/);
-    const cleanedBlocks = blocks.filter((block) => {
-      const lowerBlock = block.toLowerCase();
-      const isMigrationBlock =
-        lowerBlock.includes('_migrations') ||
-        lowerBlock.includes('supabase_migrations');
-
-      return !isMigrationBlock;
+    const filteredBlocks = blocks.filter((block) => {
+      const lower = block.toLowerCase();
+      return !lower.includes('_migrations') && !lower.includes('supabase_migrations');
     });
 
-    const finalSql = sanitizeInitialSchema(
-      cleanedBlocks
-        .join('\n\n')
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('\\'))
-        .join('\n')
-        .replace(/--.*$/gm, '')
-        .replace(/\n\s*\n/g, '\n\n')
-        .trim()
-    );
+    const filtered = filteredBlocks
+      .join('\n\n')
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith('\\') && !trimmed.startsWith('--');
+      })
+      .join('\n');
 
-    if (finalSql.length < 5000) {
-      throw new Error(`Schema gerado parece muito curto (${finalSql.length} bytes). Verifique a conexao.`);
-    }
+    const finalSql = sanitizeInitialSchema(filtered);
+
+    console.log('Validando conteudo semantico...');
+    validateSchema(finalSql);
 
     fs.writeFileSync(CANDIDATE_FILE, finalSql);
-    console.log(`Candidato gerado: ${CANDIDATE_FILE} (${(finalSql.length / 1024).toFixed(2)} KB)`);
+    console.log(`\nCandidato gerado: ${CANDIDATE_FILE} (${(finalSql.length / 1024).toFixed(2)} KB)`);
+
+    showDiff(CANDIDATE_FILE, OFFICIAL_FILE);
 
     if (!promote) {
-      console.log('\nPara promover este candidato a schema oficial e subir para o Storage, use:');
+      console.log('\nRevisione o candidato e o diff acima. Para promover a schema oficial:');
       console.log('   npm run schema:update-initial -- --promote');
       return;
     }
@@ -100,22 +159,19 @@ async function updateInitialSchema() {
     console.log(`\nPromovendo para ${OFFICIAL_FILE} e subindo para o bucket "${BUCKET_NAME}"...`);
 
     const supabase = createClient(ADMIN_URL, ADMIN_KEY);
+    const buffer = Buffer.from(finalSql);
 
     const { error: candidateError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(CANDIDATE_FILE, Buffer.from(finalSql), { upsert: true, contentType: 'text/plain' });
+      .upload(CANDIDATE_FILE, buffer, { upsert: true, contentType: 'text/plain' });
 
-    if (candidateError) {
-      throw new Error(`Erro ao subir candidato: ${candidateError.message}`);
-    }
+    if (candidateError) throw new Error(`Erro ao subir candidato: ${candidateError.message}`);
 
     const { error: officialError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(OFFICIAL_FILE, Buffer.from(finalSql), { upsert: true, contentType: 'text/plain' });
+      .upload(OFFICIAL_FILE, buffer, { upsert: true, contentType: 'text/plain' });
 
-    if (officialError) {
-      throw new Error(`Erro ao subir oficial: ${officialError.message}`);
-    }
+    if (officialError) throw new Error(`Erro ao subir oficial: ${officialError.message}`);
 
     console.log('\nSucesso! O novo onboarding usara este schema como base.');
   } catch (error: any) {

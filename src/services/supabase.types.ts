@@ -14,50 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      edge_function_audits: {
-        Row: {
-          current_version: number | null
-          function_slug: string
-          id: string
-          last_checked_at: string | null
-          reference_version: number | null
-          status: string | null
-          tenant_id: string | null
-          verify_jwt_current: boolean | null
-          verify_jwt_reference: boolean | null
-        }
-        Insert: {
-          current_version?: number | null
-          function_slug: string
-          id?: string
-          last_checked_at?: string | null
-          reference_version?: number | null
-          status?: string | null
-          tenant_id?: string | null
-          verify_jwt_current?: boolean | null
-          verify_jwt_reference?: boolean | null
-        }
-        Update: {
-          current_version?: number | null
-          function_slug?: string
-          id?: string
-          last_checked_at?: string | null
-          reference_version?: number | null
-          status?: string | null
-          tenant_id?: string | null
-          verify_jwt_current?: boolean | null
-          verify_jwt_reference?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "edge_function_audits_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "projetos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       export_runs: {
         Row: {
           checksum: string | null
@@ -291,53 +247,6 @@ export type Database = {
           topology?: string
         }
         Relationships: []
-      }
-      schema_migrations: {
-        Row: {
-          applied_at: string | null
-          applied_by: string | null
-          checksum: string | null
-          error_detail: string | null
-          id: string
-          migration_name: string
-          statements: string | null
-          status: string | null
-          tenant_id: string | null
-          version: string | null
-        }
-        Insert: {
-          applied_at?: string | null
-          applied_by?: string | null
-          checksum?: string | null
-          error_detail?: string | null
-          id?: string
-          migration_name: string
-          statements?: string | null
-          status?: string | null
-          tenant_id?: string | null
-          version?: string | null
-        }
-        Update: {
-          applied_at?: string | null
-          applied_by?: string | null
-          checksum?: string | null
-          error_detail?: string | null
-          id?: string
-          migration_name?: string
-          statements?: string | null
-          status?: string | null
-          tenant_id?: string | null
-          version?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "schema_migrations_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "projetos"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       supabase_accounts: {
         Row: {

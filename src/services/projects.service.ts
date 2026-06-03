@@ -44,7 +44,7 @@ export async function proxyAction(
   action:
     | "list-users" | "list-tables" | "health-check" | "list-buckets"
     | "list-client-members" | "create-client-member" | "update-client-member"
-    | "execute-migration" | "sync-trial-limits" | "get-migrations-status"
+    | "sync-trial-limits"
     | "repair-user-sync" | "delete-client-member" | "ban-client-member"
     | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id",
   params?: Record<string, unknown>,

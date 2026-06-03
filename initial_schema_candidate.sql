@@ -158,13 +158,13 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.get_finance_audit_log_v1(p_table_name text DEFAULT NULL::text, p_operation text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS TABLE(id uuid, table_name text, record_id uuid, operation text, old_data jsonb, new_data jsonb, changed_by uuid, user_nome text, user_email text, created_at timestamp with time zone)
+CREATE FUNCTION public.get_finance_audit_log_v1(p_tenant_id uuid, p_table_name text DEFAULT NULL::text, p_operation text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS TABLE(id uuid, table_name text, record_id uuid, operation text, old_data jsonb, new_data jsonb, changed_by uuid, user_nome text, user_email text, created_at timestamp with time zone)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
-    IF (auth.jwt() -> 'app_metadata' ->> 'role') != 'admin' THEN
-        RAISE EXCEPTION 'Acesso negado: Requer privilégios de administrador.';
+    IF NOT public.is_tenant_owner(p_tenant_id) THEN
+        RAISE EXCEPTION 'Acesso negado: Requer privilégios de proprietário do tenant.';
     END IF;
 
     RETURN QUERY
@@ -181,7 +181,8 @@ BEGIN
         a.created_at
     FROM public.audit_log_financeiro a
     LEFT JOIN public.user_profiles up ON up.id = a.changed_by
-    WHERE (p_table_name IS NULL OR a.table_name = p_table_name)
+    WHERE a.tenant_id = p_tenant_id
+      AND (p_table_name IS NULL OR a.table_name = p_table_name)
       AND (p_operation IS NULL OR a.operation = p_operation)
     ORDER BY a.created_at DESC
     LIMIT p_limit
@@ -2266,19 +2267,67 @@ ALTER TABLE public.parametros ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.parametros_financeiros ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY parametros_financeiros_insert ON public.parametros_financeiros FOR INSERT WITH CHECK ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.user_id = auth.uid()) AND (m.tenant_id = parametros_financeiros.tenant_id) AND (m.unit_id = parametros_financeiros.unit_id) AND (m.is_active = true))))));
+CREATE POLICY parametros_financeiros_insert ON public.parametros_financeiros FOR INSERT WITH CHECK (
+  public.is_tenant_owner(tenant_id)
+  OR EXISTS (
+    SELECT 1 FROM public.tenant_users tu
+    WHERE tu.tenant_id = parametros_financeiros.tenant_id
+      AND tu.user_id = auth.uid() AND tu.is_active = true
+      AND (tu.tenant_role = 'owner' OR tu.operator_type = 'presidente')
+  )
+  OR EXISTS (
+    SELECT 1 FROM public.user_unit_memberships m
+    WHERE m.user_id = auth.uid() AND m.tenant_id = parametros_financeiros.tenant_id
+      AND (parametros_financeiros.unit_id IS NULL OR m.unit_id = parametros_financeiros.unit_id)
+      AND m.is_active = true
+  )
+);
 
-CREATE POLICY parametros_financeiros_select ON public.parametros_financeiros FOR SELECT USING ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.user_id = auth.uid()) AND (m.tenant_id = parametros_financeiros.tenant_id) AND (m.unit_id = parametros_financeiros.unit_id) AND (m.is_active = true))))));
+CREATE POLICY parametros_financeiros_select ON public.parametros_financeiros FOR SELECT USING (
+  public.is_tenant_owner(tenant_id)
+  OR EXISTS (
+    SELECT 1 FROM public.tenant_users tu
+    WHERE tu.tenant_id = parametros_financeiros.tenant_id
+      AND tu.user_id = auth.uid() AND tu.is_active = true
+      AND (tu.tenant_role = 'owner' OR tu.operator_type = 'presidente')
+  )
+  OR EXISTS (
+    SELECT 1 FROM public.user_unit_memberships m
+    WHERE m.user_id = auth.uid() AND m.tenant_id = parametros_financeiros.tenant_id
+      AND (parametros_financeiros.unit_id IS NULL OR m.unit_id = parametros_financeiros.unit_id)
+      AND m.is_active = true
+  )
+);
 
-CREATE POLICY parametros_financeiros_update ON public.parametros_financeiros FOR UPDATE USING ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.user_id = auth.uid()) AND (m.tenant_id = parametros_financeiros.tenant_id) AND (m.unit_id = parametros_financeiros.unit_id) AND (m.is_active = true)))))) WITH CHECK ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
-   FROM public.user_unit_memberships m
-  WHERE ((m.user_id = auth.uid()) AND (m.tenant_id = parametros_financeiros.tenant_id) AND (m.unit_id = parametros_financeiros.unit_id) AND (m.is_active = true))))));
+CREATE POLICY parametros_financeiros_update ON public.parametros_financeiros FOR UPDATE USING (
+  public.is_tenant_owner(tenant_id)
+  OR EXISTS (
+    SELECT 1 FROM public.tenant_users tu
+    WHERE tu.tenant_id = parametros_financeiros.tenant_id
+      AND tu.user_id = auth.uid() AND tu.is_active = true
+      AND (tu.tenant_role = 'owner' OR tu.operator_type = 'presidente')
+  )
+  OR EXISTS (
+    SELECT 1 FROM public.user_unit_memberships m
+    WHERE m.user_id = auth.uid() AND m.tenant_id = parametros_financeiros.tenant_id
+      AND (parametros_financeiros.unit_id IS NULL OR m.unit_id = parametros_financeiros.unit_id)
+      AND m.is_active = true
+  )
+) WITH CHECK (
+  public.is_tenant_owner(tenant_id)
+  OR EXISTS (
+    SELECT 1 FROM public.tenant_users tu
+    WHERE tu.tenant_id = parametros_financeiros.tenant_id
+      AND tu.user_id = auth.uid() AND tu.is_active = true
+      AND (tu.tenant_role = 'owner' OR tu.operator_type = 'presidente')
+  )
+  OR EXISTS (
+    SELECT 1 FROM public.user_unit_memberships m
+    WHERE m.user_id = auth.uid() AND m.tenant_id = parametros_financeiros.tenant_id
+      AND (parametros_financeiros.unit_id IS NULL OR m.unit_id = parametros_financeiros.unit_id)
+      AND m.is_active = true
+  )
+);
 
 CREATE POLICY parametros_insert ON public.parametros FOR INSERT WITH CHECK ((public.is_tenant_owner(tenant_id) OR (EXISTS ( SELECT 1
    FROM public.user_unit_memberships m

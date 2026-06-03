@@ -1205,8 +1205,13 @@ async function buildRlsStateSyncSql(
   if (row.relrowsecurity) {
     parts.push(`ALTER TABLE ${qualifiedTable} ENABLE ROW LEVEL SECURITY;`);
   }
+  // Always emit FORCE/NO FORCE explicitly so the target aligns with the reference,
+  // including the case where different_definition means the tenant has FORCE=true
+  // but the reference has FORCE=false.
   if (row.relforcerowsecurity) {
     parts.push(`ALTER TABLE ${qualifiedTable} FORCE ROW LEVEL SECURITY;`);
+  } else if (row.relrowsecurity) {
+    parts.push(`ALTER TABLE ${qualifiedTable} NO FORCE ROW LEVEL SECURITY;`);
   }
   return parts.join("\n") || `-- RLS state already aligned for ${objectName}`;
 }
@@ -1215,6 +1220,8 @@ function buildExtensionSyncSql(
   objectName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
 ) {
+  assertSafeIdentifier(objectName, "extensionName");
+
   if (diffType === "extra_in_tenant") {
     throw createHttpError(
       `Remoção automática de extensão não suportada — avalie manualmente: ${objectName}`,
@@ -1302,6 +1309,9 @@ async function buildTableSyncSql(
   const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)}`;
 
   const columnDefs = colRows.map((col: any) => {
+    // Note: standard base types (uuid, jsonb, text, etc.) have data_type = 'uuid',
+    // 'jsonb', 'text', etc. — NOT 'user-defined'. Only custom enums and domain types
+    // come as 'user-defined'. Those may not exist in the target yet, so we block them.
     if (col.data_type?.toLowerCase() === "user-defined") {
       throw createHttpError(
         `Coluna "${col.column_name}" da tabela "${objectName}" usa tipo USER-DEFINED (${col.udt_name}) — crie o tipo manualmente no tenant antes de sincronizar esta tabela.`,

@@ -127,7 +127,7 @@ function buildViewDrift(diff: SchemaDiff, diffs: SchemaDiff[]): SyncableSchemaDr
   };
 }
 
-function buildIndexDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+function buildIndexDrift(diff: SchemaDiff, diffs: SchemaDiff[]): SyncableSchemaDrift | null {
   if (diff.category !== "indexes" || !isSupportedDiffType(diff.type)) return null;
 
   const source = pickSource(diff) as { table?: string; name?: string } | null;
@@ -137,6 +137,15 @@ function buildIndexDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
 
   const objectName = `${tableName}.${indexName}`;
   if (INTENTIONAL_EXTRA_INDEXES.has(objectName)) return null;
+
+  // Skip indexes that are backing a unique/primary constraint with the same name —
+  // those are created automatically when the constraint is applied.
+  const isBackedByConstraint = diffs.some((d) => {
+    if (d.category !== "constraints") return false;
+    const cs = pickSource(d) as { table?: string; name?: string } | null;
+    return cs?.table === tableName && cs?.name === indexName;
+  });
+  if (isBackedByConstraint) return null;
 
   return {
     objectType: "index",
@@ -399,7 +408,7 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
       buildRlsStateDrift(diff) ??
       buildExtensionsDrift(diff) ??
       buildViewDrift(diff, diffs) ??
-      buildIndexDrift(diff) ??
+      buildIndexDrift(diff, diffs) ??
       buildPolicyDrift(diff) ??
       buildGrantDrift(diff) ??
       buildAuthConfigDrift(diff) ??

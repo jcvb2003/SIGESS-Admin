@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Loader2, Rocket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,23 @@ function getSyncHelperText(item: SyncableSchemaDrift, ref: string) {
       ? `1 operação remove a constraint extra para alinhar com ${ref}.`
       : `1 operação recria a constraint com a definição atual de ${ref}.`;
   }
+  if (item.objectType === "table") {
+    return `1 operação cria a tabela ausente com colunas e PK de ${ref} (sem FK constraints — aplique constraints separadamente).`;
+  }
+  if (item.objectType === "rls_state") {
+    return `1 operação habilita/configura RLS na tabela conforme ${ref}.`;
+  }
+  if (item.objectType === "extensions") {
+    return `1 operação instala a extensão ausente (apenas allowlist aprovada).`;
+  }
+  if (item.objectType === "enum_type") {
+    return item.diffType === "missing_in_tenant"
+      ? `1 operação cria o tipo enum com os valores de ${ref}.`
+      : `Alteração de enum não é automatizável — avalie manualmente.`;
+  }
+  if (item.objectType === "edge_functions") {
+    return `1 operação aplica o campo verify_jwt conforme ${ref} via Management API.`;
+  }
   if (item.diffType === "extra_in_tenant") {
     return `1 operação remove o objeto extra para alinhar com ${ref}.`;
   }
@@ -109,6 +127,23 @@ function getPreviewDescription(item: SyncableSchemaDrift, ref: string) {
       ? "O SQL abaixo remove a constraint extra no tenant."
       : `O SQL abaixo recria a constraint com a definição real de ${ref}.`;
   }
+  if (item.objectType === "table") {
+    return `O SQL abaixo cria a tabela com colunas e PK de ${ref}. FK constraints são omitidas e devem ser aplicadas via constraints após criação das tabelas dependentes.`;
+  }
+  if (item.objectType === "rls_state") {
+    return `O SQL abaixo habilita e configura FORCE/NO FORCE de RLS conforme ${ref}.`;
+  }
+  if (item.objectType === "extensions") {
+    return `O SQL abaixo instala a extensão via CREATE EXTENSION IF NOT EXISTS.`;
+  }
+  if (item.objectType === "enum_type") {
+    return item.diffType === "missing_in_tenant"
+      ? `O SQL abaixo cria o tipo enum com todos os valores de ${ref}.`
+      : `Alteração de enum não é suportada automaticamente — requer DROP + recreate com migração de dados.`;
+  }
+  if (item.objectType === "edge_functions") {
+    return `O preview abaixo mostra a chamada PATCH à Management API para alinhar verify_jwt com ${ref}. Não é SQL.`;
+  }
   if (item.diffType === "extra_in_tenant") {
     return `O SQL abaixo remove o objeto extra no tenant para alinhá-lo com ${ref}.`;
   }
@@ -122,6 +157,8 @@ export function SchemaDriftCard({
   referenceName = "referência",
   onPrepareSync,
 }: SchemaDriftCardProps) {
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
   const syncableDrifts = getSyncableSchemaDrifts(status.diffs);
   const singleTarget = { projectId: status.projectId, projectName: status.projectName };
   const tenantLevelOperations = syncableDrifts.filter(
@@ -134,7 +171,12 @@ export function SchemaDriftCard({
       item.objectType === "function_grant" ||
       item.objectType === "trigger" ||
       item.objectType === "column" ||
-      item.objectType === "constraint",
+      item.objectType === "constraint" ||
+      item.objectType === "table" ||
+      item.objectType === "rls_state" ||
+      item.objectType === "extensions" ||
+      item.objectType === "enum_type",
+    // edge_functions: excluded from batch — apply is non-transactional with SQL
   );
 
   const syncableByDiffIdentity = new Map<string, SyncableSchemaDrift>();
@@ -174,6 +216,31 @@ export function SchemaDriftCard({
       continue;
     }
 
+    if (item.objectType === "table") {
+      syncableByDiffIdentity.set(`tables:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "rls_state") {
+      syncableByDiffIdentity.set(`rls_state:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "extensions") {
+      syncableByDiffIdentity.set(`extensions:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "enum_type") {
+      syncableByDiffIdentity.set(`enums_and_domains:${item.schema}.${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
+    if (item.objectType === "edge_functions") {
+      syncableByDiffIdentity.set(`edge_functions:${item.objectName}:${item.diffType}`, item);
+      continue;
+    }
+
     const [tableName, objectName] = item.objectName.split(".", 2);
     if (!tableName || !objectName) continue;
 
@@ -185,6 +252,46 @@ export function SchemaDriftCard({
     const category = item.objectType === "index" ? "indexes" : "policies";
     syncableByDiffIdentity.set(`${category}:${tableName}.${objectName}:${item.diffType}`, item);
   }
+
+  // Group syncable keys by diff category (prefix of the map key)
+  const syncableKeysByCategory = new Map<string, string[]>();
+  for (const key of syncableByDiffIdentity.keys()) {
+    const cat = key.split(":")[0];
+    const existing = syncableKeysByCategory.get(cat) ?? [];
+    existing.push(key);
+    syncableKeysByCategory.set(cat, existing);
+  }
+
+  const toggleCategory = (category: string) => {
+    const keys = syncableKeysByCategory.get(category) ?? [];
+    if (keys.length === 0) return;
+    const allSelected = keys.every((k) => selectedKeys.has(k));
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        keys.forEach((k) => next.delete(k));
+      } else {
+        keys.forEach((k) => next.add(k));
+      }
+      return next;
+    });
+  };
+
+  const toggleItem = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectedOperations = [...syncableByDiffIdentity.entries()]
+    .filter(([key]) => selectedKeys.has(key))
+    .map(([, item]) => item);
+
+  const selectedActionKey =
+    selectedOperations.length > 0 ? buildSingleActionKey(singleTarget, selectedOperations) : null;
 
   return (
     <Card className="p-5">
@@ -210,43 +317,104 @@ export function SchemaDriftCard({
         <div className="mt-6 border-t border-border/50 pt-4">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {status.summary?.byCategory &&
-              Object.entries(status.summary.byCategory).map(([cat, count]) => (
-                <Badge key={cat} variant="secondary">
-                  {cat}: {count}
-                </Badge>
-              ))}
+              Object.entries(status.summary.byCategory).map(([cat, count]) => {
+                const keys = syncableKeysByCategory.get(cat) ?? [];
+                const syncableCount = keys.length;
+                const selectedCount = keys.filter((k) => selectedKeys.has(k)).length;
+                const allSelected = syncableCount > 0 && selectedCount === syncableCount;
+                const someSelected = selectedCount > 0 && !allSelected;
 
-            {tenantLevelOperations.length > 1 ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
-                disabled={isPreparingDrift === buildSingleActionKey(singleTarget, tenantLevelOperations)}
-                onClick={() =>
-                  onPrepareSync([singleTarget], tenantLevelOperations, {
-                    title: `Sync do projeto ${status.projectName}`,
-                    description:
-                      "Preview agrupado por tipo: functions, triggers, grants e demais objetos em ordem segura de execução.",
-                  })
-                }
-              >
-                {isPreparingDrift === buildSingleActionKey(singleTarget, tenantLevelOperations) ? (
-                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                ) : (
-                  <Rocket className="mr-2 h-3 w-3" />
-                )}
-                Preparar sync do tenant ({tenantLevelOperations.length})
-              </Button>
-            ) : null}
+                return (
+                  <Badge
+                    key={cat}
+                    variant={allSelected ? "default" : "secondary"}
+                    className={
+                      syncableCount > 0
+                        ? "cursor-pointer select-none transition-opacity hover:opacity-80" +
+                          (someSelected ? " ring-1 ring-sky-400" : "")
+                        : ""
+                    }
+                    onClick={() => syncableCount > 0 && toggleCategory(cat)}
+                    title={
+                      syncableCount > 0
+                        ? `Clique para ${allSelected ? "desmarcar" : "selecionar"} todos os ${syncableCount} itens sincronizáveis de "${cat}"`
+                        : undefined
+                    }
+                  >
+                    {cat}: {count}
+                    {syncableCount > 0 && (
+                      <span className="ml-1 opacity-70">
+                        {selectedCount > 0 ? `(${selectedCount}/${syncableCount})` : `(${syncableCount})`}
+                      </span>
+                    )}
+                  </Badge>
+                );
+              })}
+
+            <div className="ml-auto flex items-center gap-2">
+              {selectedOperations.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200 dark:hover:bg-emerald-900/40"
+                  disabled={isPreparingDrift === selectedActionKey}
+                  onClick={() => {
+                    // edge_functions must go through the single-item path (non-transactional with SQL)
+                    if (selectedOperations.length === 1 && selectedOperations[0].objectType === "edge_functions") {
+                      onPrepareSync([singleTarget], selectedOperations[0], {
+                        title: selectedOperations[0].displayName,
+                        description: getPreviewDescription(selectedOperations[0], referenceName),
+                      });
+                    } else {
+                      onPrepareSync([singleTarget], selectedOperations, {
+                        title: `Sync selecionado — ${status.projectName}`,
+                        description: `${selectedOperations.length} operação(ões) selecionada(s) manualmente.`,
+                      });
+                    }
+                  }}
+                >
+                  {isPreparingDrift === selectedActionKey ? (
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Rocket className="mr-2 h-3 w-3" />
+                  )}
+                  Aplicar selecionados ({selectedOperations.length})
+                </Button>
+              )}
+
+              {tenantLevelOperations.length > 1 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
+                  disabled={isPreparingDrift === buildSingleActionKey(singleTarget, tenantLevelOperations)}
+                  onClick={() =>
+                    onPrepareSync([singleTarget], tenantLevelOperations, {
+                      title: `Sync do projeto ${status.projectName}`,
+                      description:
+                        "Preview agrupado por tipo: functions, triggers, grants e demais objetos em ordem segura de execução.",
+                    })
+                  }
+                >
+                  {isPreparingDrift === buildSingleActionKey(singleTarget, tenantLevelOperations) ? (
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Rocket className="mr-2 h-3 w-3" />
+                  )}
+                  Preparar sync do tenant ({tenantLevelOperations.length})
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-muted-foreground">Detalhes das Divergências</h4>
             <div className="max-h-96 overflow-y-auto rounded-md border border-border/50 bg-secondary/10 p-2">
               {status.diffs.map((diff, idx) => {
-                const syncableItem =
-                  syncableByDiffIdentity.get(`${diff.category}:${diff.key}:${diff.type}`) ?? null;
+                const mapKey = `${diff.category}:${diff.key}:${diff.type}`;
+                const syncableItem = syncableByDiffIdentity.get(mapKey) ?? null;
                 const singleActionKey = syncableItem ? buildSingleActionKey(singleTarget, [syncableItem]) : null;
+                const isSelected = selectedKeys.has(mapKey);
 
                 return (
                   <div
@@ -276,11 +444,21 @@ export function SchemaDriftCard({
 
                     {syncableItem ? (
                       <div className="mt-3 flex flex-col gap-2 rounded-md border border-sky-200/70 bg-sky-50/60 p-3 dark:border-sky-900/50 dark:bg-sky-950/20 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-xs text-sky-800 dark:text-sky-200">{getSyncHelperText(syncableItem, referenceName)}</p>
+                        <label className="flex cursor-pointer items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer accent-sky-600"
+                            checked={isSelected}
+                            onChange={() => toggleItem(mapKey)}
+                          />
+                          <p className="text-xs text-sky-800 dark:text-sky-200">
+                            {getSyncHelperText(syncableItem, referenceName)}
+                          </p>
+                        </label>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
+                          className="shrink-0 border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
                           disabled={isPreparingDrift === singleActionKey}
                           onClick={() =>
                             onPrepareSync([singleTarget], syncableItem, {

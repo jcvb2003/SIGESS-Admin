@@ -47,6 +47,7 @@ const PHASE_G_CONSTRAINTS = new Set([
   "user_unit_memberships_role_check",
   "user_unit_memberships_tenant_id_user_id_unit_id_key",
   "user_unit_memberships_unit_id_fkey",
+  "user_unit_memberships_user_id_fkey",
 ]);
 
 // Indexes that are extra in isolated tenants due to architectural extras — must NOT be auto-removed.
@@ -274,6 +275,37 @@ function buildColumnDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   };
 }
 
+function buildEdgeFunctionDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "edge_functions" || diff.type !== "different_definition") return null;
+  const slug = diff.key;
+  const source = pickSource(diff) as { verify_jwt?: boolean } | null;
+  return {
+    objectType: "edge_functions",
+    schema: "functions",
+    objectName: slug,
+    diffType: diff.type,
+    displayName: `function: ${slug} (verify_jwt: ${source?.verify_jwt})`,
+    relatedDiffCount: 1,
+  };
+}
+
+function buildEnumTypeDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
+  if (diff.category !== "enums_and_domains" || !isSupportedDiffType(diff.type)) return null;
+  if (diff.type === "extra_in_tenant") return null;
+  const source = pickSource(diff) as { schema?: string; name?: string; kind?: string } | null;
+  if (source?.kind !== "enum") return null; // domains continuam fora de escopo
+  const schemaName = source?.schema ?? "public";
+  const typeName = source?.name ?? diff.key.split(".").pop() ?? diff.key;
+  return {
+    objectType: "enum_type",
+    schema: schemaName,
+    objectName: typeName,
+    diffType: diff.type,
+    displayName: `${schemaName}.${typeName} (enum)`,
+    relatedDiffCount: 1,
+  };
+}
+
 function buildTableDrift(diff: SchemaDiff): SyncableSchemaDrift | null {
   if (diff.category !== "tables" || !isSupportedDiffType(diff.type)) return null;
   // Never surface extra tables for auto-removal
@@ -361,6 +393,8 @@ export function getSyncableSchemaDrifts(diffs: SchemaDiff[]): SyncableSchemaDrif
 
   for (const diff of diffs) {
     const drift =
+      buildEdgeFunctionDrift(diff) ??
+      buildEnumTypeDrift(diff) ??
       buildTableDrift(diff) ??
       buildRlsStateDrift(diff) ??
       buildExtensionsDrift(diff) ??

@@ -464,6 +464,64 @@ async function patchProjectAuthConfig(projectUrl: string, accessToken: string, p
   return await res.json();
 }
 
+async function patchEdgeFunction(
+  projectRef: string,
+  accessToken: string,
+  slug: string,
+  payload: { verify_jwt?: boolean },
+) {
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/functions/${slug}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw createHttpError(
+      `Management API Error (${projectRef}) [${res.status}]: ${await res.text()}`,
+      502,
+    );
+  }
+
+  return await res.json();
+}
+
+async function buildEdgeFunctionSyncPlan(
+  supabaseAdmin: SupabaseClient,
+  slug: string,
+  referenceProjectId?: string,
+) {
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const projectRef = extractProjectRef(refConfig.supabase_url);
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/functions/${slug}`, {
+    headers: { Authorization: `Bearer ${refConfig.supabase_access_token}` },
+  });
+
+  if (!res.ok) {
+    throw createHttpError(
+      `Edge function "${slug}" não encontrada na referência (${res.status})`,
+      400,
+    );
+  }
+
+  const fn = await res.json();
+  const payload = { verify_jwt: fn.verify_jwt };
+
+  return {
+    payload,
+    // Campo `sql` no dry-run contém preview textual de operação via API, não SQL real.
+    // Segue a mesma convenção de auth_config para manter o contrato do dry-run uniforme.
+    preview: `PATCH /functions/${slug}\n${JSON.stringify(payload, null, 2)}`,
+  };
+}
+
 async function buildAuthConfigSyncPlan(
   supabaseAdmin: SupabaseClient,
   objectName: string,
@@ -536,8 +594,11 @@ async function buildViewSyncSql(
     `GRANT SELECT ON TABLE ${qualified} TO ${quoteIdentifier("service_role")};`,
   ];
 
+  // DROP before CREATE because CREATE OR REPLACE VIEW fails when column order changes.
+  // CASCADE is safe for views (no FK constraints reference them).
   return [
-    `CREATE OR REPLACE VIEW ${qualified}${securityInvoker ? " WITH (security_invoker = true)" : ""} AS`,
+    `DROP VIEW IF EXISTS ${qualified} CASCADE;`,
+    `CREATE VIEW ${qualified}${securityInvoker ? " WITH (security_invoker = true)" : ""} AS`,
     definition.trim().replace(/;$/, ""),
     ";",
     ...grantStatements,
@@ -1216,6 +1277,64 @@ async function buildRlsStateSyncSql(
   return parts.join("\n") || `-- RLS state already aligned for ${objectName}`;
 }
 
+async function buildEnumTypeSyncSql(
+  supabaseAdmin: SupabaseClient,
+  objectName: string,
+  schemaName: string,
+  diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
+  referenceProjectId?: string,
+) {
+  assertSafeIdentifier(schemaName, "schema");
+  assertSafeIdentifier(objectName, "typeName");
+
+  if (diffType === "extra_in_tenant") {
+    throw createHttpError(
+      `DROP TYPE automático não suportado — avalie manualmente: ${schemaName}.${objectName}`,
+      400,
+    );
+  }
+
+  if (diffType === "different_definition") {
+    throw createHttpError(
+      `ALTER TYPE não suportado automaticamente: ${schemaName}.${objectName}. Adicionar valores a um enum é irreversível; remover valores exige DROP+recreate com dados migrados.`,
+      400,
+    );
+  }
+
+  const refConfig = await getReferenceConfig(supabaseAdmin, referenceProjectId);
+  if (!refConfig.supabase_access_token) {
+    throw createHttpError("PAT do tenant de referência ausente", 500);
+  }
+
+  const rows = await runSql(
+    refConfig.supabase_url,
+    refConfig.supabase_access_token,
+    `SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS vals
+     FROM pg_type t
+     JOIN pg_namespace n ON n.oid = t.typnamespace
+     JOIN pg_enum e ON e.enumtypid = t.oid
+     WHERE n.nspname = '${escapeLiteral(schemaName)}'
+       AND t.typname = '${escapeLiteral(objectName)}'
+       AND t.typtype = 'e'
+     GROUP BY t.oid`,
+  );
+
+  const vals = rows?.[0]?.vals;
+  if (!vals) {
+    throw createHttpError(
+      `Tipo ${schemaName}.${objectName} não encontrado na referência ou não é um enum (domains não são suportados).`,
+      400,
+    );
+  }
+
+  const quotedVals = vals
+    .split(",")
+    .map((v: string) => `'${v.replace(/'/g, "''")}'`)
+    .join(", ");
+
+  return `CREATE TYPE ${quoteIdentifier(schemaName)}.${quoteIdentifier(objectName)} AS ENUM (${quotedVals});`;
+}
+
 function buildExtensionSyncSql(
   objectName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -1334,7 +1453,7 @@ async function buildTableSyncSql(
 async function buildSchemaDriftSql(
   supabaseAdmin: SupabaseClient,
   client: ClientConfig,
-  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table",
+  objectType: "view" | "index" | "policy" | "grant" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table" | "enum_type",
   objectName: string,
   schemaName: string,
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition",
@@ -1383,6 +1502,10 @@ async function buildSchemaDriftSql(
     return buildExtensionSyncSql(objectName, diffType);
   }
 
+  if (objectType === "enum_type") {
+    return buildEnumTypeSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
+  }
+
   if (objectType === "table") {
     return await buildTableSyncSql(supabaseAdmin, objectName, schemaName, diffType, referenceProjectId);
   }
@@ -1415,17 +1538,42 @@ async function applySchemaDriftBatch(
     throw createHttpError("Modo invÃ¡lido", 400);
   }
 
+  // Sort operations by dependency order: columns/tables must precede views/functions
+  // that may reference newly added columns, and extensions/enums must precede tables.
+  const BATCH_PRIORITY: Record<string, number> = {
+    extensions: 0,
+    enum_type: 1,
+    table: 2,
+    column: 3,
+    constraint: 4,
+    function: 5,
+    trigger: 6,
+    view: 7,
+    policy: 8,
+    rls_state: 9,
+    index: 10,
+    grant: 11,
+    function_grant: 12,
+  };
+  const sortedOperations = [...operations].sort(
+    (a, b) => (BATCH_PRIORITY[a.objectType] ?? 99) - (BATCH_PRIORITY[b.objectType] ?? 99),
+  );
+
   const sqlParts: string[] = [];
   const seenPublicFunctionRevokes = new Set<string>();
 
-  for (const operation of operations) {
+  for (const operation of sortedOperations) {
     const { objectType, objectName, schema = "public", diffType } = operation;
 
     if (objectType === "auth_config") {
       throw createHttpError("auth_config ainda nÃ£o pode ser processado em lote", 400);
     }
 
-    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table"].includes(objectType)) {
+    if (objectType === "edge_functions") {
+      throw createHttpError("edge_functions não pode ser processado em lote — aplique individualmente", 400);
+    }
+
+    if (!["view", "index", "policy", "grant", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table", "enum_type"].includes(objectType)) {
       throw createHttpError(`Tipo de objeto ainda não suportado em lote: ${objectType}`, 400);
     }
 
@@ -1529,7 +1677,7 @@ async function applySchemaDrift(
     throw createHttpError(`PAT ausente para o tenant ${clientId}`, 400);
   }
 
-  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table"].includes(objectType)) {
+  if (!["view", "index", "policy", "grant", "auth_config", "function", "function_grant", "trigger", "column", "constraint", "rls_state", "extensions", "table", "enum_type", "edge_functions"].includes(objectType)) {
     throw createHttpError(`Tipo de objeto ainda não suportado: ${objectType}`, 400);
   }
 
@@ -1568,6 +1716,35 @@ async function applySchemaDrift(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw createHttpError(`Falha ao sincronizar auth_config.${objectName}: ${message}`, 400);
+    }
+  }
+
+  if (objectType === "edge_functions") {
+    if (diffType !== "different_definition") {
+      throw createHttpError("Apenas different_definition é suportado para edge_functions — missing/extra envolvem deploy de código", 400);
+    }
+    const plan = await buildEdgeFunctionSyncPlan(supabaseAdmin, objectName, referenceProjectId);
+
+    if (mode === "dry-run") {
+      return { success: true, mode, objectType, objectName, schema, diffType, sql: plan.preview };
+    }
+
+    try {
+      const tRef = extractProjectRef(client.supabase_url);
+      await patchEdgeFunction(tRef, client.supabase_access_token, objectName, plan.payload);
+      return {
+        success: true,
+        mode,
+        objectType,
+        objectName,
+        schema,
+        diffType,
+        sql: plan.preview,
+        appliedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw createHttpError(`Falha ao sincronizar edge_function.${objectName}: ${message}`, 400);
     }
   }
 
@@ -1681,7 +1858,9 @@ async function syncLicenseConfig(
   if (limits.max_socios !== null) configUpdates.max_socios = limits.max_socios;
   if (limits.acesso_expira_em !== null) configUpdates.acesso_expira_em = limits.acesso_expira_em;
 
-  if (Object.keys(configUpdates).length === 0) return;
+  if (Object.keys(configUpdates).length === 0) {
+    return { success: true, skipped: true, reason: "No license fields to sync" };
+  }
 
   const tenantRes = await fetch(`${clientUrl}/rest/v1/tenants?select=id&limit=2`, {
     headers: {
@@ -1715,6 +1894,8 @@ async function syncLicenseConfig(
   if (!patchRes.ok) {
     throw new Error(`Failed to sync tenant license (${patchRes.status}): ${await patchRes.text()}`);
   }
+
+  return { success: true, updated: configUpdates };
 }
 
 async function syncTrialLimits(
@@ -1836,6 +2017,9 @@ async function performAction(action: string, clientUrl: string, clientKey: strin
     case "ban-client-member":
       return await banClientUser(clientUrl, clientKey, params?.userId as string, params?.active as boolean);
     case "repair-user-sync": return await repairUserSync(clientUrl, clientKey);
+    case "sync-trial-limits":
+      // Routed via handleLimitActions which has access to client record (acesso_expira_em, max_socios)
+      throw new Error("sync-trial-limits must be handled in handleLimitActions");
     case "execute-raw-sql": // New: For seeds or maintenance
       if (!params?.sql) throw new Error("Missing SQL");
       return await executeRawSql(clientUrl, params.supabase_access_token as string, params.sql as string);
@@ -2017,10 +2201,10 @@ async function handleAction(clientId: string, action: string, params: Record<str
   }
 
   const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);
-  if (migrationResult) return migrationResult;
+  if (migrationResult !== null) return migrationResult;
 
   const limitResult = await handleLimitActions(action, clientId, client);
-  if (limitResult) return limitResult;
+  if (limitResult !== null) return limitResult;
 
   if (!client.supabase_secret_keys) {
     throw new Error(`Service role key missing for action ${action}`);

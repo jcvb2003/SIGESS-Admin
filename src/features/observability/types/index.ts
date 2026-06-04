@@ -12,7 +12,7 @@ export type ExportRun = {
 };
 
 export type SyncableSchemaDrift = {
-  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table" | "enum_type" | "edge_functions";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";
@@ -21,7 +21,7 @@ export type SyncableSchemaDrift = {
 };
 
 export type SchemaDriftOperation = {
-  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table";
+  objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table" | "enum_type" | "edge_functions";
   schema: string;
   objectName: string;
   diffType: "missing_in_tenant" | "extra_in_tenant" | "different_definition";

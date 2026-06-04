@@ -320,8 +320,9 @@ export function useObservability() {
 
       const operations: SchemaDriftOperation[] = [];
       const previewSegments: string[] = [];
-      const batchOps = operationsToPrepare.filter((operation) => operation.objectType !== "auth_config");
+      const batchOps = operationsToPrepare.filter((operation) => operation.objectType !== "auth_config" && operation.objectType !== "edge_functions");
       const authConfigOps = operationsToPrepare.filter((operation) => operation.objectType === "auth_config");
+      const edgeFunctionOps = operationsToPrepare.filter((operation) => operation.objectType === "edge_functions");
 
       if (batchOps.length > 0) {
         const data = await proxyAction(primaryTarget.projectId, "apply-schema-drift", {
@@ -377,6 +378,31 @@ export function useObservability() {
         previewSegments.push(data.sql);
       }
 
+      for (const operation of edgeFunctionOps) {
+        const data = await proxyAction(primaryTarget.projectId, "apply-schema-drift", {
+          objectType: operation.objectType,
+          objectName: operation.objectName,
+          schema: operation.schema,
+          diffType: operation.diffType,
+          mode: "dry-run",
+          ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
+        });
+
+        if (!data?.sql) {
+          throw new Error(`Dry-run nao retornou preview para revisao de ${operation.displayName}.`);
+        }
+
+        operations.push({
+          objectType: operation.objectType,
+          objectName: operation.objectName,
+          schema: operation.schema,
+          diffType: operation.diffType,
+          displayName: operation.displayName,
+          sql: data.sql,
+        });
+        previewSegments.push(data.sql);
+      }
+
       const defaultTitle =
         operations.length === 1
           ? operations[0].displayName
@@ -410,8 +436,9 @@ export function useObservability() {
     for (const target of driftPreview.targets) {
       const failures: string[] = [];
 
-      const batchOps = driftPreview.operations.filter((operation) => operation.objectType !== "auth_config");
+      const batchOps = driftPreview.operations.filter((operation) => operation.objectType !== "auth_config" && operation.objectType !== "edge_functions");
       const authConfigOps = driftPreview.operations.filter((operation) => operation.objectType === "auth_config");
+      const edgeFunctionOps = driftPreview.operations.filter((operation) => operation.objectType === "edge_functions");
 
       if (batchOps.length > 0) {
         try {
@@ -433,6 +460,23 @@ export function useObservability() {
       }
 
       for (const operation of authConfigOps) {
+        try {
+          await proxyAction(target.projectId, "apply-schema-drift", {
+            objectType: operation.objectType,
+            objectName: operation.objectName,
+            schema: operation.schema,
+            diffType: operation.diffType,
+            mode: "apply",
+            ...(adHocReferenceId ? { referenceProjectId: adHocReferenceId } : {}),
+          });
+        } catch (err) {
+          failures.push(
+            `${operation.displayName}: ${err instanceof Error ? err.message : "Erro desconhecido"}`,
+          );
+        }
+      }
+
+      for (const operation of edgeFunctionOps) {
         try {
           await proxyAction(target.projectId, "apply-schema-drift", {
             objectType: operation.objectType,

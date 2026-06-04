@@ -89,3 +89,84 @@ Para evitar a duplicação de código e manter a consistência:
 1. **DRY (Don't Repeat Yourself)**: Se um componente é usado em mais de uma feature, mova-o para `src/components/shared`.
 2. **Separação de Preocupações**: Mantenha a lógica complexa de dados em hooks customizados dentro de cada pasta de funcionalidade.
 3. **Consistência TypeScript**: Sempre defina interfaces ou tipos para as propriedades dos componentes e retornos de API em `src/types` ou dentro do módulo correspondente.
+
+---
+
+## Governança de Usuários em Runtime Tenants
+
+### Distinção obrigatória entre `tenant_role` e `operator_type`
+
+O projeto usa dois eixos diferentes para representar usuários de um tenant runtime:
+
+- `tenant_role`: papel estrutural de governança.
+- `operator_type`: papel operacional de negócio.
+
+Esses campos **não são intercambiáveis**.
+
+#### `tenant_role`
+
+Valores suportados:
+
+- `owner`
+- `member`
+
+Uso correto:
+
+- `owner` representa supergovernança do tenant e é consumido por regras como `is_tenant_owner(...)`.
+- `member` representa um usuário comum vinculado ao tenant, cujo comportamento operacional depende de `operator_type`.
+
+#### `operator_type`
+
+Valores suportados hoje:
+
+- `presidente`
+- `auxiliar`
+
+Uso correto:
+
+- `presidente` representa o papel operacional administrativo em tenants sem polos.
+- `auxiliar` representa operador comum.
+- `operator_type` só deve ser usado quando `tenant_role = 'member'`.
+
+### Regra prática para projetos isolated single
+
+Em projetos `isolated single`:
+
+- o papel operacional esperado é `presidente`
+- não existe gestor de polo
+- não se deve promover alguém para `owner` apenas para "fazer funcionar"
+
+Se um usuário historicamente era presidente, ele deve continuar:
+
+- `tenant_role = 'member'`
+- `operator_type = 'presidente'`
+
+### Regra de migração
+
+Durante migrações de projetos legados para a arquitetura nova:
+
+1. restaurar primeiro a matriz funcional real de usuários
+2. validar acesso e permissões com essa matriz
+3. só criar `owner` se houver decisão arquitetural explícita para aquele tenant
+
+Nunca assumir:
+
+- "tem acesso total, então deve ser owner"
+- "se a policy cita owner, precisa existir owner"
+
+Antes de alterar papéis, montar uma matriz explícita por tenant com:
+
+- email
+- `tenant_role`
+- `operator_type`
+- escopo de unidade, se existir
+- permissão esperada no produto
+
+### Erro que deve ser evitado
+
+O erro clássico é confundir:
+
+- papel técnico/arquitetural (`owner`)
+- com papel operacional do negócio (`presidente`)
+
+Essa troca pode deixar o projeto funcionando "por acaso", mas altera a semântica do tenant e dificulta as próximas migrações.

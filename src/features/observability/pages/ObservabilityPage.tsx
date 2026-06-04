@@ -1,10 +1,12 @@
 import {
+  Check,
+  Copy,
   Loader2,
   RefreshCw,
   Rocket,
   X,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,24 @@ import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useObservability } from "../hooks/useObservability";
 import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="absolute right-2 top-2 z-10 rounded p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      title="Copiar SQL"
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
 
 export default function ObservabilityPage() {
   const { data: projects = [] } = useProjects();
@@ -269,7 +289,7 @@ export default function ObservabilityPage() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     {driftPreview.targets.map((target) => (
                       <Badge
-                        key={target.clientId}
+                        key={target.projectId}
                         variant="outline"
                         className="border-emerald-300 bg-background/70 text-emerald-800 dark:border-emerald-900 dark:bg-slate-950/40 dark:text-emerald-200"
                       >
@@ -286,7 +306,7 @@ export default function ObservabilityPage() {
                   <div className="mt-3 space-y-2">
                     {driftApplyResults.map((result) => (
                       <div
-                        key={result.clientId}
+                        key={result.projectId}
                         className="flex flex-col gap-2 rounded-md border border-border/50 bg-secondary/10 p-3 sm:flex-row sm:items-start sm:justify-between"
                       >
                         <div className="min-w-0">
@@ -313,15 +333,18 @@ export default function ObservabilityPage() {
                 </div>
               )}
 
-              <ScrollArea
-                className={`rounded-md border border-border/60 bg-secondary/10 p-3 dark:border-sky-900/40 dark:bg-slate-950/40 ${
-                  driftApplyResults.length > 0 ? "h-[220px]" : "h-[420px]"
-                }`}
-              >
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                  {driftPreview?.sql}
-                </pre>
-              </ScrollArea>
+              <div className="relative">
+                <CopyButton text={driftPreview?.sql ?? ""} />
+                <ScrollArea
+                  className={`rounded-md border border-border/60 bg-secondary/10 p-3 dark:border-sky-900/40 dark:bg-slate-950/40 ${
+                    driftApplyResults.length > 0 ? "h-[220px]" : "h-[420px]"
+                  }`}
+                >
+                  <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+                    {driftPreview?.sql}
+                  </pre>
+                </ScrollArea>
+              </div>
             </div>
 
             <DialogFooter>

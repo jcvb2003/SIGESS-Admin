@@ -2041,7 +2041,7 @@ async function getRuntimeTenantId(
     await Promise.all([
       runtimeAdmin
         .from("tenants")
-        .select("id, supports_units")
+        .select("id")
         .order("created_at", { ascending: true }),
       runtimeAdmin
         .from("tenant_units")
@@ -2052,7 +2052,7 @@ async function getRuntimeTenantId(
   if (tenantsError) throw tenantsError;
   if (unitsError) throw unitsError;
 
-  const tenants = (runtimeTenants ?? []) as Array<{ id: string; supports_units?: boolean | null }>;
+  const tenants = (runtimeTenants ?? []) as Array<{ id: string }>;
   if (tenants.length === 0) throw new Error("No tenant row found in runtime DB");
 
   const activeUnitCounts = new Map<string, number>();
@@ -2065,8 +2065,8 @@ async function getRuntimeTenantId(
   const runtimeTenantId = runtimeTenantsCount === 1 ? tenants[0].id : null;
   const perTenantSupportsUnits = tenants.map((tenant) => ({
     id: tenant.id,
-    supports_units: Boolean(tenant.supports_units),
     active_units_count: activeUnitCounts.get(tenant.id) ?? 0,
+    supports_units: (activeUnitCounts.get(tenant.id) ?? 0) > 1,
   }));
 
   const allSupportUnits = perTenantSupportsUnits.every((tenant) => tenant.supports_units);

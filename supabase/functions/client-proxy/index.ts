@@ -2033,26 +2033,92 @@ async function getRuntimeTenantId(
   clientUrl: string,
   clientKey: string,
 ) {
-  // Query the project's runtime DB for the first tenant UUID
-  const res = await fetch(`${clientUrl}/rest/v1/tenants?select=id&limit=1`, {
-    headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}` },
+  const runtimeAdmin = createClient(clientUrl, clientKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
   });
-  if (!res.ok) throw new Error(`Failed to query runtime tenants (${res.status}): ${await res.text()}`);
-  const rows = await res.json();
-  const runtimeTenantId: string | null = rows?.[0]?.id ?? null;
 
-  if (!runtimeTenantId) throw new Error("No tenant row found in runtime DB");
+  const [{ data: runtimeTenants, error: tenantsError }, { data: runtimeUnits, error: unitsError }] =
+    await Promise.all([
+      runtimeAdmin
+        .from("tenants")
+        .select("id, supports_units")
+        .order("created_at", { ascending: true }),
+      runtimeAdmin
+        .from("tenant_units")
+        .select("tenant_id")
+        .eq("is_active", true),
+    ]);
 
-  // Update tenants that belong to this project and have no runtime_tenant_id yet
-  const { error } = await supabaseAdmin
-    .from("tenants")
-    .update({ runtime_tenant_id: runtimeTenantId })
-    .eq("project_id", projectId)
-    .is("runtime_tenant_id", null);
+  if (tenantsError) throw tenantsError;
+  if (unitsError) throw unitsError;
 
-  if (error) throw error;
+  const tenants = (runtimeTenants ?? []) as Array<{ id: string; supports_units?: boolean | null }>;
+  if (tenants.length === 0) throw new Error("No tenant row found in runtime DB");
 
-  return { runtime_tenant_id: runtimeTenantId };
+  const activeUnitCounts = new Map<string, number>();
+  for (const row of (runtimeUnits ?? []) as Array<{ tenant_id: string | null }>) {
+    if (!row.tenant_id) continue;
+    activeUnitCounts.set(row.tenant_id, (activeUnitCounts.get(row.tenant_id) ?? 0) + 1);
+  }
+
+  const runtimeTenantsCount = tenants.length;
+  const runtimeTenantId = runtimeTenantsCount === 1 ? tenants[0].id : null;
+  const perTenantSupportsUnits = tenants.map((tenant) => ({
+    id: tenant.id,
+    supports_units: Boolean(tenant.supports_units),
+    active_units_count: activeUnitCounts.get(tenant.id) ?? 0,
+  }));
+
+  const allSupportUnits = perTenantSupportsUnits.every((tenant) => tenant.supports_units);
+  const anySupportUnits = perTenantSupportsUnits.some((tenant) => tenant.supports_units);
+  const allSingleUnit = perTenantSupportsUnits.every((tenant) => tenant.active_units_count <= 1);
+
+  let runtimeTopology: string | null = null;
+  if (runtimeTenantsCount === 1) {
+    runtimeTopology = perTenantSupportsUnits[0].supports_units ? "isolated_polo" : "isolated_single";
+  } else if (!anySupportUnits && allSingleUnit) {
+    runtimeTopology = "shared_multi_single";
+  } else if (allSupportUnits) {
+    runtimeTopology = "shared_multi_polo";
+  } else {
+    runtimeTopology = "shared_hybrid";
+  }
+
+  const runtimeUnitsCount = perTenantSupportsUnits.reduce((sum, tenant) => sum + tenant.active_units_count, 0);
+
+  if (runtimeTenantId) {
+    const { error } = await supabaseAdmin
+      .from("tenants")
+      .update({
+        runtime_tenant_id: runtimeTenantId,
+        runtime_topology: runtimeTopology,
+        runtime_tenants_count: runtimeTenantsCount,
+        runtime_units_count: runtimeUnitsCount,
+        supports_units: perTenantSupportsUnits[0].supports_units,
+      })
+      .eq("project_id", projectId);
+
+    if (error) throw error;
+  } else {
+    const { error } = await supabaseAdmin
+      .from("tenants")
+      .update({
+        runtime_topology: runtimeTopology,
+        runtime_tenants_count: runtimeTenantsCount,
+        runtime_units_count: runtimeUnitsCount,
+      })
+      .eq("project_id", projectId);
+
+    if (error) throw error;
+  }
+
+  return {
+    runtime_tenant_id: runtimeTenantId,
+    runtime_tenants_count: runtimeTenantsCount,
+    runtime_units_count: runtimeUnitsCount,
+    supports_units: runtimeTenantsCount === 1 ? perTenantSupportsUnits[0].supports_units : anySupportUnits,
+    runtime_topology: runtimeTopology,
+  };
 }
 
 interface ClientConfig {

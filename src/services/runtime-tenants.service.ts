@@ -12,6 +12,7 @@ import type {
   TenantUnit,
   UserUnitMembership,
   OperatorType,
+  Topology,
 } from "@/features/clients/types";
 
 async function ensureRuntimeUserProfile(
@@ -84,12 +85,24 @@ async function resolveOrCreateRuntimeAuthUser(input: {
 // Não conhece projetos nem clientes do Admin central.
 
 /**
- * Para projetos isolated: consulta o runtime DB via proxy e descobre o UUID do
- * tenant runtime, para ser gravado em tenants.runtime_tenant_id.
+ * Consulta o runtime via proxy e devolve um snapshot enxuto do estado
+ * operacional. Em projetos isolated, tambem atualiza automaticamente o
+ * runtime_tenant_id e o supports_units no espelho do Admin.
  */
-export async function linkIsolatedProjectRuntime(projectId: string): Promise<{ runtime_tenant_id: string }> {
-  return proxyAction(projectId, "get-runtime-tenant-id") as Promise<{ runtime_tenant_id: string }>;
+export interface RuntimeProjectMetadata {
+  runtime_tenant_id: string | null;
+  runtime_tenants_count: number;
+  runtime_units_count: number;
+  supports_units: boolean;
+  runtime_topology: Topology | null;
 }
+
+export async function syncProjectRuntimeMetadata(projectId: string): Promise<RuntimeProjectMetadata> {
+  return proxyAction(projectId, "get-runtime-tenant-id") as Promise<RuntimeProjectMetadata>;
+}
+
+/** @deprecated use syncProjectRuntimeMetadata */
+export const linkIsolatedProjectRuntime = syncProjectRuntimeMetadata;
 
 export async function syncIsolatedProjectLicense(
   projectId: string,

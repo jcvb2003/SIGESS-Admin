@@ -50,6 +50,9 @@ export interface Tenant {
   nome_abreviado: string | null;
   tenant_code: string;
   runtime_tenant_id: string | null;
+  runtime_topology: Topology | null;
+  runtime_tenants_count: number | null;
+  runtime_units_count: number | null;
   supports_units: boolean;
   email: string | null;
   telefone: string | null;

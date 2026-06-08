@@ -152,7 +152,7 @@ function getPreviewDescription(item: SyncableSchemaDrift, ref: string) {
 
 export function SchemaDriftCard({
   status,
-  schemaStatus: _schemaStatus,
+  schemaStatus,
   isPreparingDrift,
   referenceName = "referência",
   onPrepareSync,
@@ -414,6 +414,23 @@ export function SchemaDriftCard({
                 const mapKey = `${diff.category}:${diff.key}:${diff.type}`;
                 const syncableItem = syncableByDiffIdentity.get(mapKey) ?? null;
                 const singleActionKey = syncableItem ? buildSingleActionKey(singleTarget, [syncableItem]) : null;
+                const matchingTargets = syncableItem
+                  ? schemaStatus
+                      .filter((projectStatus) =>
+                        projectStatus.diffs.some(
+                          (candidate) =>
+                            `${candidate.category}:${candidate.key}:${candidate.type}` === mapKey,
+                        ),
+                      )
+                      .map((projectStatus) => ({
+                        projectId: projectStatus.projectId,
+                        projectName: projectStatus.projectName,
+                      }))
+                  : [];
+                const multiActionKey =
+                  syncableItem && matchingTargets.length > 1
+                    ? buildSchemaSyncActionKey(matchingTargets, [syncableItem])
+                    : null;
                 const isSelected = selectedKeys.has(mapKey);
 
                 return (
@@ -455,18 +472,40 @@ export function SchemaDriftCard({
                             {getSyncHelperText(syncableItem, referenceName)}
                           </p>
                         </label>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0 border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
-                          disabled={isPreparingDrift === singleActionKey}
-                          onClick={() =>
-                            onPrepareSync([singleTarget], syncableItem, {
-                              title: syncableItem.displayName,
-                              description: getPreviewDescription(syncableItem, referenceName),
-                            })
-                          }
-                        >
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          {matchingTargets.length > 1 ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200 dark:hover:bg-emerald-900/40"
+                              disabled={isPreparingDrift === multiActionKey}
+                              onClick={() =>
+                                onPrepareSync(matchingTargets, syncableItem, {
+                                  title: syncableItem.displayName,
+                                  description: `${getPreviewDescription(syncableItem, referenceName)} Esta operação será executada em todos os projetos comparados que possuem esse mesmo drift.`,
+                                })
+                              }
+                            >
+                              {isPreparingDrift === multiActionKey ? (
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Rocket className="mr-2 h-3 w-3" />
+                              )}
+                              Aplicar em todos
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 border-sky-300 text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-200 dark:hover:bg-sky-900/40"
+                            disabled={isPreparingDrift === singleActionKey}
+                            onClick={() =>
+                              onPrepareSync([singleTarget], syncableItem, {
+                                title: syncableItem.displayName,
+                                description: getPreviewDescription(syncableItem, referenceName),
+                              })
+                            }
+                          >
                           {isPreparingDrift === singleActionKey ? (
                             <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                           ) : (
@@ -474,6 +513,7 @@ export function SchemaDriftCard({
                           )}
                           Preparar sync
                         </Button>
+                        </div>
                       </div>
                     ) : null}
 

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Building2, CheckCircle2,
-  Loader2, Pencil, Users, XCircle,
+  Loader2, Pencil, RefreshCw, Users, XCircle,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,9 +14,12 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjectDetail } from "../hooks/useProjectDetail";
 import { useClienteDetail } from "../hooks/useClienteDetail";
+import { useRuntimeMetadataSync } from "../hooks/useRuntimeMetadataSync";
 import { EditClienteModal } from "../components/EditClienteModal";
 import { SharedUsersTab, UsersTab, UnitsTab } from "@/features/clients";
 import type { Cliente, Project } from "../types";
+import { TOPOLOGY_LABEL } from "../types";
+import type { RuntimeProjectMetadata } from "@/services/runtime-tenants.service";
 
 function hasPolos(topology: Project["topology"]): boolean {
   return (
@@ -43,7 +47,25 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function CommercialCard({ cliente }: { cliente: Cliente }) {
+function CommercialCard({
+  cliente,
+  runtimeMetadata,
+  onSyncRuntime,
+  isSyncingRuntime,
+}: {
+  cliente: Cliente;
+  runtimeMetadata: RuntimeProjectMetadata | null;
+  onSyncRuntime: () => void;
+  isSyncingRuntime: boolean;
+}) {
+  const effectiveRuntimeMetadata = runtimeMetadata ?? {
+    runtime_tenant_id: cliente.runtime_tenant_id,
+    runtime_tenants_count: cliente.runtime_tenants_count ?? 0,
+    runtime_units_count: cliente.runtime_units_count ?? 0,
+    supports_units: cliente.supports_units,
+    runtime_topology: cliente.runtime_topology,
+  };
+
   const expiresAt = cliente.acesso_expira_em ? new Date(cliente.acesso_expira_em) : null;
   const expired   = expiresAt ? isPast(expiresAt) : false;
   const daysLeft  = expiresAt ? differenceInDays(expiresAt, new Date()) : null;
@@ -75,13 +97,36 @@ function CommercialCard({ cliente }: { cliente: Cliente }) {
 
   return (
     <Card className="p-5">
-      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Dados Comerciais
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Dados Comerciais
+        </p>
+        <Button variant="outline" size="sm" onClick={onSyncRuntime} disabled={isSyncingRuntime}>
+          {isSyncingRuntime ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+          Sincronizar runtime
+        </Button>
+      </div>
       <div className="divide-y divide-border/40">
         <InfoRow label="Código">
           <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs">{cliente.tenant_code}</code>
         </InfoRow>
+        <InfoRow label="Tenant ID">
+          {effectiveRuntimeMetadata.runtime_tenant_id ? (
+            <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs font-mono">{effectiveRuntimeMetadata.runtime_tenant_id}</code>
+          ) : (
+            <span className="text-amber-600 dark:text-amber-400">NÃ£o sincronizado</span>
+          )}
+        </InfoRow>
+        <InfoRow label="Runtime">
+          {effectiveRuntimeMetadata.runtime_topology ? (
+            <span>
+              {TOPOLOGY_LABEL[effectiveRuntimeMetadata.runtime_topology]} Â· {effectiveRuntimeMetadata.runtime_tenants_count} tenant(s) Â· {effectiveRuntimeMetadata.runtime_units_count} unit(s)
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Sem snapshot</span>
+          )}
+        </InfoRow>
+        <InfoRow label="Polos">{cliente.supports_units ? "Com polos" : "Sem polos"}</InfoRow>
         <InfoRow label="Assinatura">
           <Badge variant="outline" className="text-[11px]">{planLabel}</Badge>
         </InfoRow>
@@ -117,9 +162,11 @@ export default function ClienteDetailPage() {
   const navigate = useNavigate();
 
   const [editOpen, setEditOpen] = useState(false);
+  const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeProjectMetadata | null>(null);
 
   const { data: project, isLoading: loadingProject } = useProjectDetail(projectId!);
   const { data: cliente, isLoading: loadingCliente, refetch } = useClienteDetail(clienteId!);
+  const syncRuntime = useRuntimeMetadataSync(projectId!, clienteId);
   const isLoading = loadingProject || loadingCliente;
 
   if (isLoading) {
@@ -149,6 +196,19 @@ export default function ClienteDetailPage() {
   const showUnits  = hasPolos(project.topology);
   const showUsers  = hasUsers(project.topology);
   const defaultTab = showUsers ? "users" : "units";
+  const activeRuntimeTenantId =
+    runtimeMetadata?.runtime_tenant_id ??
+    cliente.runtime_tenant_id;
+
+  const handleSyncRuntime = async () => {
+    try {
+      const metadata = await syncRuntime.mutateAsync();
+      setRuntimeMetadata(metadata);
+      toast.success("Metadados de runtime sincronizados.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sincronizar runtime.");
+    }
+  };
 
   return (
     <MainLayout>
@@ -190,7 +250,12 @@ export default function ClienteDetailPage() {
         </div>
 
         {/* Commercial card */}
-        <CommercialCard cliente={cliente} />
+        <CommercialCard
+          cliente={cliente}
+          runtimeMetadata={runtimeMetadata}
+          onSyncRuntime={handleSyncRuntime}
+          isSyncingRuntime={syncRuntime.isPending}
+        />
 
         {/* Tabs */}
         {project.topology !== "unconfigured" && (
@@ -213,8 +278,8 @@ export default function ClienteDetailPage() {
             {showUsers && (
               <TabsContent value="users">
                 {project.topology === "shared_multi_single" ? (
-                  cliente.runtime_tenant_id ? (
-                    <SharedUsersTab project={project} tenantId={cliente.runtime_tenant_id} showGestor={showUnits} />
+                  activeRuntimeTenantId ? (
+                    <SharedUsersTab project={project} tenantId={activeRuntimeTenantId} showGestor={showUnits} />
                   ) : (
                     <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
                       <Users className="h-7 w-7 text-muted-foreground/40" />
@@ -235,8 +300,8 @@ export default function ClienteDetailPage() {
 
             {showUnits && (
               <TabsContent value="units">
-                {cliente.runtime_tenant_id ? (
-                  <UnitsTab project={project} tenantId={cliente.runtime_tenant_id} />
+                {activeRuntimeTenantId ? (
+                  <UnitsTab project={project} tenantId={activeRuntimeTenantId} />
                 ) : (
                   <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center border-dashed">
                     <Building2 className="h-7 w-7 text-muted-foreground/40" />

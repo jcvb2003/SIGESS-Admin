@@ -143,7 +143,16 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
       // Isolated: descoberta explícita do runtime tenant
       setStep("linking");
       try {
-        const { runtime_tenant_id } = await linkIsolatedProjectRuntime(project.id);
+        const { runtime_tenant_id, runtime_tenants_count, runtime_topology } = await linkIsolatedProjectRuntime(project.id);
+        if (!runtime_tenant_id) {
+          setLinkError(
+            runtime_tenants_count === 0
+              ? "Nenhum tenant runtime foi encontrado neste projeto."
+              : `O runtime retornou ${runtime_tenants_count} tenants (${runtime_topology ?? "topologia desconhecida"}). O vinculo isolated exige exatamente 1 tenant.`,
+          );
+          setStep("link-error");
+          return;
+        }
         setFoundRuntimeId(runtime_tenant_id);
         setStep("confirm-link");
       } catch (err) {

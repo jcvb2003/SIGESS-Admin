@@ -344,6 +344,9 @@ export type Database = {
           nome_entidade: string
           project_id: string
           runtime_tenant_id: string | null
+          runtime_tenants_count: number | null
+          runtime_topology: string | null
+          runtime_units_count: number | null
           status: string
           supports_units: boolean
           telefone: string | null
@@ -364,6 +367,9 @@ export type Database = {
           nome_entidade: string
           project_id: string
           runtime_tenant_id?: string | null
+          runtime_tenants_count?: number | null
+          runtime_topology?: string | null
+          runtime_units_count?: number | null
           status?: string
           supports_units?: boolean
           telefone?: string | null
@@ -384,6 +390,9 @@ export type Database = {
           nome_entidade?: string
           project_id?: string
           runtime_tenant_id?: string | null
+          runtime_tenants_count?: number | null
+          runtime_topology?: string | null
+          runtime_units_count?: number | null
           status?: string
           supports_units?: boolean
           telefone?: string | null

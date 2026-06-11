@@ -1,0 +1,631 @@
+**Backlog de Consolidação da Nova Arquitetura SIGESS**
+
+Este documento é para execução disciplinada, não para brainstorming.  
+A regra é simples: **não marcar item como concluído por inferência**. Só conclui com:
+- código ajustado
+- migration/deploy aplicados quando couber
+- validação em banco/runtime
+- evidência curta do resultado
+
+---
+
+## 1. Objetivo
+
+Consolidar a arquitetura universal de 5 topologias no SIGESS sem regressão de isolamento, removendo ambiguidades entre:
+- `tenant_id` como fronteira entre entidades
+- `unit_id` como fronteira entre polos dentro do tenant
+
+Garantir que:
+- o modelo funcione em `isolated_single`, `isolated_polo`, `shared_multi_single`, `shared_multi_polo`, `shared_hybrid`
+- as correções de banco, Edge Functions e Web fiquem coerentes entre si
+- o que hoje é hipótese arquitetural não seja promovido a “verdade do sistema” sem prova
+
+---
+
+## 2. Princípios de execução
+
+Claude deve seguir estas regras durante toda a execução:
+
+1. Nunca aprovar narrativa sem ler o código/diff real.
+2. Nunca assumir que “já está aplicado” só porque há commit local.
+3. Distinguir sempre 4 estados:
+   - `codificado`
+   - `aplicado no banco`
+   - `deployado`
+   - `testado`
+4. Não transformar “direção arquitetural” em “garantia atual”.
+5. Toda correção de segurança/isolation deve ser validada em projeto real, preferencialmente `MARANHAO` primeiro.
+6. `MARANHAO` é staging prioritário.
+7. Só propagar para os demais depois de validação no `MARANHAO`.
+8. Não reintroduzir compensações silenciosas onde o domínio exige bloqueio explícito.
+9. Se houver conflito entre memória/documento e código real, o código real vence.
+10. Se houver conflito entre código local e banco real, registrar explicitamente a divergência.
+
+---
+
+## 3. Escopo atual conhecido
+
+### Projetos
+- `MARANHAO` → `shared_multi_single` → staging + produção de novos clientes
+- `SINPESCA` → `shared_multi_polo`
+- `Z2`, `OEIRAS`, `ELAINE`, `BREVES` → `isolated_single`
+
+### Linhas de trabalho
+- Banco / RLS / triggers / constraints
+- Edge Functions do Admin
+- Web runtime topology migration
+- Decisão arquitetural da unit técnica `Sede`
+- Propagação segura entre projetos
+- Auditoria final de isolamento
+
+---
+
+## 4. Estado atual consolidado dos commits já revisados
+
+## 4.1 Commits `[sec]` / `[topology]` já lidos e calibrados
+
+### `Admin`
+- `77ac3e7`
+  - Parcialmente correto
+  - `DB-3`, `DB-1`, `DB-5` bons
+  - versão original de `DB-4` estava conceitualmente errada
+- `2cd2dda`
+  - Correto
+  - bloqueia `owner <-> member` com `RAISE EXCEPTION`
+- `4366a58`
+  - Correto
+  - endurece `foto_upload_tokens`
+- `678b340`
+  - Correto como etapa intermediária
+  - ainda mantinha `deploymentMode`
+- `346d31e`
+  - Correto
+  - remove `deploymentMode` deprecated
+
+### `Web`
+- `017397e`
+  - Bom, mas transitório
+  - migração para `topology`
+- `53b7dd5`
+  - Correto
+  - remove binário artificial `mode isolated/shared` de `manage-user`
+- `028649b`
+  - Correto
+  - remove fallback legado de `deploymentMode`
+
+---
+
+## 5. Questões arquiteturais já esclarecidas
+
+## 5.1 Regra de domínio firme
+- **Não existe transição válida entre `owner` e `member`.**
+- Não existe “promover operador a gestor” ou “rebaixar gestor a operador”.
+- Isso viola fronteiras do domínio.
+- O banco deve rejeitar explicitamente.
+
+## 5.2 Cuidado com a tese da `Sede`
+A direção pode ser boa, mas **ainda não pode ser tratada como garantia total do sistema**.
+
+Hoje ela é:
+- uma hipótese arquitetural forte
+- um possível alvo de convergência
+- não uma licença automática para apagar todos os caminhos `unit_id IS NULL`
+
+## 5.3 Contradição que precisa ser resolvida antes de qualquer formalização
+Hoje há conflito entre:
+- tese “todo membro sempre tem >=1 membership”
+- regra “owner não pertence a `user_unit_memberships`”
+
+Antes de seguir, o Claude deve normalizar isso para uma das formulações abaixo:
+
+### Formulação A
+- todo **operador** tem >=1 membership
+- `owner` está fora do invariante
+
+### Formulação B
+- todo usuário com vínculo no tenant tem >=1 membership
+- inclusive owner
+- isso exigiria rever DB-2 e vários fluxos
+
+**A tendência mais coerente com o estado atual do sistema é a Formulação A.**  
+Claude não deve assumir isso silenciosamente; deve registrar explicitamente.
+
+---
+
+## 6. Backlog principal
+
+# Bloco A — Segurança e isolamento
+
+## A1. Confirmar e consolidar `DB-3`
+**Objetivo:** fechar o vazamento cross-tenant mais óbvio nas tabelas per-polo.
+
+### Ações
+1. Ler integralmente `Admin/supabase/migrations/20260611_fix_cross_tenant_rls.sql`
+2. Confirmar tabela por tabela:
+   - `socios`
+   - `financeiro_cobrancas_geradas`
+   - `financeiro_lancamentos`
+   - `financeiro_dae`
+   - `financeiro_config_socio`
+   - `financeiro_historico_regime`
+   - `reap`
+   - `requerimentos`
+   - `logs_eventos_requerimento`
+3. Verificar se toda policy que usa membership recebeu:
+   - `m.unit_id = ...`
+   - `m.tenant_id = ...`
+   - `m.is_active = true`
+4. Validar se faltou `WITH CHECK` explícito onde ele é desejável por clareza.
+
+### Critério de aceite
+- nenhuma tabela dessa lista fica sem `m.tenant_id`
+- divergências são listadas pontualmente
+- `MARANHAO` permanece referência de staging
+
+### Atenção
+Isso **não encerra** toda a discussão de isolamento, porque várias tabelas ainda escopam via `socios.cpf`.
+
+---
+
+## A2. Aplicar urgentemente `DB-7` em `MARANHAO` se ainda não estiver aplicado
+**Objetivo:** eliminar exposição de biometria/PII em `foto_upload_tokens`.
+
+### Ações
+1. Verificar no banco do `MARANHAO` as policies atuais de `foto_upload_tokens`
+2. Confirmar se a migration `20260611_fix_foto_upload_tokens_rls.sql` está aplicada
+3. Se não estiver, aplicar
+4. Validar:
+   - leitura restrita
+   - insert restrito
+   - update restrito
+   - delete restrito
+
+### Critério de aceite
+- policies antigas abertas deixam de existir
+- policies novas ficam visíveis no banco
+- risco ativo deixa de existir no `MARANHAO`
+
+### Observação
+Mesmo aplicada, a solução continua dependente de `socio_cpf -> socios`, então não chamar isso de “fronteira perfeita definitiva”.
+
+---
+
+## A3. Revisar `DB-9`
+**Objetivo:** decidir se `WITH CHECK` implícito será mantido ou explicitado.
+
+### Ações
+1. Mapear as UPDATE policies per-polo citadas:
+   - `socios_update`
+   - `financeiro_*_update`
+   - `reap_update`
+   - `requerimentos_update`
+2. Identificar quais dependem do `USING` implícito
+3. Decidir padrão do projeto:
+   - manter implícito por confiança no PostgreSQL
+   - ou explicitar por legibilidade/auditoria
+
+### Recomendação
+Para um sistema sensível de isolamento, **explicitar** costuma ser melhor.
+
+### Critério de aceite
+- decisão documentada
+- se optar por explicitar, criar migration dedicada
+- validar no `MARANHAO`
+
+---
+
+# Bloco B — Regras de integridade de usuário
+
+## B1. Confirmar `DB-1`
+**Objetivo:** garantir que `operator_type` inválido não exista.
+
+### Ações
+1. Revisar a migration `20260611_fix_db1_operator_type.sql`
+2. Verificar se ela realmente proíbe:
+   - `owner` com `operator_type != null`
+   - `member` com `operator_type null`
+   - `member` com valores fora de `presidente`/`auxiliar`
+3. Pensar nos impactos em dados legados já existentes
+
+### Critério de aceite
+- constraint correta e compatível com os dados
+- caso haja dados inválidos, prever saneamento antes da aplicação global
+
+---
+
+## B2. Confirmar `DB-2`
+**Objetivo:** reforçar que `owner` não tem membership, se essa continuar sendo a regra oficial.
+
+### Ações
+1. Revisar `20260611_fix_db2_db4_owner_memberships.sql`
+2. Confirmar que o trigger:
+   - bloqueia `INSERT`
+   - bloqueia `UPDATE`
+   - não apaga silenciosamente nada
+3. Validar a aderência com o modelo de negócio adotado
+
+### Critério de aceite
+- regra explícita: `owner` fora de `user_unit_memberships`
+- nenhuma contradição restante em memória/documentação
+
+---
+
+## B3. Confirmar `DB-4`
+**Objetivo:** garantir proibição explícita de transição `owner <-> member`.
+
+### Ações
+1. Validar que a versão em vigor é a de `2cd2dda`, não a anterior
+2. Confirmar que o trigger atual usa `RAISE EXCEPTION`
+3. Procurar qualquer outro fluxo que ainda tente “compensar” essa transição
+
+### Critério de aceite
+- nenhuma narrativa residual de “cleanup automático”
+- regra firme no banco e refletida nos docs
+
+---
+
+## B4. Confirmar `DB-5`
+**Objetivo:** garantir que auxiliar não tenha múltiplas memberships ativas.
+
+### Ações
+1. Revisar trigger `chk_auxiliar_single_membership`
+2. Verificar edge cases:
+   - update no mesmo registro
+   - reativação
+   - múltiplos registros inativos
+3. Testar contra dados existentes
+
+### Critério de aceite
+- trigger impede `>1` membership ativa para auxiliar
+- sem falso positivo em update do mesmo registro
+
+---
+
+# Bloco C — Topology runtime migration
+
+## C1. Deploy de `tenant-config`
+**Objetivo:** tornar a migração para `topology` real em produção, não só local.
+
+### Ações
+1. Verificar conteúdo atual local da função
+2. Confirmar que a versão final é a pós-`346d31e`
+3. Fazer deploy
+4. Validar resposta real:
+   - `label`
+   - `supabaseUrl`
+   - `anonKey`
+   - `topology`
+   - sem `deploymentMode`
+
+### Critério de aceite
+- função deployada
+- payload real compatível com `Web/src/config/tenants.ts`
+
+---
+
+## C2. Deploy de `manage-user`
+**Objetivo:** alinhar a função com o modelo baseado em `tenantId`, não em binário `isolated/shared`.
+
+### Ações
+1. Confirmar estado atual do arquivo local
+2. Deployar versão pós-`53b7dd5`
+3. Validar no `MARANHAO`
+4. Validar no `SINPESCA`
+
+### Critério de aceite
+- função deployada
+- listagem/criação/ativação/desativação seguem o escopo correto
+- erros de schema ausente não ficam mascarados
+
+---
+
+## C3. Revisar migração Web `topology`
+**Objetivo:** garantir que a cadeia `017397e` + `028649b` está coesa.
+
+### Ações
+1. Revisar `Web/src/config/tenants.ts`
+2. Revisar `Web/src/shared/hooks/usePermissions.ts`
+3. Revisar `Web/src/shared/utils/tenant.ts`
+4. Revisar `Web/src/modules/tenant-units/services/tenantUnitService.ts`
+5. Confirmar que `deploymentMode` saiu por completo
+
+### Critério de aceite
+- nenhum fallback legado silencioso
+- erro explícito para topologia inválida
+- sem `deriveTopologyFromLegacy`
+- sem dependência funcional de `deploymentMode`
+
+---
+
+# Bloco D — Decisão da `Sede`
+
+## D1. Resolver a formulação oficial do invariante
+**Objetivo:** eliminar contradição de base.
+
+### Ações
+Claude deve redigir a regra oficial em uma frase inequívoca.
+
+### Formulação recomendada
+- todo tenant tem sempre `>=1` unit
+- todo usuário operador (`presidente`, `auxiliar`) tem sempre `>=1` membership ativa
+- `owner` não participa de `user_unit_memberships`
+
+### Critério de aceite
+- essa formulação fica refletida em:
+  - docs
+  - memória
+  - código
+  - migrations
+
+---
+
+## D2. Auditar se a `Sede` já existe de fato nos projetos-alvo
+**Objetivo:** separar argumento arquitetural de realidade operacional.
+
+### Ações
+Verificar por projeto:
+- `MARANHAO`
+- `Z2`
+- `OEIRAS`
+- `ELAINE`
+- `BREVES`
+
+Para cada tenant:
+- quantas `tenant_units` existem
+- se existe exatamente 1 quando deveria
+- se os operadores têm membership nela
+- se há dados operacionais com `unit_id null`
+
+### Critério de aceite
+- tabela objetiva por projeto/tenant
+- sem generalização vaga do tipo “parece que já tem”
+
+---
+
+## D3. Decidir se `Sede` precisa de marcador explícito no schema
+**Objetivo:** evitar semântica implícita por nome.
+
+### Ações
+Avaliar criação futura de algo como:
+- `tenant_units.is_technical boolean`
+ou
+- `tenant_units.kind = 'technical' | 'business'`
+
+### Por que isso importa
+Sem marcador explícito:
+- a `Sede` pode vazar semanticamente
+- UI/Admin pode tratá-la como polo de negócio
+- regras podem depender de convenção de nome
+
+### Critério de aceite
+- decisão explícita: manter convenção ou formalizar no schema
+- se formalizar, abrir item próprio de migration e adaptação de UI
+
+---
+
+## D4. Não matar `DB-6` e `DB-8` automaticamente
+**Objetivo:** impedir salto lógico indevido.
+
+### Ações
+1. Antes de cancelar `DB-6` e `DB-8`, Claude deve provar:
+   - não há dados operacionais relevantes com `unit_id null`
+   - onboarding garante criação de unit
+   - memberships são garantidas nos fluxos
+   - runtime do Web não depende mais de caminhos sem unit
+2. Só depois decidir:
+   - aplicar `DB-6`
+   - aplicar `DB-8`
+   - ou substituí-los por outra formalização
+
+### Critério de aceite
+- decisão baseada em prova, não em intenção
+
+---
+
+# Bloco E — Fluxos Web ainda frágeis
+
+## E1. `isSharedNoPolosContext`
+**Objetivo:** decidir se é dead code real ou ainda caminho vivo.
+
+### Ações
+1. Revisar [Web/src/modules/settings/hooks/useUserManagement.ts](D:/Projetos%20Dev/REPOSITORIOS/SIGESS/Web/src/modules/settings/hooks/useUserManagement.ts)
+2. Mapear quando `availableUnits.length === 0`
+3. Ver se isso ainda acontece legitimamente por:
+   - bootstrap
+   - dados incompletos
+   - sessão antiga
+   - onboarding parcial
+
+### Critério de aceite
+- só remover se houver garantia sistêmica real
+- se não houver, manter e documentar como fallback operacional
+
+---
+
+## E2. `memberService.countMembers`
+**Objetivo:** eliminar o `else if` frágil.
+
+### Problema
+Hoje:
+- se houver `tenantId`, ele usa um caminho
+- senão, usa `unitId`
+
+Isso pode mascarar erro de contexto e reduzir robustez.
+
+### Ações
+1. Revisar [Web/src/modules/members/services/memberService.ts](D:/Projetos%20Dev/REPOSITORIOS/SIGESS/Web/src/modules/members/services/memberService.ts)
+2. Corrigir para comportamento explícito e coerente com a arquitetura
+3. Não assumir que o novo invariante já torna isso irrelevante
+
+### Critério de aceite
+- lógica clara
+- sem dependência de simplificação “depois a Sede resolve”
+
+---
+
+## E3. `activeUnit` nullable
+**Objetivo:** decidir se `activeUnit` ainda pode ser `null` por design.
+
+### Ações
+1. Revisar `TenantUnitContext`
+2. Revisar `TenantUnitBootstrapper`
+3. Revisar usos críticos no Web
+4. Separar:
+   - `null` legítimo transitório
+   - `null` estrutural
+   - `null` por falha de provisionamento
+
+### Critério de aceite
+- não remover nullabilidade só por desejo arquitetural
+- só remover se o bootstrap e o banco sustentarem isso
+
+---
+
+# Bloco F — Guardrails de banco ainda faltantes
+
+## F1. Avaliar guardrail “tenant nunca fica com 0 units”
+**Objetivo:** proteger o invariante de unit mínima.
+
+### Ações
+1. Não implementar de forma simplória
+2. Avaliar cenários:
+   - `DELETE`
+   - `UPDATE is_active = false`
+   - criação incompleta
+   - múltiplas alterações na mesma transação
+3. Escolher abordagem:
+   - trigger transacional robusta
+   - combinação de triggers
+   - outra estratégia mais segura
+
+### Regra
+**Não aceitar** um simples `BEFORE DELETE` como solução final sem análise.
+
+### Critério de aceite
+- solução cobre zero-unit real
+- sem janelas óbvias de inconsistência
+
+---
+
+## F2. Revisar migration local quebrada de guardrail
+**Objetivo:** limpar ruído perigoso no workspace.
+
+### Ações
+1. Revisar `Web/supabase/migrations/20260609_membership_guardrail_trigger.sql`
+2. Confirmar que a versão atual local ainda usa `min(uuid)` ou outra forma inválida
+3. Corrigir ou descartar explicitamente
+4. Não deixar esse arquivo sujo como se fosse candidato confiável
+
+### Critério de aceite
+- arquivo corrigido ou removido da linha ativa
+- sem migration sabidamente quebrada pairando no workspace
+
+---
+
+# Bloco G — Documentação e memória
+
+## G1. Corrigir documentação/memória contraditória
+**Objetivo:** impedir que docs virem fonte de erro.
+
+### Ações
+Revisar especialmente:
+- memória/decisão da `Sede`
+- memória/arquitetura universal
+- memória do Claude sobre policies universais
+- qualquer texto que diga ou sugira:
+  - “todo membro tem membership” sem qualificar owner
+  - “Sede já elimina DB-6/DB-8”
+  - “policies já estão universalmente resolvidas”
+
+### Critério de aceite
+- textos passam a refletir:
+  - o alvo
+  - o estado real
+  - o que ainda depende de prova
+
+---
+
+## G2. Separar estado por estágio
+**Objetivo:** parar de misturar implementação com efetivação.
+
+### Ações
+Todo item relevante deve passar a ser descrito assim:
+- `codificado localmente`
+- `aplicado em MARANHAO`
+- `propagado`
+- `deployado`
+- `testado`
+
+### Critério de aceite
+- nenhum resumo usa “implementado” de forma ambígua
+
+---
+
+## 7. Ordem recomendada de execução
+
+1. Validar e, se necessário, aplicar `DB-7` no `MARANHAO`
+2. Confirmar estado real de `DB-3` no `MARANHAO`
+3. Deployar `tenant-config`
+4. Deployar `manage-user`
+5. Resolver formulação oficial do invariante da `Sede`
+6. Auditar dados reais por projeto sobre `unit_id` / `Sede`
+7. Revisar `DB-6` e `DB-8` com base em prova
+8. Revisar fragilidades do Web (`isSharedNoPolosContext`, `countMembers`, `activeUnit`)
+9. Resolver guardrail de `0 units`
+10. Propagar pacote validado para os demais projetos
+
+---
+
+## 8. O que Claude não deve fazer
+
+- Não concluir que algo está resolvido porque “faz sentido”.
+- Não usar memória como prova.
+- Não chamar de dead code algo que ainda pode disparar com sessão, bootstrap ou dados incompletos.
+- Não apagar fallback antes de garantir banco + deploy + runtime.
+- Não tratar `owner` e `presidente` como equivalentes.
+- Não compensar violação de domínio com cleanup automático.
+- Não esconder incerteza atrás de linguagem assertiva.
+
+---
+
+## 9. Formato de entrega esperado por item
+
+Para cada item executado, Claude deve devolver:
+
+### Item
+`A2 - DB-7 MARANHAO`
+
+### Estado anterior
+1-2 frases
+
+### O que foi feito
+1-4 bullets
+
+### Evidência
+- migration aplicada / diff / deploy / query / teste
+
+### Risco residual
+- 1 frase honesta
+
+### Status
+- `concluído`
+- `concluído com ressalva`
+- `parcial`
+- `bloqueado`
+
+---
+
+## 10. Síntese final para orientar Claude
+
+O pacote atual tem valor real.  
+O trabalho técnico já feito é melhor do que uma leitura superficial faria parecer.
+
+Mas o maior risco agora é outro:  
+**confundir avanço de implementação com autorização para simplificar o modelo antes da hora.**
+
+Então o trabalho do Claude daqui para frente é:
+- consolidar o que já está bom
+- provar o que ainda é só hipótese
+- e recusar qualquer atalho lógico entre uma coisa e outra
+
+Se quiser, eu também posso te entregar uma **versão curta e operacional desse backlog**, em formato de checklist executiva de 1 página para o Claude usar no dia a dia.

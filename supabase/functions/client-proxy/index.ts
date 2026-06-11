@@ -131,6 +131,44 @@ async function updateClientMember(clientUrl: string, clientKey: string, params?:
   return results;
 }
 
+async function provisionUserInTenant(
+  clientUrl: string,
+  clientKey: string,
+  userId: string,
+  role: string,
+): Promise<void> {
+  const client = createClient(clientUrl, clientKey);
+
+  // Resolve the tenant — isolated projects have exactly 1. Skip for shared (N tenants).
+  const { data: tenants } = await client
+    .from("tenants" as never)
+    .select("id")
+    .limit(2);
+
+  if (!Array.isArray(tenants) || tenants.length !== 1) return;
+
+  const tenantId = (tenants[0] as { id: string }).id;
+  const operatorType = role === "admin" ? "presidente" : "auxiliar";
+
+  const { error } = await client
+    .from("tenant_users" as never)
+    .upsert(
+      {
+        tenant_id: tenantId,
+        user_id: userId,
+        tenant_role: "member",
+        operator_type: operatorType,
+        is_active: true,
+      },
+      { onConflict: "tenant_id,user_id" },
+    );
+
+  if (error) {
+    console.warn("[provisionUserInTenant] tenant_users upsert failed:", error.message);
+  }
+  // user_unit_memberships is handled by the DB trigger trg_auto_membership_single_unit.
+}
+
 async function createClientUser(clientUrl: string, clientKey: string, params?: Record<string, unknown>, limits?: { acesso_expira_em: string | null, max_socios: number | null }, tenantCode?: string) {
   const { email, role, password, autoConfirm } = params as {
     email: string,
@@ -171,13 +209,13 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
     const newUser = createBody;
 
     if (newUser?.id) {
-      // Ensure app_metadata.role is clean
       await fetch(`${clientUrl}/auth/v1/admin/users/${newUser.id}`, {
         method: "PUT",
         headers: { apikey: clientKey, Authorization: `Bearer ${clientKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ app_metadata: { role } }),
       });
 
+      await provisionUserInTenant(clientUrl, clientKey, newUser.id, role);
     }
 
     return { user: newUser, mode: 'direct' };
@@ -208,6 +246,8 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
     await supabase.auth.admin.updateUserById(data.user.id, {
       app_metadata: { role }
     });
+
+    await provisionUserInTenant(clientUrl, clientKey, data.user.id, role);
   }
 
   return {

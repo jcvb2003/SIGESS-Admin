@@ -73,12 +73,16 @@ serve(async (req: Request) => {
       });
     }
 
+    const topology = (proj.topology as string | null) ?? "unconfigured";
+
     return new Response(
       JSON.stringify({
         label: data.nome_entidade,
         supabaseUrl: proj.supabase_url,
         anonKey: proj.supabase_publishable_key,
-        deploymentMode: (proj.topology as string ?? "").startsWith("shared") ? "shared" : "isolated",
+        topology,
+        // deprecated: use topology
+        deploymentMode: topology.startsWith("shared") ? "shared" : "isolated",
       }),
       {
         headers: {

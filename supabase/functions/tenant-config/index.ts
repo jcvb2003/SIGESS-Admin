@@ -81,8 +81,6 @@ serve(async (req: Request) => {
         supabaseUrl: proj.supabase_url,
         anonKey: proj.supabase_publishable_key,
         topology,
-        // deprecated: use topology
-        deploymentMode: topology.startsWith("shared") ? "shared" : "isolated",
       }),
       {
         headers: {

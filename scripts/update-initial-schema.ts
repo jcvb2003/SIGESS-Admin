@@ -9,8 +9,22 @@ dotenv.config({ path: path.join(process.cwd(), '.env') });
 const ADMIN_URL = process.env.VITE_SUPABASE_URL;
 const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
-// Fonte neutra: preferir BASELINE_DATABASE_URL; aceitar RAYSSA_DATABASE_URL como legado
-const BASELINE_DB_URL = process.env.BASELINE_DATABASE_URL ?? process.env.RAYSSA_DATABASE_URL;
+// Fonte canonica desta rodada: MARANHAO.
+// BASELINE_DATABASE_URL continua aceito como alias neutro.
+// RAYSSA_DATABASE_URL permanece apenas como fallback legado para nao quebrar fluxos antigos.
+const BASELINE_DB_URL =
+  process.env.MARANHAO_DATABASE_URL ??
+  process.env.BASELINE_DATABASE_URL ??
+  process.env.RAYSSA_DATABASE_URL;
+
+const BASELINE_DB_SOURCE =
+  process.env.MARANHAO_DATABASE_URL
+    ? 'MARANHAO_DATABASE_URL'
+    : process.env.BASELINE_DATABASE_URL
+      ? 'BASELINE_DATABASE_URL'
+      : process.env.RAYSSA_DATABASE_URL
+        ? 'RAYSSA_DATABASE_URL'
+        : null;
 
 const CANDIDATE_FILE = 'initial_schema_candidate.sql';
 const OFFICIAL_FILE = 'initial_schema.sql';
@@ -103,17 +117,17 @@ async function updateInitialSchema() {
   }
 
   if (!BASELINE_DB_URL) {
-    console.error('Erro: BASELINE_DATABASE_URL (ou RAYSSA_DATABASE_URL) nao definido no .env');
-    console.log('Exemplo: BASELINE_DATABASE_URL=postgresql://postgres.<ref>:[SENHA]@<host>:5432/postgres');
+    console.error('Erro: MARANHAO_DATABASE_URL (ou BASELINE_DATABASE_URL / RAYSSA_DATABASE_URL legado) nao definido no .env');
+    console.log('Exemplo: MARANHAO_DATABASE_URL=postgresql://postgres.<ref>:[SENHA]@<host>:5432/postgres');
     process.exit(1);
   }
 
-  if (!process.env.BASELINE_DATABASE_URL && process.env.RAYSSA_DATABASE_URL) {
-    console.warn('Aviso: usando RAYSSA_DATABASE_URL como fonte. Defina BASELINE_DATABASE_URL no .env para remover esta dependencia.');
+  if (BASELINE_DB_SOURCE === 'RAYSSA_DATABASE_URL') {
+    console.warn('Aviso: usando RAYSSA_DATABASE_URL como fonte legada. Defina MARANHAO_DATABASE_URL no .env para fixar o baseline canonico.');
   }
 
   try {
-    console.log('Gerando dump do schema baseline...');
+    console.log(`Gerando dump do schema baseline a partir de ${BASELINE_DB_SOURCE}...`);
 
     // --no-comments: remove cabecalhos de comentario gerados pelo pg_dump
     // --schema-only: apenas estrutura, sem dados

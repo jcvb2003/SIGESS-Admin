@@ -11,6 +11,8 @@ import type {
   ProviderSubscription,
 } from '../_shared/billing/types.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
+import { AsaasClient } from '../_shared/billing/asaas-client.ts';
+import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -63,11 +65,17 @@ class StubBillingProvider implements BillingProvider {
   }
 }
 
-// Marco 4: replace this with new AsaasAdapter(apiKey)
 function createProvider(): BillingProvider {
   const providerName = Deno.env.get('BILLING_PROVIDER') ?? 'stub';
   if (providerName === 'stub') return new StubBillingProvider();
-  throw new Error(`Unknown BILLING_PROVIDER: ${providerName}. Add AsaasAdapter in Marco 4.`);
+  if (providerName === 'asaas') {
+    const apiKey = Deno.env.get('ASAAS_API_KEY');
+    if (!apiKey) throw createHttpError('ASAAS_API_KEY not configured', 500);
+    const sandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false'; // default: sandbox=true
+    const webhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
+    return new AsaasAdapter(new AsaasClient(apiKey, sandbox), webhookToken);
+  }
+  throw new Error(`Unknown BILLING_PROVIDER: ${providerName}. Configure BILLING_PROVIDER=asaas.`);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

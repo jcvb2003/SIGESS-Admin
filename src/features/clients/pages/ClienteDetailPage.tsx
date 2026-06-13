@@ -13,6 +13,7 @@ import { EditClienteModal } from "../components/EditClienteModal";
 import { ClienteCommercialCard } from "../components/ClienteCommercialCard";
 import { ClienteDetailHeader } from "../components/ClienteDetailHeader";
 import { SharedUsersTab, UsersTab, UnitsTab } from "@/features/clients";
+import { BillingAccountCard } from "@/features/billing";
 import { hasClientePolos, hasClienteUsers } from "../utils/cliente-detail";
 import type { RuntimeProjectMetadata } from "@/services/runtime-tenants.service";
 
@@ -83,6 +84,8 @@ export default function ClienteDetailPage() {
           onSyncRuntime={handleSyncRuntime}
           isSyncingRuntime={syncRuntime.isPending}
         />
+
+        <BillingAccountCard cliente={cliente} />
 
         {project.topology !== "unconfigured" && (
           <Tabs defaultValue={defaultTab} className="space-y-4">

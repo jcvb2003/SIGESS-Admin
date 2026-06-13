@@ -179,7 +179,7 @@ export async function recordWebhookEvent(
   db: SupabaseClient,
   event: BillingWebhookEvent & { provider: string; payload: Record<string, unknown> },
 ): Promise<{ alreadyProcessed: boolean; eventId: string }> {
-  const { inserted, eventId } = await repo.insertEventIfNew(db, {
+  const { inserted, eventId, existingStatus } = await repo.insertEventIfNew(db, {
     provider: event.provider,
     provider_event_id: event.providerEventId,
     event_type: event.eventType,
@@ -187,7 +187,11 @@ export async function recordWebhookEvent(
     status: 'pending',
   });
 
-  return { alreadyProcessed: !inserted, eventId };
+  // Semântica de reapply:
+  //   'processed' → não reaplica (idempotência garantida)
+  //   'pending'   → reaplica (janela de crash entre insert e apply)
+  //   'failed'    → reaplica (apply falhou anteriormente; retry deve tentar novamente)
+  return { alreadyProcessed: !inserted && existingStatus === 'processed', eventId };
 }
 
 // ─── ApplyWebhookEvent ────────────────────────────────────────────────────────

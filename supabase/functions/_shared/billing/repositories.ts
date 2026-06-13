@@ -215,10 +215,14 @@ export async function findChargeByProviderId(
 
 // Inserts event if provider_event_id is new. Returns whether it was inserted.
 // Uses insert + conflict detection to avoid silent upsert swallowing the duplicate.
+// existingStatus is returned when !inserted so callers can decide whether to re-apply:
+//   'processed' → skip (idempotência garantida)
+//   'pending'   → reaplica (janela de crash entre insert e apply)
+//   'failed'    → reaplica (apply falhou; retry deve tentar novamente)
 export async function insertEventIfNew(
   db: SupabaseClient,
   row: Omit<BillingEventRow, 'id' | 'processed_at' | 'error' | 'created_at'>,
-): Promise<{ inserted: boolean; eventId: string }> {
+): Promise<{ inserted: boolean; eventId: string; existingStatus?: BillingEventRow['status'] }> {
   const { data, error } = await db
     .from('billing_events')
     .insert(row)
@@ -227,14 +231,18 @@ export async function insertEventIfNew(
 
   if (error) {
     if (error.code === '23505') {
-      // Duplicate — find the existing id
+      // Duplicate — fetch id + status to inform retry semantics
       const { data: existing } = await db
         .from('billing_events')
-        .select('id')
+        .select('id, status')
         .eq('provider', row.provider)
         .eq('provider_event_id', row.provider_event_id)
         .single();
-      return { inserted: false, eventId: existing?.id ?? '' };
+      return {
+        inserted: false,
+        eventId: existing?.id ?? '',
+        existingStatus: existing?.status,
+      };
     }
     throw new Error(`billing_events insert failed: ${error.message}`);
   }
@@ -298,4 +306,53 @@ export async function consumeToken(db: SupabaseClient, id: string): Promise<void
     .update({ used_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw new Error(`billing_portal_tokens consume failed: ${error.message}`);
+}
+
+// ─── Sync helpers ─────────────────────────────────────────────────────────────
+
+export async function findAccountsForSync(
+  db: SupabaseClient,
+): Promise<BillingAccountRow[]> {
+  const { data, error } = await db
+    .from('billing_accounts')
+    .select('*')
+    .not('lifecycle_status', 'in', '("cancelled","draft")')
+    .not('provider_customer_id', 'is', null)
+    .eq('provider', 'asaas');
+  if (error) throw new Error(`billing_accounts sync lookup failed: ${error.message}`);
+  return data ?? [];
+}
+
+export async function findActiveSubscriptionByAccountId(
+  db: SupabaseClient,
+  billingAccountId: string,
+): Promise<BillingSubscriptionRow | null> {
+  const { data, error } = await db
+    .from('billing_subscriptions')
+    .select('*')
+    .eq('billing_account_id', billingAccountId)
+    .in('billing_status', ['active', 'trialing', 'pending_payment', 'overdue'])
+    .not('provider_subscription_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`billing_subscriptions sync lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function findOpenChargesByAccountId(
+  db: SupabaseClient,
+  billingAccountId: string,
+  limit = 10,
+): Promise<BillingChargeRow[]> {
+  const { data, error } = await db
+    .from('billing_charges')
+    .select('*')
+    .eq('billing_account_id', billingAccountId)
+    .in('status', ['pending', 'overdue'])
+    .not('provider_charge_id', 'is', null)
+    .order('due_date', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(`billing_charges sync lookup failed: ${error.message}`);
+  return data ?? [];
 }

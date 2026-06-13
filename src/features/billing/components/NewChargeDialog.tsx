@@ -45,8 +45,8 @@ export function NewChargeDialog({ adminClientId, open, onOpenChange }: Readonly<
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const amountCents = Math.round(parseFloat(amount) * 100);
-    if (!amountCents || amountCents <= 0) {
+    const amountReais = parseFloat(amount);
+    if (!amountReais || amountReais <= 0) {
       toast.error('Valor deve ser maior que zero');
       return;
     }
@@ -60,7 +60,7 @@ export function NewChargeDialog({ adminClientId, open, onOpenChange }: Readonly<
     }
 
     createCharge.mutate(
-      { amount: amountCents, due_date: dueDate, description: description.trim(), type, billing_type: billingType },
+      { amount: amountReais, due_date: dueDate, description: description.trim(), type, billing_type: billingType },
       {
         onSuccess: () => {
           toast.success('Cobrança criada');

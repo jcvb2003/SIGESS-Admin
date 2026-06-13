@@ -50,7 +50,7 @@ export function BillingSummaryCard({ account, subscription }: Readonly<BillingSu
         {subscription ? (
           <span>
             {INTERVAL_LABEL[subscription.interval]} —{' '}
-            {(subscription.amount / 100).toLocaleString('pt-BR', {
+            {subscription.amount.toLocaleString('pt-BR', {
               style: 'currency',
               currency: 'BRL',
             })}

@@ -21,8 +21,8 @@ function statusClass(status: BillingChargeStatus): string {
   }
 }
 
-function formatBRL(cents: number): string {
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function formatBRL(reais: number): string {
+  return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 interface ChargesTableProps {

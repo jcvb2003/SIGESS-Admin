@@ -25,7 +25,7 @@ function planLabel(plan: BillingPlan): string {
   const range = plan.max_socios_to
     ? `${plan.max_socios_from}–${plan.max_socios_to} sócios`
     : `a partir de ${plan.max_socios_from} sócios`;
-  const price = (plan.price_monthly / 100).toLocaleString('pt-BR', {
+  const price = plan.price_monthly.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   });

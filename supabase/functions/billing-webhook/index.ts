@@ -5,6 +5,21 @@ import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
 
+// Eventos do Asaas que o sistema processa. Qualquer outro retorna 200 imediatamente
+// sem gravar em billing_events — evita poluição do inbox e ciclos de retry sem sentido.
+const SUPPORTED_ASAAS_EVENTS = new Set([
+  'PAYMENT_RECEIVED',
+  'PAYMENT_CONFIRMED',
+  'PAYMENT_RECEIVED_IN_CASH',
+  'PAYMENT_DUNNING_RECEIVED',
+  'PAYMENT_OVERDUE',
+  'PAYMENT_DELETED',
+  'PAYMENT_REFUNDED',
+  'PAYMENT_CHARGEBACK_REQUESTED',
+  'SUBSCRIPTION_RENEWED',
+  'SUBSCRIPTION_DELETED',
+]);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function json(body: unknown, status = 200): Response {
@@ -53,6 +68,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const event = provider.parseWebhookEvent({ rawBody, headers });
+
+    if (!SUPPORTED_ASAAS_EVENTS.has(event.rawEventType)) {
+      return json({ received: true, ignored: true, reason: 'unsupported_event_type' });
+    }
 
     const payload = JSON.parse(rawBody) as Record<string, unknown>;
 

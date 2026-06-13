@@ -312,13 +312,15 @@ export async function consumeToken(db: SupabaseClient, id: string): Promise<void
 
 export async function findAccountsForSync(
   db: SupabaseClient,
+  limit = 100,
 ): Promise<BillingAccountRow[]> {
   const { data, error } = await db
     .from('billing_accounts')
     .select('*')
-    .not('lifecycle_status', 'in', '("cancelled","draft")')
+    .in('lifecycle_status', ['trial_active', 'payment_pending', 'active', 'past_due', 'suspended'])
     .not('provider_customer_id', 'is', null)
-    .eq('provider', 'asaas');
+    .eq('provider', 'asaas')
+    .limit(limit);
   if (error) throw new Error(`billing_accounts sync lookup failed: ${error.message}`);
   return data ?? [];
 }

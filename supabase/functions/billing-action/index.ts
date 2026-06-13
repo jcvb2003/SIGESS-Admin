@@ -261,10 +261,10 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     syncedCharges.push(charge.provider_charge_id);
   }
 
-  // Sync active subscription (if any)
+  // Sync active subscription (if any) — also propagates lifecycle_status to billing_accounts
   const { data: activeSub } = await db
     .from('billing_subscriptions')
-    .select('id, provider_subscription_id')
+    .select('id, provider_subscription_id, billing_account_id')
     .eq('billing_account_id', account.id)
     .in('billing_status', ['active', 'trialing', 'pending_payment', 'overdue'])
     .order('created_at', { ascending: false })
@@ -273,18 +273,13 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
 
   let syncedSubscription: string | null = null;
   if (activeSub?.provider_subscription_id) {
-    const snapshot = await provider.fetchSubscription({
-      providerSubscriptionId: activeSub.provider_subscription_id,
-    });
-    const { error } = await db
-      .from('billing_subscriptions')
-      .update({
-        billing_status: snapshot.billingStatus,
-        next_billing_date: snapshot.nextBillingDate ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', activeSub.id);
-    if (error) throw createHttpError(`billing_subscriptions update failed: ${error.message}`, 500);
+    await svc.syncSubscriptionFromProvider(
+      db,
+      provider,
+      activeSub.id,
+      activeSub.provider_subscription_id,
+      activeSub.billing_account_id,
+    );
     syncedSubscription = activeSub.provider_subscription_id;
   }
 

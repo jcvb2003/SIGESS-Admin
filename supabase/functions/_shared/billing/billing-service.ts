@@ -223,9 +223,9 @@ async function _applyChargeStatus(
   if (!charge) return; // charge not tracked locally — safe to skip
 
   const patch: Parameters<typeof repo.updateCharge>[2] = { status };
-  if (status === 'paid') {
-    // Use the provider's actual payment timestamp. Never fabricate with Date.now().
-    patch.paid_at = paidAt ?? null;
+  if (status === 'paid' && paidAt) {
+    // Use the provider's actual payment timestamp. Never fabricate or clear an existing value.
+    patch.paid_at = paidAt;
   }
 
   await repo.updateCharge(db, charge.id, patch);
@@ -278,6 +278,33 @@ export async function syncChargeFromProvider(
     await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'active' });
   } else if (snapshot.status === 'overdue') {
     await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'past_due' });
+  }
+}
+
+// ─── SyncSubscriptionFromProvider ────────────────────────────────────────────
+// Mirrors syncChargeFromProvider: fetches provider state, updates local row,
+// propagates lifecycle_status to billing_accounts — same rules as applyWebhookEvent.
+
+export async function syncSubscriptionFromProvider(
+  db: SupabaseClient,
+  provider: BillingProvider,
+  subscriptionId: string,
+  providerSubscriptionId: string,
+  billingAccountId: string,
+) {
+  const snapshot = await provider.fetchSubscription({ providerSubscriptionId });
+
+  await repo.updateSubscription(db, subscriptionId, {
+    billing_status: snapshot.billingStatus,
+    next_billing_date: snapshot.nextBillingDate ?? null,
+  });
+
+  if (snapshot.billingStatus === 'cancelled') {
+    await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'cancelled' });
+  } else if (snapshot.billingStatus === 'overdue') {
+    await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'past_due' });
+  } else if (snapshot.billingStatus === 'active') {
+    await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'active' });
   }
 }
 

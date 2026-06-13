@@ -47,11 +47,37 @@ export async function proxyAction(
     | "sync-trial-limits"
     | "repair-user-sync" | "delete-client-member" | "ban-client-member"
     | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id"
-    | "create-shared-tenant",
+    | "create-shared-tenant"
+    | "list-shared-tenants" | "sync-shared-tenant-license"
+    | "list-shared-tenant-units" | "create-shared-tenant-unit" | "update-shared-tenant-unit" | "delete-shared-tenant-unit"
+    | "list-shared-tenant-users" | "create-shared-tenant-admin" | "create-shared-tenant-operator"
+    | "delete-shared-tenant-user" | "update-shared-tenant-user"
+    | "list-shared-memberships" | "create-shared-membership" | "update-shared-membership" | "delete-shared-membership",
   params?: Record<string, unknown>,
 ) {
   const check = await supabase.from("projetos").select("topology").eq("id", projectId).single();
-  if (check.data?.topology?.startsWith("shared") && !["get-runtime-tenant-id", "create-shared-tenant"].includes(action)) {
+  if (
+    check.data?.topology?.startsWith("shared")
+    && ![
+      "get-runtime-tenant-id",
+      "create-shared-tenant",
+      "list-shared-tenants",
+      "sync-shared-tenant-license",
+      "list-shared-tenant-units",
+      "create-shared-tenant-unit",
+      "update-shared-tenant-unit",
+      "delete-shared-tenant-unit",
+      "list-shared-tenant-users",
+      "create-shared-tenant-admin",
+      "create-shared-tenant-operator",
+      "delete-shared-tenant-user",
+      "update-shared-tenant-user",
+      "list-shared-memberships",
+      "create-shared-membership",
+      "update-shared-membership",
+      "delete-shared-membership",
+    ].includes(action)
+  ) {
     throw new Error("Operações proxy não são permitidas em projetos shared. Use as operações runtime diretamente.");
   }
 

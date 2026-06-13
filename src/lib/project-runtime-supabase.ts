@@ -17,7 +17,7 @@ export function getProjectRuntimeSupabase(project: RuntimeProjectConnection) {
   const cached = runtimeClientCache.get(cacheKey);
   if (cached) return cached;
 
-  const key = project.supabase_secret_keys || project.supabase_publishable_key;
+  const key = project.supabase_publishable_key;
 
   if (!project.supabase_url || !key) {
     throw new Error(`Credenciais runtime ausentes para o projeto ${project.project_name}.`);

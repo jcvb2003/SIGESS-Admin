@@ -115,13 +115,7 @@ export async function syncIsolatedProjectLicense(
 }
 
 export async function listSharedTenants(project: RuntimeProjectConnection): Promise<SharedTenant[]> {
-  const { data, error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("tenants")
-    .select("id, code, name")
-    .order("name", { ascending: true });
-
-  if (error) throw handleSupabaseError(error);
-  return (data || []) as SharedTenant[];
+  return await proxyAction(project.id, "list-shared-tenants") as SharedTenant[];
 }
 
 async function ensureSharedRuntimeScopeRows(input: {
@@ -228,45 +222,24 @@ export async function syncSharedTenantLicense(
   tenantId: string,
   input: { acesso_expira_em: string | null; max_socios: number | null },
 ): Promise<void> {
-  const { error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("tenants")
-    .update({
-      acesso_expira_em: input.acesso_expira_em,
-      max_socios: input.max_socios,
-    })
-    .eq("id", tenantId);
-
-  if (error) throw handleSupabaseError(error);
+  await proxyAction(project.id, "sync-shared-tenant-license", {
+    tenantId,
+    acessoExpiraEm: input.acesso_expira_em,
+    maxSocios: input.max_socios,
+  });
 }
 
 export async function listSharedTenantUnits(project: RuntimeProjectConnection, tenantId: string): Promise<TenantUnit[]> {
-  const { data, error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("tenant_units")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("name", { ascending: true });
-
-  if (error) throw handleSupabaseError(error);
-  return (data || []) as TenantUnit[];
+  return await proxyAction(project.id, "list-shared-tenant-units", { tenantId }) as TenantUnit[];
 }
 
 export async function createSharedTenantUnit(
   project: RuntimeProjectConnection,
   input: Omit<TenantUnit, "id" | "created_at" | "updated_at">,
 ): Promise<TenantUnit> {
-  const { data, error } = await getProjectRuntimeSupabase(project)
-    .from("tenant_units")
-    .insert(input)
-    .select()
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  await ensureSharedRuntimeScopeRows({
-    project,
-    tenantId: input.tenant_id,
-    unitId: data.id,
-  });
-  return data as TenantUnit;
+  return await proxyAction(project.id, "create-shared-tenant-unit", {
+    payload: input,
+  }) as TenantUnit;
 }
 
 export async function updateSharedTenantUnit(
@@ -274,31 +247,18 @@ export async function updateSharedTenantUnit(
   id: string,
   input: Partial<Omit<TenantUnit, "id" | "created_at" | "updated_at">>,
 ): Promise<TenantUnit> {
-  const { data, error } = await getProjectRuntimeSupabase(project)
-    .from("tenant_units")
-    .update(input)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as TenantUnit;
+  return await proxyAction(project.id, "update-shared-tenant-unit", {
+    id,
+    payload: input,
+  }) as TenantUnit;
 }
 
 export async function deleteSharedTenantUnit(project: RuntimeProjectConnection, id: string): Promise<void> {
-  const { error } = await getProjectRuntimeSupabase(project).from("tenant_units").delete().eq("id", id);
-  if (error) throw handleSupabaseError(error);
+  await proxyAction(project.id, "delete-shared-tenant-unit", { id });
 }
 
 export async function listSharedTenantUsers(project: RuntimeProjectConnection, tenantId: string): Promise<TenantUser[]> {
-  const { data, error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("tenant_users")
-    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw handleSupabaseError(error);
-  return (data || []) as TenantUser[];
+  return await proxyAction(project.id, "list-shared-tenant-users", { tenantId }) as TenantUser[];
 }
 
 export async function createSharedTenantAdmin(input: {
@@ -309,53 +269,13 @@ export async function createSharedTenantAdmin(input: {
   password: string;
   autoConfirm?: boolean;
 }): Promise<TenantUser> {
-  const client = getProjectRuntimeSupabase(input.project);
-  const adminClient = getProjectRuntimeSupabaseAdmin(input.project);
-  const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedName = input.nome.trim();
-
-  const { id: resolvedAuthUserId } = await resolveOrCreateRuntimeAuthUser({
-    project: input.project,
-    email: normalizedEmail,
-    nome: normalizedName,
+  return await proxyAction(input.project.id, "create-shared-tenant-admin", {
+    tenantId: input.tenantId,
+    email: input.email,
+    nome: input.nome,
     password: input.password,
-    role: "admin",
     autoConfirm: input.autoConfirm,
-  });
-
-  const { data: upsertedData, error: upsertError } = await client
-    .from("tenant_users")
-    .upsert(
-      { tenant_id: input.tenantId, user_id: resolvedAuthUserId, tenant_role: "owner", is_active: true },
-      { onConflict: "tenant_id,user_id" },
-    )
-    .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .single();
-
-  if (upsertError) throw handleSupabaseError(upsertError);
-  return upsertedData as TenantUser;
-
-  const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
-    email: normalizedEmail,
-    password: input.password,
-    email_confirm: input.autoConfirm ?? true,
-    user_metadata: { nome: normalizedName },
-    app_metadata: { role: "admin" },
-  });
-
-  if (createUserError) throw handleSupabaseError(createUserError);
-
-  const authUserId = createdUserData.user?.id;
-  if (!authUserId) throw new Error("Não foi possível identificar o usuário criado no projeto shared.");
-
-  const { data, error } = await client
-    .from("tenant_users")
-    .insert({ tenant_id: input.tenantId, user_id: authUserId, tenant_role: "owner", is_active: true })
-    .select("id, tenant_id, user_id, tenant_role, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as TenantUser;
+  }) as TenantUser;
 }
 
 export async function createSharedTenantOperator(input: {
@@ -367,65 +287,14 @@ export async function createSharedTenantOperator(input: {
   operatorType: OperatorType;
   autoConfirm?: boolean;
 }): Promise<TenantUser> {
-  const client = getProjectRuntimeSupabase(input.project);
-  const adminClient = getProjectRuntimeSupabaseAdmin(input.project);
-  const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedName = input.nome.trim();
-
-  const { id: resolvedAuthUserId } = await resolveOrCreateRuntimeAuthUser({
-    project: input.project,
-    email: normalizedEmail,
-    nome: normalizedName,
+  return await proxyAction(input.project.id, "create-shared-tenant-operator", {
+    tenantId: input.tenantId,
+    email: input.email,
+    nome: input.nome,
     password: input.password,
-    role: "member",
+    operatorType: input.operatorType,
     autoConfirm: input.autoConfirm,
-  });
-
-  const { data: upsertedData, error: upsertError } = await client
-    .from("tenant_users")
-    .upsert(
-      {
-        tenant_id: input.tenantId,
-        user_id: resolvedAuthUserId,
-        tenant_role: "member",
-        operator_type: input.operatorType,
-        is_active: true,
-      },
-      { onConflict: "tenant_id,user_id" },
-    )
-    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .single();
-
-  if (upsertError) throw handleSupabaseError(upsertError);
-  return upsertedData as TenantUser;
-
-  const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
-    email: normalizedEmail,
-    password: input.password,
-    email_confirm: input.autoConfirm ?? true,
-    user_metadata: { nome: normalizedName },
-    app_metadata: { role: "member" },
-  });
-
-  if (createUserError) throw handleSupabaseError(createUserError);
-
-  const authUserId = createdUserData.user?.id;
-  if (!authUserId) throw new Error("Não foi possível identificar o usuário criado no projeto shared.");
-
-  const { data, error } = await client
-    .from("tenant_users")
-    .insert({
-      tenant_id: input.tenantId,
-      user_id: authUserId,
-      tenant_role: "member",
-      operator_type: input.operatorType,
-      is_active: true,
-    })
-    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as TenantUser;
+  }) as TenantUser;
 }
 
 export async function createSharedTenantOperatorWithMembership(input: {
@@ -465,27 +334,11 @@ export async function deleteSharedTenantUser(input: {
   tenantUserId: string;
   authUserId: string;
 }): Promise<void> {
-  const client = getProjectRuntimeSupabase(input.project);
-  const adminClient = getProjectRuntimeSupabaseAdmin(input.project);
-
-  const { error: membershipsError } = await client
-    .from("user_unit_memberships")
-    .delete()
-    .eq("tenant_id", input.tenantId)
-    .eq("user_id", input.authUserId);
-
-  if (membershipsError) throw handleSupabaseError(membershipsError);
-
-  const { error: tenantUserError } = await client
-    .from("tenant_users")
-    .delete()
-    .eq("id", input.tenantUserId)
-    .eq("tenant_id", input.tenantId);
-
-  if (tenantUserError) throw handleSupabaseError(tenantUserError);
-
-  const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(input.authUserId);
-  if (authDeleteError) throw handleSupabaseError(authDeleteError);
+  await proxyAction(input.project.id, "delete-shared-tenant-user", {
+    tenantId: input.tenantId,
+    tenantUserId: input.tenantUserId,
+    authUserId: input.authUserId,
+  });
 }
 
 export async function updateSharedTenantUser(
@@ -493,40 +346,23 @@ export async function updateSharedTenantUser(
   id: string,
   input: Partial<Pick<TenantUser, "operator_type" | "is_active">>,
 ): Promise<TenantUser> {
-  const { data, error } = await getProjectRuntimeSupabase(project)
-    .from("tenant_users")
-    .update(input)
-    .eq("id", id)
-    .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as TenantUser;
+  return await proxyAction(project.id, "update-shared-tenant-user", {
+    id,
+    payload: input,
+  }) as TenantUser;
 }
 
 export async function listSharedMemberships(project: RuntimeProjectConnection, tenantId: string): Promise<UserUnitMembership[]> {
-  const { data, error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("user_unit_memberships")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw handleSupabaseError(error);
-  return (data || []) as UserUnitMembership[];
+  return await proxyAction(project.id, "list-shared-memberships", { tenantId }) as UserUnitMembership[];
 }
 
 export async function createSharedMembership(
   project: RuntimeProjectConnection,
   input: Omit<UserUnitMembership, "id" | "created_at" | "updated_at">,
 ): Promise<UserUnitMembership> {
-  const { data, error } = await getProjectRuntimeSupabase(project)
-    .from("user_unit_memberships")
-    .insert(input)
-    .select()
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as UserUnitMembership;
+  return await proxyAction(project.id, "create-shared-membership", {
+    payload: input,
+  }) as UserUnitMembership;
 }
 
 export async function updateSharedMembership(
@@ -534,24 +370,14 @@ export async function updateSharedMembership(
   id: string,
   input: Partial<Omit<UserUnitMembership, "id" | "created_at" | "updated_at">>,
 ): Promise<UserUnitMembership> {
-  const { data, error } = await getProjectRuntimeSupabase(project)
-    .from("user_unit_memberships")
-    .update(input)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw handleSupabaseError(error);
-  return data as UserUnitMembership;
+  return await proxyAction(project.id, "update-shared-membership", {
+    id,
+    payload: input,
+  }) as UserUnitMembership;
 }
 
 export async function deleteSharedMembership(project: RuntimeProjectConnection, id: string): Promise<void> {
-  const { error } = await getProjectRuntimeSupabase(project)
-    .from("user_unit_memberships")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw handleSupabaseError(error);
+  await proxyAction(project.id, "delete-shared-membership", { id });
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {

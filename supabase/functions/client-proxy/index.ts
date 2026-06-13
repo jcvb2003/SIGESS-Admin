@@ -2222,6 +2222,302 @@ async function createSharedTenantRuntime(
   return tenant;
 }
 
+async function ensureRuntimeUserProfileRuntime(
+  runtimeAdmin: SupabaseClient,
+  input: { userId: string; email: string; nome: string },
+) {
+  const { error } = await runtimeAdmin
+    .from("user_profiles")
+    .upsert(
+      {
+        id: input.userId,
+        email: input.email,
+        nome: input.nome,
+        is_active: true,
+      },
+      { onConflict: "id" },
+    );
+
+  if (error) throw error;
+}
+
+async function resolveOrCreateRuntimeAuthUserRuntime(input: {
+  runtimeAdmin: SupabaseClient;
+  email: string;
+  nome: string;
+  password: string;
+  role: "admin" | "member";
+  autoConfirm?: boolean;
+}): Promise<{ id: string }> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const normalizedName = input.nome.trim();
+
+  const { data: createdUserData, error: createUserError } = await input.runtimeAdmin.auth.admin.createUser({
+    email: normalizedEmail,
+    password: input.password,
+    email_confirm: input.autoConfirm ?? true,
+    user_metadata: { nome: normalizedName },
+    app_metadata: { role: input.role },
+  });
+
+  if (!createUserError && createdUserData.user?.id) {
+    await ensureRuntimeUserProfileRuntime(input.runtimeAdmin, {
+      userId: createdUserData.user.id,
+      email: normalizedEmail,
+      nome: normalizedName,
+    });
+    return { id: createdUserData.user.id };
+  }
+
+  if (createUserError?.message?.includes("already been registered")) {
+    const { data: listedUsers, error: listUsersError } = await input.runtimeAdmin.auth.admin.listUsers();
+    if (listUsersError) throw listUsersError;
+
+    const existingUser = listedUsers.users.find((user) => user.email?.toLowerCase() === normalizedEmail);
+    if (!existingUser?.id) throw createUserError;
+
+    await ensureRuntimeUserProfileRuntime(input.runtimeAdmin, {
+      userId: existingUser.id,
+      email: normalizedEmail,
+      nome: normalizedName,
+    });
+    return { id: existingUser.id };
+  }
+
+  throw createUserError;
+}
+
+function createRuntimeAdminClient(clientUrl: string, clientKey: string) {
+  return createClient(clientUrl, clientKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+async function handleSharedRuntimeAction(
+  action: string,
+  clientUrl: string,
+  clientKey: string,
+  params?: Record<string, unknown>,
+) {
+  const runtimeAdmin = createRuntimeAdminClient(clientUrl, clientKey);
+
+  if (action === "list-shared-tenants") {
+    const { data, error } = await runtimeAdmin
+      .from("tenants")
+      .select("id, code, name")
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  if (action === "sync-shared-tenant-license") {
+    const tenantId = params?.tenantId as string | undefined;
+    if (!tenantId) throw new Error("Missing tenantId");
+    const { error } = await runtimeAdmin
+      .from("tenants")
+      .update({
+        acesso_expira_em: (params?.acessoExpiraEm as string | null | undefined) ?? null,
+        max_socios: (params?.maxSocios as number | null | undefined) ?? null,
+      })
+      .eq("id", tenantId);
+    if (error) throw error;
+    return { success: true };
+  }
+
+  if (action === "list-shared-tenant-units") {
+    const tenantId = params?.tenantId as string | undefined;
+    if (!tenantId) throw new Error("Missing tenantId");
+    const { data, error } = await runtimeAdmin
+      .from("tenant_units")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  if (action === "create-shared-tenant-unit") {
+    const payload = params?.payload as Record<string, unknown> | undefined;
+    if (!payload?.tenant_id || !payload?.code || !payload?.name) throw new Error("Missing payload for create-shared-tenant-unit");
+    const { data, error } = await runtimeAdmin
+      .from("tenant_units")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (error) throw error;
+    await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+      tenantId: String(payload.tenant_id),
+      unitId: String(data.id),
+    });
+    return data;
+  }
+
+  if (action === "update-shared-tenant-unit") {
+    const id = params?.id as string | undefined;
+    const payload = params?.payload as Record<string, unknown> | undefined;
+    if (!id || !payload) throw new Error("Missing id or payload");
+    const { data, error } = await runtimeAdmin
+      .from("tenant_units")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === "delete-shared-tenant-unit") {
+    const id = params?.id as string | undefined;
+    if (!id) throw new Error("Missing id");
+    const { error } = await runtimeAdmin.from("tenant_units").delete().eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  }
+
+  if (action === "list-shared-tenant-users") {
+    const tenantId = params?.tenantId as string | undefined;
+    if (!tenantId) throw new Error("Missing tenantId");
+    const { data, error } = await runtimeAdmin
+      .from("tenant_users")
+      .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  if (action === "create-shared-tenant-admin" || action === "create-shared-tenant-operator") {
+    const tenantId = params?.tenantId as string | undefined;
+    const email = params?.email as string | undefined;
+    const nome = params?.nome as string | undefined;
+    const password = params?.password as string | undefined;
+    const autoConfirm = params?.autoConfirm as boolean | undefined;
+    if (!tenantId || !email || !nome || !password) throw new Error("Missing fields to create shared tenant user");
+
+    const role = action === "create-shared-tenant-admin" ? "admin" : "member";
+    const tenantRole = action === "create-shared-tenant-admin" ? "owner" : "member";
+    const operatorType = action === "create-shared-tenant-operator"
+      ? (params?.operatorType as string | undefined)
+      : undefined;
+
+    const { id: resolvedAuthUserId } = await resolveOrCreateRuntimeAuthUserRuntime({
+      runtimeAdmin,
+      email,
+      nome,
+      password,
+      role,
+      autoConfirm,
+    });
+
+    const upsertPayload: Record<string, unknown> = {
+      tenant_id: tenantId,
+      user_id: resolvedAuthUserId,
+      tenant_role: tenantRole,
+      is_active: true,
+    };
+    if (operatorType) upsertPayload.operator_type = operatorType;
+
+    const { data, error } = await runtimeAdmin
+      .from("tenant_users")
+      .upsert(upsertPayload, { onConflict: "tenant_id,user_id" })
+      .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === "delete-shared-tenant-user") {
+    const tenantId = params?.tenantId as string | undefined;
+    const tenantUserId = params?.tenantUserId as string | undefined;
+    const authUserId = params?.authUserId as string | undefined;
+    if (!tenantId || !tenantUserId || !authUserId) throw new Error("Missing fields for delete-shared-tenant-user");
+
+    const { error: membershipsError } = await runtimeAdmin
+      .from("user_unit_memberships")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("user_id", authUserId);
+    if (membershipsError) throw membershipsError;
+
+    const { error: tenantUserError } = await runtimeAdmin
+      .from("tenant_users")
+      .delete()
+      .eq("id", tenantUserId)
+      .eq("tenant_id", tenantId);
+    if (tenantUserError) throw tenantUserError;
+
+    const { error: authDeleteError } = await runtimeAdmin.auth.admin.deleteUser(authUserId);
+    if (authDeleteError) throw authDeleteError;
+
+    return { success: true };
+  }
+
+  if (action === "update-shared-tenant-user") {
+    const id = params?.id as string | undefined;
+    const payload = params?.payload as Record<string, unknown> | undefined;
+    if (!id || !payload) throw new Error("Missing id or payload");
+    const { data, error } = await runtimeAdmin
+      .from("tenant_users")
+      .update(payload)
+      .eq("id", id)
+      .select("id, tenant_id, user_id, tenant_role, operator_type, is_active, created_at, updated_at, user_profiles(id, email, nome, is_active, created_at, updated_at)")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === "list-shared-memberships") {
+    const tenantId = params?.tenantId as string | undefined;
+    if (!tenantId) throw new Error("Missing tenantId");
+    const { data, error } = await runtimeAdmin
+      .from("user_unit_memberships")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  if (action === "create-shared-membership") {
+    const payload = params?.payload as Record<string, unknown> | undefined;
+    if (!payload) throw new Error("Missing payload");
+    const { data, error } = await runtimeAdmin
+      .from("user_unit_memberships")
+      .insert(payload)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === "update-shared-membership") {
+    const id = params?.id as string | undefined;
+    const payload = params?.payload as Record<string, unknown> | undefined;
+    if (!id || !payload) throw new Error("Missing id or payload");
+    const { data, error } = await runtimeAdmin
+      .from("user_unit_memberships")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === "delete-shared-membership") {
+    const id = params?.id as string | undefined;
+    if (!id) throw new Error("Missing id");
+    const { error } = await runtimeAdmin
+      .from("user_unit_memberships")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+    return { success: true };
+  }
+
+  return null;
+}
+
 // Helper to handle client-side actions securely
 async function performAction(action: string, clientUrl: string, clientKey: string, params?: Record<string, unknown>) {
   if (!clientUrl || !clientKey) {
@@ -2512,6 +2808,39 @@ async function handleAction(clientId: string, action: string, params: Record<str
       client.supabase_secret_keys,
       params,
     );
+  }
+
+  if (
+    [
+      "list-shared-tenants",
+      "sync-shared-tenant-license",
+      "list-shared-tenant-units",
+      "create-shared-tenant-unit",
+      "update-shared-tenant-unit",
+      "delete-shared-tenant-unit",
+      "list-shared-tenant-users",
+      "create-shared-tenant-admin",
+      "create-shared-tenant-operator",
+      "delete-shared-tenant-user",
+      "update-shared-tenant-user",
+      "list-shared-memberships",
+      "create-shared-membership",
+      "update-shared-membership",
+      "delete-shared-membership",
+    ].includes(action)
+  ) {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+
+    const sharedResult = await handleSharedRuntimeAction(
+      action,
+      client.supabase_url,
+      client.supabase_secret_keys,
+      params,
+    );
+
+    if (sharedResult !== null) return sharedResult;
   }
 
   const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);

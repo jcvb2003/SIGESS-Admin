@@ -1,7 +1,5 @@
 import { supabase } from "@/lib/supabase";
 import {
-  getProjectRuntimeSupabase,
-  getProjectRuntimeSupabaseAdmin,
   type RuntimeProjectConnection,
 } from "@/lib/project-runtime-supabase";
 import { handleSupabaseError } from "@/services/error.handler";
@@ -14,72 +12,6 @@ import type {
   OperatorType,
   Topology,
 } from "@/features/clients/types";
-
-async function ensureRuntimeUserProfile(
-  project: RuntimeProjectConnection,
-  input: { userId: string; email: string; nome: string },
-): Promise<void> {
-  const { error } = await getProjectRuntimeSupabaseAdmin(project)
-    .from("user_profiles")
-    .upsert(
-      {
-        id: input.userId,
-        email: input.email,
-        nome: input.nome,
-        is_active: true,
-      },
-      { onConflict: "id" },
-    );
-
-  if (error) throw handleSupabaseError(error);
-}
-
-async function resolveOrCreateRuntimeAuthUser(input: {
-  project: RuntimeProjectConnection;
-  email: string;
-  nome: string;
-  password: string;
-  role: "admin" | "member";
-  autoConfirm?: boolean;
-}): Promise<{ id: string }> {
-  const adminClient = getProjectRuntimeSupabaseAdmin(input.project);
-  const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedName = input.nome.trim();
-
-  const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
-    email: normalizedEmail,
-    password: input.password,
-    email_confirm: input.autoConfirm ?? true,
-    user_metadata: { nome: normalizedName },
-    app_metadata: { role: input.role },
-  });
-
-  if (!createUserError && createdUserData.user?.id) {
-    await ensureRuntimeUserProfile(input.project, {
-      userId: createdUserData.user.id,
-      email: normalizedEmail,
-      nome: normalizedName,
-    });
-    return { id: createdUserData.user.id };
-  }
-
-  if (createUserError?.message?.includes("already been registered")) {
-    const { data: listedUsers, error: listUsersError } = await adminClient.auth.admin.listUsers();
-    if (listUsersError) throw handleSupabaseError(listUsersError);
-
-    const existingUser = listedUsers.users.find((user) => user.email?.toLowerCase() === normalizedEmail);
-    if (!existingUser?.id) throw handleSupabaseError(createUserError);
-
-    await ensureRuntimeUserProfile(input.project, {
-      userId: existingUser.id,
-      email: normalizedEmail,
-      nome: normalizedName,
-    });
-    return { id: existingUser.id };
-  }
-
-  throw handleSupabaseError(createUserError);
-}
 
 // Operações no banco runtime do projeto (shared ou isolated).
 // Não conhece projetos nem clientes do Admin central.
@@ -116,91 +48,6 @@ export async function syncIsolatedProjectLicense(
 
 export async function listSharedTenants(project: RuntimeProjectConnection): Promise<SharedTenant[]> {
   return await proxyAction(project.id, "list-shared-tenants") as SharedTenant[];
-}
-
-async function ensureSharedRuntimeScopeRows(input: {
-  project: RuntimeProjectConnection;
-  tenantId: string;
-  unitId: string;
-  entityName?: string | null;
-}) {
-  const sharedAdmin = getProjectRuntimeSupabaseAdmin(input.project);
-
-  const [{ data: existingEntity }, { data: existingConfig }, { data: existingParametros }, { data: existingFinanceiros }] =
-    await Promise.all([
-      sharedAdmin
-        .from("entidade")
-        .select("id")
-        .eq("tenant_id", input.tenantId)
-        .eq("unit_id", input.unitId)
-        .limit(1)
-        .maybeSingle(),
-      sharedAdmin
-        .from("configuracao_entidade")
-        .select("id")
-        .eq("tenant_id", input.tenantId)
-        .eq("unit_id", input.unitId)
-        .limit(1)
-        .maybeSingle(),
-      sharedAdmin
-        .from("parametros")
-        .select("id")
-        .eq("tenant_id", input.tenantId)
-        .eq("unit_id", input.unitId)
-        .limit(1)
-        .maybeSingle(),
-      sharedAdmin
-        .from("parametros_financeiros")
-        .select("id")
-        .eq("tenant_id", input.tenantId)
-        .eq("unit_id", input.unitId)
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-  const inserts = [];
-
-  if (!existingEntity) {
-    inserts.push(
-      sharedAdmin.from("entidade").insert({
-        tenant_id: input.tenantId,
-        unit_id: input.unitId,
-        nome_entidade: input.entityName ?? null,
-      }),
-    );
-  }
-
-  if (!existingConfig) {
-    inserts.push(
-      sharedAdmin.from("configuracao_entidade").insert({
-        tenant_id: input.tenantId,
-        unit_id: input.unitId,
-      }),
-    );
-  }
-
-  if (!existingParametros) {
-    inserts.push(
-      sharedAdmin.from("parametros").insert({
-        tenant_id: input.tenantId,
-        unit_id: input.unitId,
-      }),
-    );
-  }
-
-  if (!existingFinanceiros) {
-    inserts.push(
-      sharedAdmin.from("parametros_financeiros").insert({
-        tenant_id: input.tenantId,
-        unit_id: input.unitId,
-      }),
-    );
-  }
-
-  const results = await Promise.all(inserts);
-  for (const result of results) {
-    if (result.error) throw handleSupabaseError(result.error);
-  }
 }
 
 export async function createSharedTenantForProject(

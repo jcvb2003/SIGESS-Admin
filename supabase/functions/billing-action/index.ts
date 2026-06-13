@@ -11,6 +11,7 @@ import type {
   ProviderSubscription,
 } from '../_shared/billing/types.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
+import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 
@@ -135,6 +136,18 @@ function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): 
   return value;
 }
 
+// ─── Summary sync helper ──────────────────────────────────────────────────────
+
+// Projection errors must never roll back the Admin DB mutation.
+// Log and continue — the next billing-sync cycle will reconcile.
+async function trySyncSummary(db: SupabaseClient, adminClientId: string): Promise<void> {
+  try {
+    await syncBillingSummaryToRuntime(db, adminClientId);
+  } catch (e) {
+    console.error('[billing-action] summary sync failed for', adminClientId, ':', e);
+  }
+}
+
 // ─── Action handlers ──────────────────────────────────────────────────────────
 
 async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
@@ -144,7 +157,7 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
   assert(params.customer_email, 'customer_email');
   assert(params.customer_cpf_cnpj, 'customer_cpf_cnpj');
 
-  return svc.provisionBillingAccount(db, provider, {
+  const result = await svc.provisionBillingAccount(db, provider, {
     adminClientId: params.admin_client_id as string,
     planId: params.plan_id as string,
     customerInfo: {
@@ -154,16 +167,20 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
       phone: params.customer_phone as string | undefined,
     },
   });
+  await trySyncSummary(db, params.admin_client_id as string);
+  return result;
 }
 
 async function handleStartTrial(db: SupabaseClient, params: Record<string, unknown>) {
   assert(params.admin_client_id, 'admin_client_id');
   const trialDays = typeof params.trial_days === 'number' ? params.trial_days : 7;
 
-  return svc.startTrial(db, {
+  const result = await svc.startTrial(db, {
     adminClientId: params.admin_client_id as string,
     trialDays,
   });
+  await trySyncSummary(db, params.admin_client_id as string);
+  return result;
 }
 
 async function handleCreateSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
@@ -175,7 +192,7 @@ async function handleCreateSubscription(db: SupabaseClient, provider: BillingPro
 
   const interval = assertDomain(params.interval, 'interval', VALID_INTERVALS);
 
-  return svc.createInitialSubscription(db, provider, {
+  const result = await svc.createInitialSubscription(db, provider, {
     adminClientId: params.admin_client_id as string,
     planId: params.plan_id as string,
     interval: interval as 'monthly' | 'annual',
@@ -183,11 +200,27 @@ async function handleCreateSubscription(db: SupabaseClient, provider: BillingPro
     nextDueDate: params.next_due_date as string,
     description: params.description as string | undefined,
   });
+  await trySyncSummary(db, params.admin_client_id as string);
+  return result;
 }
 
 async function handleCancelSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.subscription_id, 'subscription_id');
-  return svc.cancelSubscription(db, provider, params.subscription_id as string);
+  const subId = params.subscription_id as string;
+
+  // Resolve admin_client_id before mutation to sync summary afterward
+  const { data: sub } = await db
+    .from('billing_subscriptions')
+    .select('billing_account_id')
+    .eq('id', subId)
+    .maybeSingle();
+  const { data: account } = sub?.billing_account_id
+    ? await db.from('billing_accounts').select('admin_client_id').eq('id', sub.billing_account_id).maybeSingle()
+    : { data: null };
+
+  const result = await svc.cancelSubscription(db, provider, subId);
+  if (account?.admin_client_id) await trySyncSummary(db, account.admin_client_id);
+  return result;
 }
 
 async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
@@ -203,7 +236,7 @@ async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider,
     ? assertDomain(params.billing_type, 'billing_type', VALID_BILLING_TYPES)
     : 'BOLETO';
 
-  return svc.createOneOffCharge(db, provider, {
+  const result = await svc.createOneOffCharge(db, provider, {
     adminClientId: params.admin_client_id as string,
     amount: params.amount as number,
     dueDate: params.due_date as string,
@@ -211,20 +244,37 @@ async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider,
     type: chargeType as 'one_off' | 'adjustment' | 'tier_upgrade',
     billingType: billingType as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
   });
+  await trySyncSummary(db, params.admin_client_id as string);
+  return result;
 }
 
 async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.provider_charge_id, 'provider_charge_id');
+  const providerChargeId = params.provider_charge_id as string;
+
+  // Resolve admin_client_id before mutation to sync summary afterward
+  const { data: charge } = await db
+    .from('billing_charges')
+    .select('billing_account_id')
+    .eq('provider_charge_id', providerChargeId)
+    .maybeSingle();
+  const { data: account } = charge?.billing_account_id
+    ? await db.from('billing_accounts').select('admin_client_id').eq('id', charge.billing_account_id).maybeSingle()
+    : { data: null };
 
   // Cancel at provider level
-  await provider.cancelCharge({ providerChargeId: params.provider_charge_id as string });
+  await provider.cancelCharge({ providerChargeId });
 
   // Update local record
   const { error } = await db
     .from('billing_charges')
     .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-    .eq('provider_charge_id', params.provider_charge_id as string);
+    .eq('provider_charge_id', providerChargeId);
   if (error) throw createHttpError(`billing_charges update failed: ${error.message}`, 500);
+
+  // Sync: the urgentCharge query in buildBillingSummaryProjection will re-evaluate
+  // remaining open charges — if another charge is still pending, hasPendingCharge stays true.
+  if (account?.admin_client_id) await trySyncSummary(db, account.admin_client_id);
 
   return { cancelled: true };
 }
@@ -291,11 +341,13 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     syncedSubscription = activeSub.provider_subscription_id;
   }
 
-  return {
+  const result = {
     synced_charges: syncedCharges.length,
     provider_charge_ids: syncedCharges,
     synced_subscription: syncedSubscription,
   };
+  await trySyncSummary(db, params.admin_client_id as string);
+  return result;
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────

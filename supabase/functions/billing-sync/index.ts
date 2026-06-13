@@ -7,6 +7,7 @@ import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
 import * as repo from '../_shared/billing/repositories.ts';
+import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,12 @@ async function handleSyncAll(db: SupabaseClient) {
         if (charge.provider_charge_id) {
           await svc.syncChargeFromProvider(db, provider, charge.provider_charge_id);
         }
+      }
+
+      try {
+        await syncBillingSummaryToRuntime(db, account.admin_client_id);
+      } catch (e) {
+        console.error(`[billing-sync] summary sync failed for account ${account.id}:`, e);
       }
 
       results.push({ accountId: account.id, ok: true });

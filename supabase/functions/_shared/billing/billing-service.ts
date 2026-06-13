@@ -354,11 +354,6 @@ export async function issuePortalToken(
   });
 }
 
-// ─── SyncBillingSummaryToRuntime ──────────────────────────────────────────────
-// Stub — implemented in Marco 6 when billing_summary is added to tenant DBs.
-// The projection service will write to each tenant's own Supabase DB via Management API.
-export async function syncBillingSummaryToRuntime(
-  _adminClientId: string,
-): Promise<void> {
-  // TODO Marco 6: fetch billing_account + latest charge, call projection-service
-}
+// SyncBillingSummaryToRuntime is intentionally absent from this file.
+// Domain (billing-service.ts) must remain blind to infrastructure (Management API, topology).
+// Call projection-service.ts directly from edge function handlers.

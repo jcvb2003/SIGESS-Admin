@@ -46,11 +46,12 @@ export async function proxyAction(
     | "list-client-members" | "create-client-member" | "update-client-member"
     | "sync-trial-limits"
     | "repair-user-sync" | "delete-client-member" | "ban-client-member"
-    | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id",
+    | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id"
+    | "create-shared-tenant",
   params?: Record<string, unknown>,
 ) {
   const check = await supabase.from("projetos").select("topology").eq("id", projectId).single();
-  if (check.data?.topology?.startsWith("shared") && action !== "get-runtime-tenant-id") {
+  if (check.data?.topology?.startsWith("shared") && !["get-runtime-tenant-id", "create-shared-tenant"].includes(action)) {
     throw new Error("Operações proxy não são permitidas em projetos shared. Use as operações runtime diretamente.");
   }
 

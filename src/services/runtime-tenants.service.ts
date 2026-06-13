@@ -214,50 +214,13 @@ export async function createSharedTenantForProject(
   clienteId: string,           // ID do registro em `clientes` a ser vinculado
   input: { name: string; code: string; acesso_expira_em: string | null; max_socios: number | null },
 ): Promise<SharedTenant> {
-  const sharedAdmin = getProjectRuntimeSupabaseAdmin(project);
-
-  const { data: tenant, error: tenantError } = await sharedAdmin
-    .from("tenants")
-    .insert({
-      name: input.name,
-      code: input.code.toLowerCase(),
-      status: "active",
-      acesso_expira_em: input.acesso_expira_em,
-      max_socios: input.max_socios,
-    })
-    .select("id, code, name")
-    .single();
-
-  if (tenantError) throw handleSupabaseError(tenantError);
-
-  const tenantId = tenant.id;
-
-  const { data: unit, error: unitError } = await sharedAdmin
-    .from("tenant_units")
-    .insert({ tenant_id: tenantId, code: "principal", name: "Sede", is_active: true })
-    .select("id")
-    .single();
-
-  if (unitError) throw handleSupabaseError(unitError);
-
-  const unitId = unit.id;
-
-  await ensureSharedRuntimeScopeRows({
-    project,
-    tenantId,
-    unitId,
-    entityName: input.name,
-  });
-
-  // Vincula o tenant runtime ao registro central pelo ID exato
-  const { error: updateError } = await supabase
-    .from("tenants")
-    .update({ runtime_tenant_id: tenantId })
-    .eq("id", clienteId);
-
-  if (updateError) throw handleSupabaseError(updateError);
-
-  return tenant as SharedTenant;
+  return await proxyAction(project.id, "create-shared-tenant", {
+    clienteId,
+    name: input.name,
+    code: input.code.toLowerCase(),
+    acessoExpiraEm: input.acesso_expira_em,
+    maxSocios: input.max_socios,
+  }) as SharedTenant;
 }
 
 export async function syncSharedTenantLicense(

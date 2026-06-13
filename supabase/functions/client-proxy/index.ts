@@ -2038,6 +2038,190 @@ async function repairUserSync(clientUrl: string, clientKey: string) {
   };
 }
 
+async function ensureSharedScopeRowsRuntime(
+  runtimeAdmin: SupabaseClient,
+  input: { tenantId: string; unitId: string; entityName?: string | null },
+) {
+  const [{ data: existingEntity }, { data: existingConfig }, { data: existingParametros }, { data: existingFinanceiros }] =
+    await Promise.all([
+      runtimeAdmin
+        .from("entidade")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      runtimeAdmin
+        .from("configuracao_entidade")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      runtimeAdmin
+        .from("parametros")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+      runtimeAdmin
+        .from("parametros_financeiros")
+        .select("id")
+        .eq("tenant_id", input.tenantId)
+        .eq("unit_id", input.unitId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const inserts = [];
+
+  if (!existingEntity) {
+    inserts.push(
+      runtimeAdmin.from("entidade").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+        nome_entidade: input.entityName ?? null,
+      }),
+    );
+  }
+
+  if (!existingConfig) {
+    inserts.push(
+      runtimeAdmin.from("configuracao_entidade").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  if (!existingParametros) {
+    inserts.push(
+      runtimeAdmin.from("parametros").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  if (!existingFinanceiros) {
+    inserts.push(
+      runtimeAdmin.from("parametros_financeiros").insert({
+        tenant_id: input.tenantId,
+        unit_id: input.unitId,
+      }),
+    );
+  }
+
+  const results = await Promise.all(inserts);
+  for (const result of results) {
+    if (result.error) throw result.error;
+  }
+}
+
+async function cleanupSharedTenantRuntime(
+  runtimeAdmin: SupabaseClient,
+  input: { tenantId: string; unitId: string },
+) {
+  const steps = [
+    runtimeAdmin.from("parametros_financeiros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    runtimeAdmin.from("parametros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    runtimeAdmin.from("configuracao_entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    runtimeAdmin.from("entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    runtimeAdmin.from("tenant_units").delete().eq("id", input.unitId),
+    runtimeAdmin.from("tenants").delete().eq("id", input.tenantId),
+  ];
+
+  const results = await Promise.all(steps);
+  for (const result of results) {
+    if (result.error) throw result.error;
+  }
+}
+
+async function createSharedTenantRuntime(
+  supabaseAdmin: SupabaseClient,
+  projectId: string,
+  clientUrl: string,
+  clientKey: string,
+  params?: Record<string, unknown>,
+) {
+  const clienteId = params?.clienteId as string | undefined;
+  const name = params?.name as string | undefined;
+  const code = params?.code as string | undefined;
+  const acessoExpiraEm = (params?.acessoExpiraEm as string | null | undefined) ?? null;
+  const maxSocios = (params?.maxSocios as number | null | undefined) ?? null;
+
+  if (!clienteId || !name || !code) {
+    throw new Error("Missing fields for create-shared-tenant");
+  }
+
+  const runtimeAdmin = createClient(clientUrl, clientKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: tenant, error: tenantError } = await runtimeAdmin
+    .from("tenants")
+    .insert({
+      name,
+      code: code.toLowerCase(),
+      status: "active",
+      acesso_expira_em: acessoExpiraEm,
+      max_socios: maxSocios,
+    })
+    .select("id, code, name")
+    .single();
+
+  if (tenantError) throw tenantError;
+
+  const tenantId = tenant.id as string;
+  let unitId: string | null = null;
+
+  try {
+    const { data: unit, error: unitError } = await runtimeAdmin
+      .from("tenant_units")
+      .insert({ tenant_id: tenantId, code: "principal", name: "Sede", is_active: true })
+      .select("id")
+      .single();
+
+    if (unitError) throw unitError;
+
+    unitId = unit.id as string;
+
+    await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+      tenantId,
+      unitId,
+      entityName: name,
+    });
+
+    const { error: updateError } = await supabaseAdmin
+      .from("tenants")
+      .update({
+        runtime_tenant_id: tenantId,
+        runtime_topology: "shared_multi_single",
+        supports_units: false,
+      })
+      .eq("id", clienteId)
+      .eq("project_id", projectId);
+
+    if (updateError) throw updateError;
+  } catch (error) {
+    if (unitId) {
+      try {
+        await cleanupSharedTenantRuntime(runtimeAdmin, { tenantId, unitId });
+      } catch (cleanupError) {
+        throw new Error(
+          `Shared tenant runtime criado parcialmente e o rollback falhou: ${
+            cleanupError instanceof Error ? cleanupError.message : "erro desconhecido"
+          }. Erro original: ${error instanceof Error ? error.message : "erro desconhecido"}`,
+        );
+      }
+    }
+    throw error;
+  }
+
+  return tenant;
+}
+
 // Helper to handle client-side actions securely
 async function performAction(action: string, clientUrl: string, clientKey: string, params?: Record<string, unknown>) {
   if (!clientUrl || !clientKey) {
@@ -2095,6 +2279,13 @@ async function getRuntimeTenantId(
   const tenants = (runtimeTenants ?? []) as Array<{ id: string }>;
   if (tenants.length === 0) throw new Error("No tenant row found in runtime DB");
 
+  const { count: centralTenantsCount, error: centralTenantsError } = await supabaseAdmin
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
+
+  if (centralTenantsError) throw centralTenantsError;
+
   const activeUnitCounts = new Map<string, number>();
   for (const row of (runtimeUnits ?? []) as Array<{ tenant_id: string | null }>) {
     if (!row.tenant_id) continue;
@@ -2125,8 +2316,10 @@ async function getRuntimeTenantId(
   }
 
   const runtimeUnitsCount = perTenantSupportsUnits.reduce((sum, tenant) => sum + tenant.active_units_count, 0);
+  const supportsUnits = runtimeTenantsCount === 1 ? perTenantSupportsUnits[0].supports_units : anySupportUnits;
+  const shouldAutoBindRuntimeTenant = runtimeTenantsCount === 1 && (centralTenantsCount ?? 0) === 1;
 
-  if (runtimeTenantId) {
+  if (runtimeTenantId && shouldAutoBindRuntimeTenant) {
     const { error } = await supabaseAdmin
       .from("tenants")
       .update({
@@ -2134,7 +2327,7 @@ async function getRuntimeTenantId(
         runtime_topology: runtimeTopology,
         runtime_tenants_count: runtimeTenantsCount,
         runtime_units_count: runtimeUnitsCount,
-        supports_units: perTenantSupportsUnits[0].supports_units,
+        supports_units: supportsUnits,
       })
       .eq("project_id", projectId);
 
@@ -2143,9 +2336,11 @@ async function getRuntimeTenantId(
     const { error } = await supabaseAdmin
       .from("tenants")
       .update({
+        runtime_tenant_id: null,
         runtime_topology: runtimeTopology,
         runtime_tenants_count: runtimeTenantsCount,
         runtime_units_count: runtimeUnitsCount,
+        supports_units: supportsUnits,
       })
       .eq("project_id", projectId);
 
@@ -2153,10 +2348,10 @@ async function getRuntimeTenantId(
   }
 
   return {
-    runtime_tenant_id: runtimeTenantId,
+    runtime_tenant_id: shouldAutoBindRuntimeTenant ? runtimeTenantId : null,
     runtime_tenants_count: runtimeTenantsCount,
     runtime_units_count: runtimeUnitsCount,
-    supports_units: runtimeTenantsCount === 1 ? perTenantSupportsUnits[0].supports_units : anySupportUnits,
+    supports_units: supportsUnits,
     runtime_topology: runtimeTopology,
   };
 }
@@ -2304,6 +2499,19 @@ async function handleAction(clientId: string, action: string, params: Record<str
       throw createHttpError(`Service role key missing for project ${clientId}`, 400);
     }
     return await getRuntimeTenantId(supabaseAdmin, clientId, client.supabase_url, client.supabase_secret_keys);
+  }
+
+  if (action === "create-shared-tenant") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    return await createSharedTenantRuntime(
+      supabaseAdmin,
+      clientId,
+      client.supabase_url,
+      client.supabase_secret_keys,
+      params,
+    );
   }
 
   const migrationResult = await handleMigrationActions(action, clientId, client, supabaseAdmin, params);

@@ -6,6 +6,7 @@ import {
   linkIsolatedProjectRuntime,
   syncIsolatedProjectLicense,
 } from "@/services/runtime-tenants.service";
+import { deleteTenant } from "@/services/commercial-tenants.service";
 import {
   Dialog,
   DialogContent,
@@ -129,13 +130,22 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
           onCreated?.(result.id);
           handleClose();
         } catch (runtimeError) {
-          toast.warning(
-            `Tenant criado, mas o vínculo runtime não foi inicializado: ${
+          try {
+            await deleteTenant(result.id);
+          } catch (rollbackError) {
+            toast.error(
+              `Falha ao criar tenant no runtime e o rollback do registro central também falhou: ${
+                rollbackError instanceof Error ? rollbackError.message : "erro desconhecido"
+              }. Erro original: ${runtimeError instanceof Error ? runtimeError.message : "erro desconhecido"}`,
+            );
+            return;
+          }
+
+          toast.error(
+            `Falha ao criar tenant no runtime: ${
               runtimeError instanceof Error ? runtimeError.message : "erro desconhecido"
-            }. Acesse o projeto para resolver.`,
+            }. O registro central foi removido automaticamente.`,
           );
-          onCreated?.(result.id);
-          handleClose();
         }
         return;
       }

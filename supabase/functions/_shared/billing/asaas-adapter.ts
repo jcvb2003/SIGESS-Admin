@@ -88,7 +88,9 @@ export class AsaasAdapter implements BillingProvider {
   ) {}
 
   async ensureCustomer(input: EnsureCustomerInput): Promise<ProviderCustomer> {
-    // Etapa 1: buscar por externalReference (só se fornecido)
+    // Customer identity is tenant-scoped: externalReference is the canonical lookup key.
+    // cpfCnpj is a required customer attribute but must NOT be used to reuse a customer
+    // from another tenant — matching cpfCnpj alone does not authorize cross-tenant fusion.
     if (input.externalRef) {
       const found = await this.client.get<AsaasListResponse<AsaasCustomer>>(
         '/customers',
@@ -97,17 +99,6 @@ export class AsaasAdapter implements BillingProvider {
       if (found.data[0]) return { providerCustomerId: found.data[0].id };
     }
 
-    // Etapa 2: buscar por CPF/CNPJ.
-    // Intencional: CNPJ/CPF identifica a entidade jurídica — dois tenants com o mesmo
-    // documento são a mesma organização e devem compartilhar o mesmo customer no Asaas.
-    // billing_accounts distintos apontam para o mesmo provider_customer_id; isso é aceito.
-    const found2 = await this.client.get<AsaasListResponse<AsaasCustomer>>(
-      '/customers',
-      { cpfCnpj: input.cpfCnpj, limit: '1' },
-    );
-    if (found2.data[0]) return { providerCustomerId: found2.data[0].id };
-
-    // Criar novo cliente
     const res = await this.client.post<AsaasCustomer>('/customers', {
       name: input.name,
       cpfCnpj: input.cpfCnpj,

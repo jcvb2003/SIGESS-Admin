@@ -97,7 +97,10 @@ export class AsaasAdapter implements BillingProvider {
       if (found.data[0]) return { providerCustomerId: found.data[0].id };
     }
 
-    // Etapa 2: buscar por CPF/CNPJ
+    // Etapa 2: buscar por CPF/CNPJ.
+    // Intencional: CNPJ/CPF identifica a entidade jurídica — dois tenants com o mesmo
+    // documento são a mesma organização e devem compartilhar o mesmo customer no Asaas.
+    // billing_accounts distintos apontam para o mesmo provider_customer_id; isso é aceito.
     const found2 = await this.client.get<AsaasListResponse<AsaasCustomer>>(
       '/customers',
       { cpfCnpj: input.cpfCnpj, limit: '1' },
@@ -109,7 +112,7 @@ export class AsaasAdapter implements BillingProvider {
       name: input.name,
       cpfCnpj: input.cpfCnpj,
       email: input.email,
-      ...(input.phone ? { phone: input.phone } : {}),
+      ...(input.phone ? { mobilePhone: input.phone } : {}),
       ...(input.externalRef ? { externalReference: input.externalRef } : {}),
     });
     return { providerCustomerId: res.id };

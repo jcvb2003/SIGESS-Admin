@@ -56,6 +56,8 @@ export interface ParseWebhookInput {
 // ─── Contract ─────────────────────────────────────────────────────────────────
 
 export interface BillingProvider {
+  readonly name: string; // persisted in billing_accounts.provider — must be stable
+
   // Idempotent: creates or returns existing customer for the given cpfCnpj.
   ensureCustomer(input: EnsureCustomerInput): Promise<ProviderCustomer>;
 

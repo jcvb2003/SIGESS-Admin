@@ -24,6 +24,8 @@ const corsHeaders = {
 // Replaced by AsaasAdapter in Marco 4 — swap only this class.
 
 class StubBillingProvider implements BillingProvider {
+  readonly name = 'stub';
+
   async ensureCustomer(): Promise<ProviderCustomer> {
     return { providerCustomerId: `stub_cust_${crypto.randomUUID()}` };
   }
@@ -109,6 +111,22 @@ async function validateAdminSession(req: Request, db: SupabaseClient) {
   return user;
 }
 
+// ─── Domain validators ────────────────────────────────────────────────────────
+
+const VALID_INTERVALS = new Set(['monthly', 'annual']);
+const VALID_CHARGE_TYPES = new Set(['one_off', 'adjustment', 'tier_upgrade']);
+const VALID_BILLING_TYPES = new Set(['BOLETO', 'PIX', 'CREDIT_CARD']);
+
+function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): string {
+  if (typeof value !== 'string' || !allowed.has(value)) {
+    throw createHttpError(
+      `Invalid value for ${fieldName}: "${value}". Allowed: ${[...allowed].join(', ')}`,
+      400,
+    );
+  }
+  return value;
+}
+
 // ─── Action handlers ──────────────────────────────────────────────────────────
 
 async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
@@ -120,7 +138,6 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
 
   return svc.provisionBillingAccount(db, provider, {
     adminClientId: params.admin_client_id as string,
-    provider: 'asaas',
     planId: params.plan_id as string,
     customerInfo: {
       name: params.customer_name as string,
@@ -148,10 +165,12 @@ async function handleCreateSubscription(db: SupabaseClient, provider: BillingPro
   assert(params.amount, 'amount');
   assert(params.next_due_date, 'next_due_date');
 
+  const interval = assertDomain(params.interval, 'interval', VALID_INTERVALS);
+
   return svc.createInitialSubscription(db, provider, {
     adminClientId: params.admin_client_id as string,
     planId: params.plan_id as string,
-    interval: params.interval as 'monthly' | 'annual',
+    interval: interval as 'monthly' | 'annual',
     amount: params.amount as number,
     nextDueDate: params.next_due_date as string,
     description: params.description as string | undefined,
@@ -169,13 +188,20 @@ async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider,
   assert(params.due_date, 'due_date');
   assert(params.description, 'description');
 
+  const chargeType = params.type !== undefined
+    ? assertDomain(params.type, 'type', VALID_CHARGE_TYPES)
+    : 'one_off';
+  const billingType = params.billing_type !== undefined
+    ? assertDomain(params.billing_type, 'billing_type', VALID_BILLING_TYPES)
+    : 'BOLETO';
+
   return svc.createOneOffCharge(db, provider, {
     adminClientId: params.admin_client_id as string,
     amount: params.amount as number,
     dueDate: params.due_date as string,
     description: params.description as string,
-    type: (params.type as 'one_off' | 'adjustment' | 'tier_upgrade') ?? 'one_off',
-    billingType: (params.billing_type as 'BOLETO' | 'PIX') ?? 'BOLETO',
+    type: chargeType as 'one_off' | 'adjustment' | 'tier_upgrade',
+    billingType: billingType as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
   });
 }
 
@@ -211,7 +237,6 @@ async function handleGeneratePortalToken(db: SupabaseClient, params: Record<stri
 async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.admin_client_id, 'admin_client_id');
 
-  // Find the latest pending charge for this account and sync its status from provider
   const { data: account } = await db
     .from('billing_accounts')
     .select('id')
@@ -220,22 +245,54 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
 
   if (!account) throw createHttpError('billing_account not found', 404);
 
+  // Sync pending/overdue charges (up to 10)
   const { data: charges } = await db
     .from('billing_charges')
     .select('provider_charge_id')
     .eq('billing_account_id', account.id)
     .in('status', ['pending', 'overdue'])
     .order('due_date', { ascending: false })
-    .limit(5);
+    .limit(10);
 
-  const synced: string[] = [];
+  const syncedCharges: string[] = [];
   for (const charge of (charges ?? [])) {
     if (!charge.provider_charge_id) continue;
     await svc.syncChargeFromProvider(db, provider, charge.provider_charge_id);
-    synced.push(charge.provider_charge_id);
+    syncedCharges.push(charge.provider_charge_id);
   }
 
-  return { synced_charges: synced.length, provider_charge_ids: synced };
+  // Sync active subscription (if any)
+  const { data: activeSub } = await db
+    .from('billing_subscriptions')
+    .select('id, provider_subscription_id')
+    .eq('billing_account_id', account.id)
+    .in('billing_status', ['active', 'trialing', 'pending_payment', 'overdue'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let syncedSubscription: string | null = null;
+  if (activeSub?.provider_subscription_id) {
+    const snapshot = await provider.fetchSubscription({
+      providerSubscriptionId: activeSub.provider_subscription_id,
+    });
+    const { error } = await db
+      .from('billing_subscriptions')
+      .update({
+        billing_status: snapshot.billingStatus,
+        next_billing_date: snapshot.nextBillingDate ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', activeSub.id);
+    if (error) throw createHttpError(`billing_subscriptions update failed: ${error.message}`, 500);
+    syncedSubscription = activeSub.provider_subscription_id;
+  }
+
+  return {
+    synced_charges: syncedCharges.length,
+    provider_charge_ids: syncedCharges,
+    synced_subscription: syncedSubscription,
+  };
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────

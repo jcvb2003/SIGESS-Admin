@@ -8,7 +8,6 @@ import * as repo from './repositories.ts';
 
 export interface ProvisionBillingAccountInput {
   adminClientId: string;
-  provider: string;
   planId: string;
   customerInfo: {
     name: string;
@@ -33,7 +32,7 @@ export async function provisionBillingAccount(
 
   return repo.insertAccount(db, {
     admin_client_id: input.adminClientId,
-    provider: input.provider,
+    provider: provider.name,
     provider_customer_id: customer.providerCustomerId,
     lifecycle_status: 'draft',
     trial_starts_at: null,
@@ -194,7 +193,7 @@ export async function recordWebhookEvent(
 // ─── ApplyWebhookEvent ────────────────────────────────────────────────────────
 // Updates local state based on a parsed webhook event.
 // Call after recordWebhookEvent confirms the event is new.
-
+// paidAt must come from the provider event — never fabricate it.
 export async function applyWebhookEvent(
   db: SupabaseClient,
   eventId: string,
@@ -202,7 +201,7 @@ export async function applyWebhookEvent(
 ): Promise<void> {
   try {
     if (event.providerChargeId && event.chargeStatus) {
-      await _applyChargeStatus(db, event.providerChargeId, event.chargeStatus);
+      await _applyChargeStatus(db, event.providerChargeId, event.chargeStatus, event.paidAt);
     }
     if (event.providerSubscriptionId && event.subscriptionStatus) {
       await _applySubscriptionStatus(db, event.providerSubscriptionId, event.subscriptionStatus);
@@ -218,12 +217,16 @@ async function _applyChargeStatus(
   db: SupabaseClient,
   providerChargeId: string,
   status: BillingWebhookEvent['chargeStatus'],
+  paidAt?: string,
 ) {
   const charge = await repo.findChargeByProviderId(db, providerChargeId);
   if (!charge) return; // charge not tracked locally — safe to skip
 
   const patch: Parameters<typeof repo.updateCharge>[2] = { status };
-  if (status === 'paid') patch.paid_at = new Date().toISOString();
+  if (status === 'paid') {
+    // Use the provider's actual payment timestamp. Never fabricate with Date.now().
+    patch.paid_at = paidAt ?? null;
+  }
 
   await repo.updateCharge(db, charge.id, patch);
 
@@ -292,6 +295,21 @@ export async function issuePortalToken(
 ) {
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
+
+  // Guard: chargeId, when provided, must belong to this account.
+  // Prevents token for account A pointing at a charge from account B.
+  if (input.chargeId) {
+    const { data: charge, error } = await db
+      .from('billing_charges')
+      .select('id, billing_account_id')
+      .eq('id', input.chargeId)
+      .maybeSingle();
+    if (error) throw new Error(`billing_charges lookup failed: ${error.message}`);
+    if (!charge) throw new Error(`charge ${input.chargeId} not found`);
+    if (charge.billing_account_id !== account.id) {
+      throw new Error(`charge ${input.chargeId} does not belong to billing_account ${account.id}`);
+    }
+  }
 
   const expiresAt = new Date(
     Date.now() + (input.expiresInHours ?? 72) * 3_600_000,

@@ -1,6 +1,6 @@
 // Internal domain types — never Asaas-specific strings outside this layer.
 
-export type BillingProviderName = 'asaas';
+export type BillingProviderName = 'asaas' | 'stub';
 
 export type BillingAccountLifecycleStatus =
   | 'draft'
@@ -64,4 +64,5 @@ export interface BillingWebhookEvent {
   providerSubscriptionId?: string;
   chargeStatus?: BillingChargeStatus;
   subscriptionStatus?: BillingSubscriptionStatus;
+  paidAt?: string;                          // ISO datetime — use provider value, never fabricate
 }

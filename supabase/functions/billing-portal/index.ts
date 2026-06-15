@@ -53,26 +53,34 @@ Deno.serve(async (req: Request) => {
     .update({ accessed_at: new Date().toISOString() })
     .eq('id', pt.id);
 
-  // 3. Resolve dados da conta e tenant
+  // 3. Resolve dados da conta — obrigatório
   const { data: account } = await supabase
     .from('billing_accounts')
     .select('admin_client_id, current_plan_id')
     .eq('id', pt.billing_account_id)
     .single();
 
+  if (!account) {
+    console.error('billing-portal: billing_account não encontrado para token', pt.id);
+    return json({ ok: false, reason: 'account_not_found' }, 500);
+  }
+
   const { data: tenant } = await supabase
     .from('tenants')
     .select('nome_entidade')
-    .eq('id', account?.admin_client_id)
+    .eq('id', account.admin_client_id)
     .maybeSingle();
 
-  const { data: plan } = await supabase
-    .from('billing_plans')
-    .select('name')
-    .eq('id', account?.current_plan_id)
-    .maybeSingle();
+  if (!tenant) {
+    console.error('billing-portal: tenant não encontrado para account', pt.billing_account_id);
+    return json({ ok: false, reason: 'tenant_not_found' }, 500);
+  }
 
-  // 4. Resolve charge (se token for charge-specific)
+  const { data: plan } = account.current_plan_id
+    ? await supabase.from('billing_plans').select('name').eq('id', account.current_plan_id).maybeSingle()
+    : { data: null };
+
+  // 4. Resolve charge (se token for charge-specific) — obrigatório quando charge_id presente
   let amount: number | null = null;
   let due_date: string | null = null;
   let payment_url: string | null = null;
@@ -84,16 +92,19 @@ Deno.serve(async (req: Request) => {
       .eq('id', pt.charge_id)
       .maybeSingle();
 
-    if (charge) {
-      amount = charge.amount;
-      due_date = charge.due_date;
-      payment_url = charge.payment_url;
+    if (!charge) {
+      console.error('billing-portal: billing_charge não encontrado para token', pt.id, 'charge_id', pt.charge_id);
+      return json({ ok: false, reason: 'charge_not_found' }, 500);
     }
+
+    amount = charge.amount;
+    due_date = charge.due_date;
+    payment_url = charge.payment_url;
   }
 
   return json({
     ok: true,
-    tenant_name: tenant?.nome_entidade ?? null,
+    tenant_name: tenant.nome_entidade,
     plan_name: plan?.name ?? null,
     amount,
     due_date,

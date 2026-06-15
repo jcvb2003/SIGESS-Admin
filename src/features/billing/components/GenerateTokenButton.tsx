@@ -28,11 +28,16 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
     });
   };
 
-  const portalUrl = result
-    ? `${import.meta.env.VITE_WEB_BASE_URL}/pay/${result.token}`
+  const webBaseUrl = import.meta.env.VITE_WEB_BASE_URL as string | undefined;
+  const portalUrl = result && webBaseUrl
+    ? `${webBaseUrl}/pay/${result.token}`
     : null;
 
   const handleCopy = () => {
+    if (!webBaseUrl) {
+      toast.error('VITE_WEB_BASE_URL não configurado — link indisponível');
+      return;
+    }
     if (!portalUrl) return;
     navigator.clipboard.writeText(portalUrl).then(() => {
       toast.success('Link copiado para a área de transferência');
@@ -54,9 +59,15 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <code className="block break-all rounded bg-background px-2 py-1.5 text-xs font-mono">
-          {portalUrl}
-        </code>
+        {portalUrl ? (
+          <code className="block break-all rounded bg-background px-2 py-1.5 text-xs font-mono">
+            {portalUrl}
+          </code>
+        ) : (
+          <p className="rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+            VITE_WEB_BASE_URL não configurado
+          </p>
+        )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted-foreground">
             Expira em {format(new Date(result.expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}

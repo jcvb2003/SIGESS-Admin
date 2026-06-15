@@ -62,7 +62,7 @@ export default function ClienteDetailPage() {
     try {
       const metadata = await syncRuntime.mutateAsync();
       setRuntimeMetadata(metadata);
-      toast.success("Metadados de runtime sincronizados.");
+      toast.success("Snapshot do runtime sincronizado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao sincronizar runtime.");
     }

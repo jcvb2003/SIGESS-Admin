@@ -70,15 +70,18 @@ export function ClienteCommercialCard({
 
   return (
     <Card className="p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Dados Comerciais
-        </p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Dados Comerciais
+          </p>
         <Button variant="outline" size="sm" onClick={onSyncRuntime} disabled={isSyncingRuntime}>
           {isSyncingRuntime ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
           Sincronizar runtime
         </Button>
       </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Sincroniza o snapshot do projeto runtime. Em projetos compartilhados, nao altera o vinculo tenant-a-tenant salvo no Admin.
+      </p>
       <div className="divide-y divide-border/40">
         <InfoRow label="Codigo">
           <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs">{cliente.tenant_code}</code>

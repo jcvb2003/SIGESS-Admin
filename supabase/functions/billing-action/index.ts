@@ -67,11 +67,11 @@ class StubBillingProvider implements BillingProvider {
   }
 }
 
-function createProvider(config: { provider: string; asaasApiKey?: string; asaasSandbox: boolean; asaasWebhookToken?: string }): BillingProvider {
+function createProvider(config: { provider: string; apiKey?: string; sandbox: boolean; webhookToken?: string }): BillingProvider {
   if (config.provider === 'stub') return new StubBillingProvider();
   if (config.provider === 'asaas') {
-    if (!config.asaasApiKey) throw createHttpError('ASAAS_API_KEY não configurado — configure via Admin > Settings', 500);
-    return new AsaasAdapter(new AsaasClient(config.asaasApiKey, config.asaasSandbox), config.asaasWebhookToken);
+    if (!config.apiKey) throw createHttpError('ASAAS_API_KEY não configurado — configure via Admin > Settings', 500);
+    return new AsaasAdapter(new AsaasClient(config.apiKey, config.sandbox), config.webhookToken);
   }
   throw new Error(`Unknown BILLING_PROVIDER: ${config.provider}. Configure via Admin > Settings.`);
 }
@@ -474,7 +474,7 @@ Deno.serve(async (req: Request) => {
 
     // Provider-dependent actions
     const config = await loadBillingProviderConfig(db);
-    log('info', 'billing-action', 'provider config', { provider: config.provider, source: config.source, sandbox: config.asaasSandbox });
+    log('info', 'billing-action', 'provider config', { provider: config.provider, source: config.source, sandbox: config.sandbox });
     const provider = createProvider(config);
 
     switch (action) {

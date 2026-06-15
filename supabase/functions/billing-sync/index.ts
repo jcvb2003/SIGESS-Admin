@@ -130,17 +130,17 @@ Deno.serve(async (req: Request) => {
       log('info', 'billing-sync', 'start', { action });
 
       const config = await loadBillingProviderConfig(db);
-      log('info', 'billing-sync', 'provider config', { provider: config.provider, source: config.source, sandbox: config.asaasSandbox });
+      log('info', 'billing-sync', 'provider config', { provider: config.provider, source: config.source, sandbox: config.sandbox });
 
       if (config.provider !== 'asaas') {
         log('warn', 'billing-sync', 'provider not asaas — skipping sync', { provider: config.provider });
         return json({ synced: 0, total: 0, results: [], skipped: true });
       }
-      if (!config.asaasApiKey) {
-        throw createHttpError('ASAAS_API_KEY não configurado — configure via Admin > Settings', 500);
+      if (!config.apiKey) {
+        throw createHttpError('API key não configurada — configure via Admin > Settings', 500);
       }
 
-      const provider = new AsaasAdapter(new AsaasClient(config.asaasApiKey, config.asaasSandbox));
+      const provider = new AsaasAdapter(new AsaasClient(config.apiKey, config.sandbox));
       return await handleSyncAll(db, provider, t0);
     }
 

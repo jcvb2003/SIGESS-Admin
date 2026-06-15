@@ -56,15 +56,15 @@ Deno.serve(async (req: Request) => {
     log('warn', 'billing-webhook', 'provider not asaas — ignoring webhook', { provider: config.provider });
     return json({ received: true, ignored: true, reason: 'provider_not_asaas' });
   }
-  if (!config.asaasApiKey) {
-    log('error', 'billing-webhook', 'ASAAS_API_KEY not configured', {});
+  if (!config.apiKey) {
+    log('error', 'billing-webhook', 'API key not configured', {});
     return json({ error: 'Provider not configured' }, 500);
   }
 
   // Step 3: instantiate provider with the same config that was loaded
   const provider = new AsaasAdapter(
-    new AsaasClient(config.asaasApiKey, config.asaasSandbox),
-    config.asaasWebhookToken,
+    new AsaasClient(config.apiKey, config.sandbox),
+    config.webhookToken,
   );
 
   const rawBody = await req.text();

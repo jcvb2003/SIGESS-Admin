@@ -4,9 +4,9 @@ import { log } from './logger.ts';
 
 export interface BillingProviderConfig {
   provider: string;
-  asaasApiKey?: string;
-  asaasSandbox: boolean;
-  asaasWebhookToken?: string;
+  apiKey?: string;
+  sandbox: boolean;
+  webhookToken?: string;
   source: 'db' | 'env';
 }
 
@@ -21,9 +21,9 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
     if (!error && data?.provider) {
       return {
         provider: data.provider,
-        asaasApiKey: data.asaas_api_key ?? undefined,
-        asaasSandbox: data.asaas_sandbox,
-        asaasWebhookToken: data.asaas_webhook_token ?? undefined,
+        apiKey: data.asaas_api_key ?? undefined,
+        sandbox: data.asaas_sandbox,
+        webhookToken: data.asaas_webhook_token ?? undefined,
         source: 'db',
       };
     }
@@ -38,11 +38,11 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
     // @ts-expect-error: Deno global
     provider: Deno.env.get('BILLING_PROVIDER') ?? 'stub',
     // @ts-expect-error: Deno global
-    asaasApiKey: Deno.env.get('ASAAS_API_KEY'),
+    apiKey: Deno.env.get('ASAAS_API_KEY'),
     // @ts-expect-error: Deno global
-    asaasSandbox: Deno.env.get('ASAAS_SANDBOX') !== 'false',
+    sandbox: Deno.env.get('ASAAS_SANDBOX') !== 'false',
     // @ts-expect-error: Deno global
-    asaasWebhookToken: Deno.env.get('ASAAS_WEBHOOK_TOKEN'),
+    webhookToken: Deno.env.get('ASAAS_WEBHOOK_TOKEN'),
     source: 'env',
   };
 }

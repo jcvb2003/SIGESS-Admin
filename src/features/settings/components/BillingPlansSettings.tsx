@@ -200,7 +200,12 @@ export function BillingPlansSettings() {
       await deletePlan.mutateAsync(plan.id);
       toast.success("Plano excluído");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao excluir plano");
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("violates foreign key") || msg.includes("foreign key constraint")) {
+        toast.error("Plano em uso — desative-o em vez de excluir.");
+      } else {
+        toast.error(msg || "Erro ao excluir plano");
+      }
     }
   };
 

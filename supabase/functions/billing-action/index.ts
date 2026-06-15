@@ -148,7 +148,7 @@ async function trySyncSummary(db: SupabaseClient, adminClientId: string): Promis
 async function handleGetProviderSettings(db: SupabaseClient) {
   const { data, error } = await db
     .from('billing_provider_settings')
-    .select('provider, asaas_sandbox, asaas_api_key, asaas_webhook_token, updated_at, updated_by')
+    .select('provider, sandbox, api_key, webhook_token, updated_at, updated_by')
     .eq('id', 'default')
     .maybeSingle();
 
@@ -166,7 +166,7 @@ async function handleGetProviderSettings(db: SupabaseClient) {
     const envSandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false';
     return {
       provider: envProvider,
-      asaas_sandbox: envSandbox,
+      sandbox: envSandbox,
       api_key_configured: Boolean(envApiKey),
       webhook_token_configured: Boolean(envWebhookToken),
       updated_at: null,
@@ -177,9 +177,9 @@ async function handleGetProviderSettings(db: SupabaseClient) {
 
   return {
     provider: data.provider,
-    asaas_sandbox: data.asaas_sandbox,
-    api_key_configured: data.asaas_api_key !== null && data.asaas_api_key !== '',
-    webhook_token_configured: data.asaas_webhook_token !== null && data.asaas_webhook_token !== '',
+    sandbox: data.sandbox,
+    api_key_configured: data.api_key !== null && data.api_key !== '',
+    webhook_token_configured: data.webhook_token !== null && data.webhook_token !== '',
     updated_at: data.updated_at,
     updated_by: data.updated_by,
     source: 'db',
@@ -192,22 +192,22 @@ async function handleUpsertProviderSettings(
   params: Record<string, unknown>,
 ) {
   if (typeof params.provider !== 'string') throw createHttpError('Missing required field: provider', 400);
-  if (typeof params.asaas_sandbox !== 'boolean') throw createHttpError('Missing required field: asaas_sandbox', 400);
+  if (typeof params.sandbox !== 'boolean') throw createHttpError('Missing required field: sandbox', 400);
 
   const payload: Record<string, unknown> = {
     id: 'default',
     provider: params.provider,
-    asaas_sandbox: params.asaas_sandbox,
+    sandbox: params.sandbox,
     updated_at: new Date().toISOString(),
     updated_by: user.email ?? null,
   };
 
   // Only include secrets if the caller sent a non-empty string — never overwrite with empty/null
-  if (typeof params.asaas_api_key === 'string' && params.asaas_api_key.trim()) {
-    payload.asaas_api_key = params.asaas_api_key.trim();
+  if (typeof params.api_key === 'string' && params.api_key.trim()) {
+    payload.api_key = params.api_key.trim();
   }
-  if (typeof params.asaas_webhook_token === 'string' && params.asaas_webhook_token.trim()) {
-    payload.asaas_webhook_token = params.asaas_webhook_token.trim();
+  if (typeof params.webhook_token === 'string' && params.webhook_token.trim()) {
+    payload.webhook_token = params.webhook_token.trim();
   }
 
   const { error } = await db.from('billing_provider_settings').upsert(payload, { onConflict: 'id' });
@@ -215,7 +215,7 @@ async function handleUpsertProviderSettings(
 
   log('info', 'billing-action', 'upsert_provider_settings', {
     provider: params.provider,
-    sandbox: params.asaas_sandbox,
+    sandbox: params.sandbox,
     updated_by: user.email ?? null,
   });
 

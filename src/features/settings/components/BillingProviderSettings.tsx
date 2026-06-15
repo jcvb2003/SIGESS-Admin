@@ -46,7 +46,7 @@ export function BillingProviderSettings() {
 
   const handleEdit = () => {
     setProvider(meta?.provider ?? "stub");
-    setSandbox(meta?.asaas_sandbox ?? true);
+    setSandbox(meta?.sandbox ?? true);
     setApiKey("");
     setWebhookToken("");
     setEditing(true);
@@ -61,11 +61,11 @@ export function BillingProviderSettings() {
 
     const input: UpsertProviderSettingsInput = {
       provider,
-      asaas_sandbox: sandbox,
+      sandbox,
     };
     // Only include secrets if the user actually typed something
-    if (apiKey.trim()) input.asaas_api_key = apiKey.trim();
-    if (webhookToken.trim()) input.asaas_webhook_token = webhookToken.trim();
+    if (apiKey.trim()) input.api_key = apiKey.trim();
+    if (webhookToken.trim()) input.webhook_token = webhookToken.trim();
 
     try {
       await upsert.mutateAsync(input);
@@ -110,7 +110,7 @@ export function BillingProviderSettings() {
           {meta?.provider === "asaas" && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Modo</span>
-              <span>{meta.asaas_sandbox ? "Sandbox" : "Produção"}</span>
+              <span>{meta.sandbox ? "Sandbox" : "Produção"}</span>
             </div>
           )}
           <div className="flex items-center justify-between">

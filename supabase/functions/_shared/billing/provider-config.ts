@@ -14,16 +14,16 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
   try {
     const { data, error } = await db
       .from('billing_provider_settings')
-      .select('provider, asaas_api_key, asaas_sandbox, asaas_webhook_token')
+      .select('provider, api_key, sandbox, webhook_token')
       .eq('id', 'default')
       .maybeSingle();
 
     if (!error && data?.provider) {
       return {
         provider: data.provider,
-        apiKey: data.asaas_api_key ?? undefined,
-        sandbox: data.asaas_sandbox,
-        webhookToken: data.asaas_webhook_token ?? undefined,
+        apiKey: data.api_key ?? undefined,
+        sandbox: data.sandbox,
+        webhookToken: data.webhook_token ?? undefined,
         source: 'db',
       };
     }

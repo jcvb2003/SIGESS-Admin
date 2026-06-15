@@ -1,16 +1,3 @@
-export type ExportRun = {
-  id: string;
-  run_id: string | null;
-  tenant_code: string | null;
-  tenant_name: string | null;
-  tabela: string | null;
-  status: "running" | "success" | "failed" | "skipped" | null;
-  skip_reason: string | null;
-  file_size_bytes: number | null;
-  error_detail: string | null;
-  executed_at: string | null;
-};
-
 export type SyncableSchemaDrift = {
   objectType: "view" | "index" | "policy" | "grant" | "auth_config" | "function" | "function_grant" | "trigger" | "column" | "constraint" | "rls_state" | "extensions" | "table" | "enum_type" | "edge_functions";
   schema: string;

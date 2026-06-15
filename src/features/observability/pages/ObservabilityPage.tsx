@@ -31,7 +31,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useObservability } from "../hooks/useObservability";
-import { ExportStatusCard } from "../components/ExportStatusCard";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 
 function CopyButton({ text }: { text: string }) {
@@ -56,8 +55,6 @@ export default function ObservabilityPage() {
   const { data: projects = [] } = useProjects();
 
   const {
-    clients,
-    exportRuns,
     adHocReferenceId,
     setAdHocReferenceId,
     adHocTargetId,
@@ -66,7 +63,6 @@ export default function ObservabilityPage() {
     isRunningAdHocAudit,
     handleRunAdHocAudit,
     handleClearAdHoc,
-    isLoadingExports,
     isRefreshing,
     isPreparingDrift,
     isApplyingDrift,
@@ -116,30 +112,10 @@ export default function ObservabilityPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="exports" className="space-y-6">
+        <Tabs defaultValue="schema" className="space-y-6">
           <TabsList className="bg-secondary/60">
-            <TabsTrigger value="exports">Exportação (JSONL)</TabsTrigger>
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="exports" className="space-y-4">
-            {isLoadingExports ? (
-              <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed bg-secondary/10">
-                <Loader2 className="mr-3 h-6 w-6 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Carregando logs de exportação...</span>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {clients.map((client) => (
-                  <ExportStatusCard 
-                    key={`export-${client.id}`} 
-                    client={client} 
-                    exportRuns={exportRuns} 
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
 
           <TabsContent value="schema" className="space-y-4">
             {/* Seletor de comparação */}

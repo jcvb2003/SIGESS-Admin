@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { useClients } from "@/features/clients";
 import { proxyAction } from "@/services/clients.service";
 import { buildSchemaSyncActionKey } from "../utils/drift-utils";
 import type {
-  ExportRun,
   SchemaDriftPreview,
   SchemaDriftApplyResult,
   SchemaDriftOperation,
@@ -201,7 +199,6 @@ function sortOperations(operations: SyncableSchemaDrift[]) {
 
 export function useObservability() {
   const queryClient = useQueryClient();
-  const { data: clients = [] } = useClients();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [driftPreview, setDriftPreview] = useState<SchemaDriftPreview | null>(null);
   const [isPreparingDrift, setIsPreparingDrift] = useState<string | null>(null);
@@ -213,23 +210,6 @@ export function useObservability() {
   const [adHocTargetId, setAdHocTargetId] = useState<string | null>(null);
   const [adHocResults, setAdHocResults] = useState<ProjectSchemaStatus[] | null>(null);
   const [isRunningAdHocAudit, setIsRunningAdHocAudit] = useState(false);
-
-  const queryExports = useQuery<ExportRun[]>({
-    queryKey: ["global-export-runs"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("export_runs")
-        .select("*")
-        .order("executed_at", { ascending: false })
-        .limit(200);
-
-      if (error) throw error;
-      return (data as unknown as ExportRun[]) ?? [];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-  const exportRuns = queryExports.data ?? [];
-  const isLoadingExports = queryExports.isLoading;
 
   const handleRunAdHocAudit = async () => {
     if (!adHocReferenceId) return;
@@ -275,7 +255,6 @@ export function useObservability() {
     setIsRefreshing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: ["clients"] });
-      await queryClient.invalidateQueries({ queryKey: ["global-export-runs"] });
       handleClearAdHoc();
       toast.success("Observabilidade atualizada.");
     } finally {
@@ -523,8 +502,6 @@ export function useObservability() {
   };
 
   return {
-    clients,
-    exportRuns,
     adHocReferenceId,
     setAdHocReferenceId,
     adHocTargetId,
@@ -533,7 +510,6 @@ export function useObservability() {
     isRunningAdHocAudit,
     handleRunAdHocAudit,
     handleClearAdHoc,
-    isLoadingExports,
     isRefreshing,
     isPreparingDrift,
     isApplyingDrift,

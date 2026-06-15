@@ -151,6 +151,7 @@ export interface TenantUnit {
   city: string | null;
   state: string | null;
   is_active: boolean;
+  is_technical: boolean;
   created_at: string;
   updated_at: string;
 }

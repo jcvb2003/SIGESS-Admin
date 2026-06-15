@@ -142,7 +142,7 @@ export function UnitsTab({ project, tenantId }: UnitsTabProps) {
 
   const createUnitMutation = useMutation({
     mutationFn: (payload: UnitFormState) =>
-      createSharedTenantUnit(project, { tenant_id: tenantId, code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null, is_active: true }),
+      createSharedTenantUnit(project, { tenant_id: tenantId, code: payload.code.trim().toLowerCase(), name: payload.name.trim(), city: payload.city.trim() || null, state: payload.state.trim() || null, is_active: true, is_technical: false }),
     onSuccess: () => { toast({ title: "Polo criado" }); queryClient.invalidateQueries({ queryKey: unitsKey }); handleCloseUnit(); },
     onError: (e) => toast({ title: "Erro ao criar polo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" }),
   });
@@ -335,9 +335,16 @@ export function UnitsTab({ project, tenantId }: UnitsTabProps) {
                         </p>
                       </div>
                     </div>
-                    <Badge variant={unit.is_active ? "default" : "secondary"}>
-                      {unit.is_active ? "Ativo" : "Inativo"}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      {unit.is_technical && (
+                        <Badge variant="outline" className="border-primary/40 text-primary text-[10px]">
+                          Sede
+                        </Badge>
+                      )}
+                      <Badge variant={unit.is_active ? "default" : "secondary"}>
+                        {unit.is_active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Localidade */}
@@ -382,22 +389,24 @@ export function UnitsTab({ project, tenantId }: UnitsTabProps) {
                       <UserPlus className="h-4 w-4" />
                       Novo Operador
                     </Button>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEditUnit(unit)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10"
-                        onClick={() => setPendingDeleteUnit(unit)}
-                        disabled={deleteUnitMutation.isPending}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir
-                      </Button>
-                    </div>
+                    {!unit.is_technical && (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditUnit(unit)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => setPendingDeleteUnit(unit)}
+                          disabled={deleteUnitMutation.isPending}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Excluir
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </Card>
               );

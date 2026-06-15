@@ -1189,6 +1189,28 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION public.prevent_technical_unit_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.is_technical THEN
+    RAISE EXCEPTION 'Não é permitido excluir a unidade técnica (Sede) do tenant.';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+
+CREATE FUNCTION public.prevent_technical_unit_demotion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.is_technical AND NOT NEW.is_technical THEN
+    RAISE EXCEPTION 'Não é permitido reclassificar uma unidade técnica (Sede).';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1534,6 +1556,7 @@ CREATE TABLE public.tenant_units (
     city text,
     state text,
     is_active boolean DEFAULT true NOT NULL,
+    is_technical boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1876,6 +1899,10 @@ CREATE INDEX user_unit_memberships_user_id_idx ON public.user_unit_memberships U
 CREATE TRIGGER set_tenant_users_updated_at BEFORE UPDATE ON public.tenant_users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER tenant_units_set_updated_at BEFORE UPDATE ON public.tenant_units FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER no_delete_technical_unit BEFORE DELETE ON public.tenant_units FOR EACH ROW EXECUTE FUNCTION public.prevent_technical_unit_delete();
+
+CREATE TRIGGER no_demote_technical_unit BEFORE UPDATE ON public.tenant_units FOR EACH ROW EXECUTE FUNCTION public.prevent_technical_unit_demotion();
 
 CREATE TRIGGER tenants_set_updated_at BEFORE UPDATE ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 

@@ -28,11 +28,14 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
     });
   };
 
+  const portalUrl = result
+    ? `${import.meta.env.VITE_WEB_BASE_URL}/pay/${result.token}`
+    : null;
+
   const handleCopy = () => {
-    if (!result) return;
-    // TODO Marco 7: substituir por URL pública do portal
-    navigator.clipboard.writeText(result.token).then(() => {
-      toast.success('Token copiado para a área de transferência');
+    if (!portalUrl) return;
+    navigator.clipboard.writeText(portalUrl).then(() => {
+      toast.success('Link copiado para a área de transferência');
     });
   };
 
@@ -52,7 +55,7 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
           </Button>
         </div>
         <code className="block break-all rounded bg-background px-2 py-1.5 text-xs font-mono">
-          {result.token}
+          {portalUrl}
         </code>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted-foreground">
@@ -60,7 +63,7 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
           </span>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleCopy}>
             <Copy className="mr-1.5 h-3 w-3" />
-            Copiar token
+            Copiar link
           </Button>
         </div>
       </div>

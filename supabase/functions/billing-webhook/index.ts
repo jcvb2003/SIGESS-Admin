@@ -5,6 +5,7 @@ import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
 import { log } from '../_shared/billing/logger.ts';
+import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
 
 // Eventos do Asaas que o sistema processa. Qualquer outro retorna 200 imediatamente
 // sem gravar em billing_events — evita poluição do inbox e ciclos de retry sem sentido.
@@ -38,18 +39,6 @@ Deno.serve(async (req: Request) => {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
-  // @ts-expect-error: Deno global
-  const apiKey = Deno.env.get('ASAAS_API_KEY');
-  if (!apiKey) {
-    console.error('[billing-webhook] ASAAS_API_KEY not configured');
-    return json({ error: 'Provider not configured' }, 500);
-  }
-
-  // @ts-expect-error: Deno global
-  const sandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false';
-  // @ts-expect-error: Deno global
-  const webhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
-
   const db = createClient(
     // @ts-expect-error: Deno global
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -58,17 +47,35 @@ Deno.serve(async (req: Request) => {
     { auth: { persistSession: false } },
   );
 
-  const rawBody = await req.text();
+  // Step 1: load config — single source for this entire request
+  const config = await loadBillingProviderConfig(db);
+  log('info', 'billing-webhook', 'config loaded', { provider: config.provider, source: config.source });
 
+  // Step 2: validate that asaas is actually configured when expected
+  if (config.provider !== 'asaas') {
+    log('warn', 'billing-webhook', 'provider not asaas — ignoring webhook', { provider: config.provider });
+    return json({ received: true, ignored: true, reason: 'provider_not_asaas' });
+  }
+  if (!config.asaasApiKey) {
+    log('error', 'billing-webhook', 'ASAAS_API_KEY not configured', {});
+    return json({ error: 'Provider not configured' }, 500);
+  }
+
+  // Step 3: instantiate provider with the same config that was loaded
+  const provider = new AsaasAdapter(
+    new AsaasClient(config.asaasApiKey, config.asaasSandbox),
+    config.asaasWebhookToken,
+  );
+
+  const rawBody = await req.text();
   const headers: Record<string, string> = {};
   req.headers.forEach((v, k) => { headers[k] = v; });
-
-  const provider = new AsaasAdapter(new AsaasClient(apiKey, sandbox), webhookToken);
 
   let eventId: string | undefined;
   const t0 = Date.now();
 
   try {
+    // Step 4: validate token + parse event (uses the webhook token from config above)
     const event = provider.parseWebhookEvent({ rawBody, headers });
 
     if (!SUPPORTED_ASAAS_EVENTS.has(event.rawEventType)) {
@@ -78,6 +85,7 @@ Deno.serve(async (req: Request) => {
 
     const payload = JSON.parse(rawBody) as Record<string, unknown>;
 
+    // Step 5: record + apply
     const { alreadyProcessed, eventId: eid } = await svc.recordWebhookEvent(db, {
       ...event,
       provider: provider.name,

@@ -15,6 +15,7 @@ import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-servi
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import { log } from '../_shared/billing/logger.ts';
+import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,6 @@ const corsHeaders = {
 };
 
 // ─── Stub provider ────────────────────────────────────────────────────────────
-// Replaced by AsaasAdapter in Marco 4 — swap only this class.
 
 class StubBillingProvider implements BillingProvider {
   readonly name = 'stub';
@@ -67,17 +67,13 @@ class StubBillingProvider implements BillingProvider {
   }
 }
 
-function createProvider(): BillingProvider {
-  const providerName = Deno.env.get('BILLING_PROVIDER') ?? 'stub';
-  if (providerName === 'stub') return new StubBillingProvider();
-  if (providerName === 'asaas') {
-    const apiKey = Deno.env.get('ASAAS_API_KEY');
-    if (!apiKey) throw createHttpError('ASAAS_API_KEY not configured', 500);
-    const sandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false'; // default: sandbox=true
-    const webhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
-    return new AsaasAdapter(new AsaasClient(apiKey, sandbox), webhookToken);
+function createProvider(config: { provider: string; asaasApiKey?: string; asaasSandbox: boolean; asaasWebhookToken?: string }): BillingProvider {
+  if (config.provider === 'stub') return new StubBillingProvider();
+  if (config.provider === 'asaas') {
+    if (!config.asaasApiKey) throw createHttpError('ASAAS_API_KEY não configurado — configure via Admin > Settings', 500);
+    return new AsaasAdapter(new AsaasClient(config.asaasApiKey, config.asaasSandbox), config.asaasWebhookToken);
   }
-  throw new Error(`Unknown BILLING_PROVIDER: ${providerName}. Configure BILLING_PROVIDER=asaas.`);
+  throw new Error(`Unknown BILLING_PROVIDER: ${config.provider}. Configure via Admin > Settings.`);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -139,8 +135,6 @@ function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): 
 
 // ─── Summary sync helper ──────────────────────────────────────────────────────
 
-// Projection errors must never roll back the Admin DB mutation.
-// Log and continue — the next billing-sync cycle will reconcile.
 async function trySyncSummary(db: SupabaseClient, adminClientId: string): Promise<void> {
   try {
     await syncBillingSummaryToRuntime(db, adminClientId);
@@ -149,7 +143,86 @@ async function trySyncSummary(db: SupabaseClient, adminClientId: string): Promis
   }
 }
 
-// ─── Action handlers ──────────────────────────────────────────────────────────
+// ─── Global config action handlers ───────────────────────────────────────────
+
+async function handleGetProviderSettings(db: SupabaseClient) {
+  const { data, error } = await db
+    .from('billing_provider_settings')
+    .select('provider, asaas_sandbox, asaas_api_key, asaas_webhook_token, updated_at, updated_by')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  if (error) throw createHttpError(`provider_settings read failed: ${error.message}`, 500);
+
+  if (!data) {
+    // Fallback metadata from env — no DB row yet
+    // @ts-expect-error: Deno global
+    const envProvider = Deno.env.get('BILLING_PROVIDER') ?? 'stub';
+    // @ts-expect-error: Deno global
+    const envApiKey = Deno.env.get('ASAAS_API_KEY');
+    // @ts-expect-error: Deno global
+    const envWebhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
+    // @ts-expect-error: Deno global
+    const envSandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false';
+    return {
+      provider: envProvider,
+      asaas_sandbox: envSandbox,
+      api_key_configured: Boolean(envApiKey),
+      webhook_token_configured: Boolean(envWebhookToken),
+      updated_at: null,
+      updated_by: null,
+      source: 'env',
+    };
+  }
+
+  return {
+    provider: data.provider,
+    asaas_sandbox: data.asaas_sandbox,
+    api_key_configured: data.asaas_api_key !== null && data.asaas_api_key !== '',
+    webhook_token_configured: data.asaas_webhook_token !== null && data.asaas_webhook_token !== '',
+    updated_at: data.updated_at,
+    updated_by: data.updated_by,
+    source: 'db',
+  };
+}
+
+async function handleUpsertProviderSettings(
+  db: SupabaseClient,
+  user: { email?: string },
+  params: Record<string, unknown>,
+) {
+  if (typeof params.provider !== 'string') throw createHttpError('Missing required field: provider', 400);
+  if (typeof params.asaas_sandbox !== 'boolean') throw createHttpError('Missing required field: asaas_sandbox', 400);
+
+  const payload: Record<string, unknown> = {
+    id: 'default',
+    provider: params.provider,
+    asaas_sandbox: params.asaas_sandbox,
+    updated_at: new Date().toISOString(),
+    updated_by: user.email ?? null,
+  };
+
+  // Only include secrets if the caller sent a non-empty string — never overwrite with empty/null
+  if (typeof params.asaas_api_key === 'string' && params.asaas_api_key.trim()) {
+    payload.asaas_api_key = params.asaas_api_key.trim();
+  }
+  if (typeof params.asaas_webhook_token === 'string' && params.asaas_webhook_token.trim()) {
+    payload.asaas_webhook_token = params.asaas_webhook_token.trim();
+  }
+
+  const { error } = await db.from('billing_provider_settings').upsert(payload, { onConflict: 'id' });
+  if (error) throw createHttpError(`provider_settings upsert failed: ${error.message}`, 500);
+
+  log('info', 'billing-action', 'upsert_provider_settings', {
+    provider: params.provider,
+    sandbox: params.asaas_sandbox,
+    updated_by: user.email ?? null,
+  });
+
+  return { ok: true };
+}
+
+// ─── Account action handlers ──────────────────────────────────────────────────
 
 async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.admin_client_id, 'admin_client_id');
@@ -215,7 +288,6 @@ async function handleCancelSubscription(db: SupabaseClient, provider: BillingPro
   assert(params.subscription_id, 'subscription_id');
   const subId = params.subscription_id as string;
 
-  // Resolve admin_client_id before mutation to sync summary afterward
   const { data: sub } = await db
     .from('billing_subscriptions')
     .select('billing_account_id')
@@ -259,7 +331,6 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
   assert(params.provider_charge_id, 'provider_charge_id');
   const providerChargeId = params.provider_charge_id as string;
 
-  // Resolve admin_client_id before mutation to sync summary afterward
   const { data: charge } = await db
     .from('billing_charges')
     .select('billing_account_id')
@@ -269,18 +340,14 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
     ? await db.from('billing_accounts').select('admin_client_id').eq('id', charge.billing_account_id).maybeSingle()
     : { data: null };
 
-  // Cancel at provider level
   await provider.cancelCharge({ providerChargeId });
 
-  // Update local record
   const { error } = await db
     .from('billing_charges')
     .update({ status: 'cancelled', updated_at: new Date().toISOString() })
     .eq('provider_charge_id', providerChargeId);
   if (error) throw createHttpError(`billing_charges update failed: ${error.message}`, 500);
 
-  // Sync: the urgentCharge query in buildBillingSummaryProjection will re-evaluate
-  // remaining open charges — if another charge is still pending, hasPendingCharge stays true.
   if (account?.admin_client_id) await trySyncSummary(db, account.admin_client_id);
 
   return { cancelled: true };
@@ -295,7 +362,6 @@ async function handleGeneratePortalToken(db: SupabaseClient, params: Record<stri
     expiresInHours: params.expires_in_hours as number | undefined,
   });
 
-  // Return only the token value — never log it
   return { token: token.token, expires_at: token.expires_at };
 }
 
@@ -310,7 +376,6 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
 
   if (!account) throw createHttpError('billing_account not found', 404);
 
-  // Sync pending/overdue charges (up to 10)
   const { data: charges } = await db
     .from('billing_charges')
     .select('provider_charge_id')
@@ -326,7 +391,6 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     syncedCharges.push(charge.provider_charge_id);
   }
 
-  // Sync active subscription (if any) — also propagates lifecycle_status to billing_accounts
   const { data: activeSub } = await db
     .from('billing_subscriptions')
     .select('id, provider_subscription_id, billing_account_id')
@@ -365,7 +429,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // @ts-expect-error: Deno global
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    // @ts-expect-error: Deno global
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     if (!supabaseUrl || !supabaseKey) {
       throw createHttpError('Internal configuration error: missing env vars', 500);
@@ -375,7 +441,7 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    await validateAdminSession(req, db);
+    const user = await validateAdminSession(req, db);
 
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const { action, params = {} } = body as { action?: string; params?: Record<string, unknown> };
@@ -385,8 +451,31 @@ Deno.serve(async (req: Request) => {
     const t0 = Date.now();
     log('info', 'billing-action', 'start', { action, admin_client_id: (params as Record<string, unknown>).admin_client_id });
 
-    const provider = createProvider();
     let result: unknown;
+
+    // Global config actions — no provider needed
+    if (action === 'get_provider_settings') {
+      result = await handleGetProviderSettings(db);
+      log('info', 'billing-action', 'done', { action, duration_ms: Date.now() - t0 });
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'upsert_provider_settings') {
+      result = await handleUpsertProviderSettings(db, user, params);
+      log('info', 'billing-action', 'done', { action, duration_ms: Date.now() - t0 });
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Provider-dependent actions
+    const config = await loadBillingProviderConfig(db);
+    log('info', 'billing-action', 'provider config', { provider: config.provider, source: config.source, sandbox: config.asaasSandbox });
+    const provider = createProvider(config);
 
     switch (action) {
       case 'provision_account':

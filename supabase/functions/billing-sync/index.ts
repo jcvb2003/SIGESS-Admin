@@ -9,6 +9,8 @@ import * as svc from '../_shared/billing/billing-service.ts';
 import * as repo from '../_shared/billing/repositories.ts';
 import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { log } from '../_shared/billing/logger.ts';
+import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
+import type { BillingProvider } from '../_shared/billing/provider.interface.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -59,16 +61,7 @@ function handleError(err: unknown): Response {
 
 // ─── sync_all ─────────────────────────────────────────────────────────────────
 
-async function handleSyncAll(db: SupabaseClient, t0: number) {
-  // @ts-expect-error: Deno global
-  const apiKey = Deno.env.get('ASAAS_API_KEY');
-  if (!apiKey) throw createHttpError('ASAAS_API_KEY not configured', 500);
-
-  // @ts-expect-error: Deno global
-  const sandbox = Deno.env.get('ASAAS_SANDBOX') !== 'false';
-
-  const provider = new AsaasAdapter(new AsaasClient(apiKey, sandbox));
-
+async function handleSyncAll(db: SupabaseClient, provider: BillingProvider, t0: number) {
   const accounts = await repo.findAccountsForSync(db);
 
   const results: { accountId: string; ok: boolean; error?: string }[] = [];
@@ -135,7 +128,20 @@ Deno.serve(async (req: Request) => {
     if (action === 'sync_all') {
       const t0 = Date.now();
       log('info', 'billing-sync', 'start', { action });
-      return await handleSyncAll(db, t0);
+
+      const config = await loadBillingProviderConfig(db);
+      log('info', 'billing-sync', 'provider config', { provider: config.provider, source: config.source, sandbox: config.asaasSandbox });
+
+      if (config.provider !== 'asaas') {
+        log('warn', 'billing-sync', 'provider not asaas — skipping sync', { provider: config.provider });
+        return json({ synced: 0, total: 0, results: [], skipped: true });
+      }
+      if (!config.asaasApiKey) {
+        throw createHttpError('ASAAS_API_KEY não configurado — configure via Admin > Settings', 500);
+      }
+
+      const provider = new AsaasAdapter(new AsaasClient(config.asaasApiKey, config.asaasSandbox));
+      return await handleSyncAll(db, provider, t0);
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

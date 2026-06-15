@@ -48,6 +48,51 @@ export async function getBillingPlans(): Promise<BillingPlan[]> {
   return (data ?? []) as BillingPlan[];
 }
 
+export async function getAllBillingPlans(): Promise<BillingPlan[]> {
+  const { data, error } = await supabase
+    .from('billing_plans')
+    .select('*')
+    .order('max_socios_from', { ascending: true });
+  if (error) throw new Error(`billing_plans lookup failed: ${error.message}`);
+  return (data ?? []) as BillingPlan[];
+}
+
+export interface BillingPlanInput {
+  name: string;
+  max_socios_from: number;
+  max_socios_to: number | null;
+  price_monthly: number;
+  price_annual: number;
+  effective_from: string;
+  active: boolean;
+}
+
+export async function createBillingPlan(input: BillingPlanInput): Promise<BillingPlan> {
+  const { data, error } = await supabase
+    .from('billing_plans')
+    .insert(input)
+    .select()
+    .single();
+  if (error) throw new Error(`billing_plans insert failed: ${error.message}`);
+  return data as BillingPlan;
+}
+
+export async function updateBillingPlan(id: string, input: Partial<BillingPlanInput>): Promise<void> {
+  const { error } = await supabase
+    .from('billing_plans')
+    .update(input)
+    .eq('id', id);
+  if (error) throw new Error(`billing_plans update failed: ${error.message}`);
+}
+
+export async function deleteBillingPlan(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('billing_plans')
+    .delete()
+    .eq('id', id);
+  if (error) throw new Error(`billing_plans delete failed: ${error.message}`);
+}
+
 // ─── Writes (via billing-action edge function) ────────────────────────────────
 
 export async function invokeBillingAction(

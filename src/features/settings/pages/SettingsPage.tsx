@@ -2,6 +2,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { SecuritySettings } from "../components/SecuritySettings";
 import { SupabaseAccountsSettings } from "../components/SupabaseAccountsSettings";
 import { IntegrationSettings } from "../components/IntegrationSettings";
+import { BillingPlansSettings } from "../components/BillingPlansSettings";
 
 export default function SettingsPage() {
   return (
@@ -16,6 +17,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid gap-6 max-w-2xl">
+          <BillingPlansSettings />
           <SecuritySettings />
           <SupabaseAccountsSettings />
           <IntegrationSettings />

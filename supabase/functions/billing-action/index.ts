@@ -14,6 +14,7 @@ import * as svc from '../_shared/billing/billing-service.ts';
 import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
+import { log } from '../_shared/billing/logger.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
   assert(params.customer_email, 'customer_email');
   assert(params.customer_cpf_cnpj, 'customer_cpf_cnpj');
 
-  const result = await svc.provisionBillingAccount(db, provider, {
+  const { account, created, pending } = await svc.provisionBillingAccount(db, provider, {
     adminClientId: params.admin_client_id as string,
     planId: params.plan_id as string,
     customerInfo: {
@@ -167,8 +168,14 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
       phone: params.customer_phone as string | undefined,
     },
   });
-  await trySyncSummary(db, params.admin_client_id as string);
-  return result;
+  log('info', 'billing-action', 'provision_account', {
+    admin_client_id: params.admin_client_id as string,
+    account_id: account.id,
+    created,
+    pending,
+  });
+  if (!pending) await trySyncSummary(db, params.admin_client_id as string);
+  return { ...account, created, pending };
 }
 
 async function handleStartTrial(db: SupabaseClient, params: Record<string, unknown>) {
@@ -375,7 +382,8 @@ Deno.serve(async (req: Request) => {
 
     if (!action) throw createHttpError('Missing action in request body', 400);
 
-    console.log(`[billing-action] action=${action}`);
+    const t0 = Date.now();
+    log('info', 'billing-action', 'start', { action, admin_client_id: (params as Record<string, unknown>).admin_client_id });
 
     const provider = createProvider();
     let result: unknown;
@@ -409,6 +417,7 @@ Deno.serve(async (req: Request) => {
         throw createHttpError(`Unknown action: ${action}`, 400);
     }
 
+    log('info', 'billing-action', 'done', { action, duration_ms: Date.now() - t0 });
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

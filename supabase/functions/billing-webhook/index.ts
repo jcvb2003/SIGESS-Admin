@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
+import { log } from '../_shared/billing/logger.ts';
 
 // Eventos do Asaas que o sistema processa. Qualquer outro retorna 200 imediatamente
 // sem gravar em billing_events — evita poluição do inbox e ciclos de retry sem sentido.
@@ -65,11 +66,13 @@ Deno.serve(async (req: Request) => {
   const provider = new AsaasAdapter(new AsaasClient(apiKey, sandbox), webhookToken);
 
   let eventId: string | undefined;
+  const t0 = Date.now();
 
   try {
     const event = provider.parseWebhookEvent({ rawBody, headers });
 
     if (!SUPPORTED_ASAAS_EVENTS.has(event.rawEventType)) {
+      log('info', 'billing-webhook', 'ignored', { event_type: event.rawEventType });
       return json({ received: true, ignored: true, reason: 'unsupported_event_type' });
     }
 
@@ -83,21 +86,24 @@ Deno.serve(async (req: Request) => {
     eventId = eid;
 
     if (alreadyProcessed) {
+      log('info', 'billing-webhook', 'duplicate', { event_type: event.eventType, provider_event_id: event.providerEventId });
       return json({ received: true, duplicate: true });
     }
 
     await svc.applyWebhookEvent(db, eventId, event);
 
+    log('info', 'billing-webhook', 'done', {
+      event_type: event.eventType,
+      provider_event_id: event.providerEventId,
+      duration_ms: Date.now() - t0,
+    });
     return json({ received: true });
   } catch (err) {
     if (err instanceof Error && err.message === 'Invalid webhook token') {
       return json({ error: 'Unauthorized' }, 401);
     }
 
-    // applyWebhookEvent already called markEventFailed internally before re-throwing.
-    // Return 500 so Asaas retries; existingStatus='failed' allows re-apply on next attempt.
-    // Retry containment depends on Asaas retry policy and/or manual billing-sync.
-    console.error('[billing-webhook] Error:', err, { eventId });
+    log('error', 'billing-webhook', 'error', { event_id: eventId, err: String(err), duration_ms: Date.now() - t0 });
     return json({ error: String(err) }, 500);
   }
 });

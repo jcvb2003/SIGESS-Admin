@@ -1,5 +1,6 @@
 // @ts-expect-error: Deno-specific URL imports
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { log } from '../_shared/billing/logger.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'GET') return json({ ok: false, reason: 'method_not_allowed' }, 405);
 
+  const t0 = Date.now();
   const url = new URL(req.url);
   const token = url.searchParams.get('token');
   if (!token) return json({ ok: false, reason: 'token_required' }, 400);
@@ -38,20 +40,21 @@ Deno.serve(async (req: Request) => {
   // 1. Busca e valida o token
   const { data: pt, error: ptErr } = await supabase
     .from('billing_portal_tokens')
-    .select('id, charge_id, billing_account_id, expires_at, consumed_at')
+    .select('id, charge_id, billing_account_id, expires_at, used_at')
     .eq('token', token)
     .maybeSingle();
 
-  if (ptErr || !pt) return json({ ok: false, reason: 'token_invalid' }, 404);
-  if (new Date(pt.expires_at) < new Date()) return json({ ok: false, reason: 'token_expired' }, 410);
+  if (ptErr || !pt) {
+    log('warn', 'billing-portal', 'token_invalid', { duration_ms: Date.now() - t0 });
+    return json({ ok: false, reason: 'token_invalid' }, 404);
+  }
+  if (new Date(pt.expires_at) < new Date()) {
+    log('warn', 'billing-portal', 'token_expired', { duration_ms: Date.now() - t0 });
+    return json({ ok: false, reason: 'token_expired' }, 410);
+  }
 
-  // consumed_at indica pagamento confirmado — link ainda pode ser consultado (reutilizável até expirar)
-
-  // 2. Atualiza accessed_at
-  await supabase
-    .from('billing_portal_tokens')
-    .update({ accessed_at: new Date().toISOString() })
-    .eq('id', pt.id);
+  // `billing_portal_tokens` ainda não tem `accessed_at` no schema aplicado.
+  // O token continua reutilizável até expirar; por ora não registramos acesso aqui.
 
   // 3. Resolve dados da conta — obrigatório
   const { data: account } = await supabase
@@ -102,6 +105,7 @@ Deno.serve(async (req: Request) => {
     payment_url = charge.payment_url;
   }
 
+  log('info', 'billing-portal', 'done', { token_found: true, has_charge: !!pt.charge_id, duration_ms: Date.now() - t0 });
   return json({
     ok: true,
     tenant_name: tenant.nome_entidade,

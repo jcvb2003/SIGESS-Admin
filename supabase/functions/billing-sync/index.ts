@@ -8,6 +8,7 @@ import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
 import * as repo from '../_shared/billing/repositories.ts';
 import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
+import { log } from '../_shared/billing/logger.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ function handleError(err: unknown): Response {
 
 // ─── sync_all ─────────────────────────────────────────────────────────────────
 
-async function handleSyncAll(db: SupabaseClient) {
+async function handleSyncAll(db: SupabaseClient, t0: number) {
   // @ts-expect-error: Deno global
   const apiKey = Deno.env.get('ASAAS_API_KEY');
   if (!apiKey) throw createHttpError('ASAAS_API_KEY not configured', 500);
@@ -96,16 +97,14 @@ async function handleSyncAll(db: SupabaseClient) {
 
       results.push({ accountId: account.id, ok: true });
     } catch (err) {
-      console.error(`[billing-sync] account ${account.id} sync failed:`, err);
+      log('error', 'billing-sync', 'account_sync_failed', { account_id: account.id, err: String(err) });
       results.push({ accountId: account.id, ok: false, error: String(err) });
     }
   }
 
-  return json({
-    synced: results.filter((r) => r.ok).length,
-    total: accounts.length,
-    results,
-  });
+  const synced = results.filter((r) => r.ok).length;
+  log('info', 'billing-sync', 'done', { accounts_total: accounts.length, synced, failed: accounts.length - synced, duration_ms: Date.now() - t0 });
+  return json({ synced, total: accounts.length, results });
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -134,7 +133,9 @@ Deno.serve(async (req: Request) => {
     const action = body?.action;
 
     if (action === 'sync_all') {
-      return await handleSyncAll(db);
+      const t0 = Date.now();
+      log('info', 'billing-sync', 'start', { action });
+      return await handleSyncAll(db, t0);
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

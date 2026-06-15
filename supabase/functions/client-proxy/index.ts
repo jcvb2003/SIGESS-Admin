@@ -2629,10 +2629,12 @@ async function getRuntimeTenantId(
 
     if (error) throw error;
   } else {
+    // Shared project snapshot is project-scoped metadata only; do not clear
+    // tenant-level runtime bindings here. In shared topologies, runtime_tenant_id
+    // must be preserved per Admin tenant row and can only be set explicitly.
     const { error } = await supabaseAdmin
       .from("tenants")
       .update({
-        runtime_tenant_id: null,
         runtime_topology: runtimeTopology,
         runtime_tenants_count: runtimeTenantsCount,
         runtime_units_count: runtimeUnitsCount,

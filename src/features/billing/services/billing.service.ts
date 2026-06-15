@@ -59,11 +59,20 @@ export async function invokeBillingAction(
   });
 
   if (error) {
-    const ctx = (error as any).context as Response | undefined;
+    const ctx = (error as any).context as unknown;
     if (ctx) {
       try {
-        const body = await ctx.clone().json();
-        if (body?.error) throw new Error(body.error);
+        if (ctx instanceof Response) {
+          const body = await ctx.clone().json();
+          if (body?.error) throw new Error(body.error);
+        }
+
+        if (typeof ctx === 'object' && ctx !== null && 'error' in ctx) {
+          const body = ctx as { error?: unknown };
+          if (typeof body.error === 'string' && body.error.trim()) {
+            throw new Error(body.error);
+          }
+        }
       } catch (parseErr) {
         if (parseErr instanceof Error && parseErr.message !== 'body used already') throw parseErr;
       }

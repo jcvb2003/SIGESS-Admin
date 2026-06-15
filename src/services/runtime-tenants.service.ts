@@ -18,8 +18,14 @@ import type {
 
 /**
  * Consulta o runtime via proxy e devolve um snapshot enxuto do estado
- * operacional. Em projetos isolated, tambem atualiza automaticamente o
- * runtime_tenant_id e o supports_units no espelho do Admin.
+ * operacional.
+ *
+ * Em projetos isolated, o proxy pode auto-vincular runtime_tenant_id quando
+ * existe uma correspondencia 1:1 entre projeto e tenant.
+ *
+ * Em projetos shared, a operacao sincroniza apenas metadados agregados do
+ * projeto (topologia, contagens e supports_units) e nao recalcula nem limpa o
+ * vinculo tenant-a-tenant salvo no Admin.
  */
 export interface RuntimeProjectMetadata {
   runtime_tenant_id: string | null;

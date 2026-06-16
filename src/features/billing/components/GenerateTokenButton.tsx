@@ -5,9 +5,11 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useBillingActions } from '../hooks';
+import type { BillingCharge } from '../types';
 
 interface GenerateTokenButtonProps {
   adminClientId: string;
+  charges: BillingCharge[];
 }
 
 interface TokenResult {
@@ -15,12 +17,20 @@ interface TokenResult {
   expires_at: string;
 }
 
-export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenButtonProps>) {
+const PAYABLE = new Set<BillingCharge['status']>(['pending', 'overdue']);
+
+export function GenerateTokenButton({ adminClientId, charges }: Readonly<GenerateTokenButtonProps>) {
   const [result, setResult] = useState<TokenResult | null>(null);
   const { generateToken } = useBillingActions(adminClientId);
 
+  // Seleciona a cobrança pagável mais recente (maior due_date)
+  const openCharge = charges
+    .filter((c) => PAYABLE.has(c.status))
+    .sort((a, b) => b.due_date.localeCompare(a.due_date))[0] ?? null;
+
   const handleGenerate = () => {
-    generateToken.mutate(undefined, {
+    if (!openCharge) return;
+    generateToken.mutate(openCharge.id, {
       onSuccess: (data) => {
         const d = data as TokenResult;
         setResult(d);
@@ -82,18 +92,26 @@ export function GenerateTokenButton({ adminClientId }: Readonly<GenerateTokenBut
   }
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleGenerate}
-      disabled={generateToken.isPending}
-    >
-      {generateToken.isPending ? (
-        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Key className="mr-2 h-3.5 w-3.5" />
+    <div className="flex flex-col items-start gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleGenerate}
+        disabled={generateToken.isPending || !openCharge}
+        title={!openCharge ? 'Nenhuma cobrança aberta para vincular ao token' : undefined}
+      >
+        {generateToken.isPending ? (
+          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Key className="mr-2 h-3.5 w-3.5" />
+        )}
+        Gerar token portal
+      </Button>
+      {!openCharge && (
+        <span className="text-[11px] text-muted-foreground">
+          Sem cobrança aberta — crie uma cobrança primeiro
+        </span>
       )}
-      Gerar token portal
-    </Button>
+    </div>
   );
 }

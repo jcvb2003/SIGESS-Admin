@@ -1,11 +1,12 @@
 import { CalendarCheck, Loader2, PlusCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GenerateTokenButton } from './GenerateTokenButton';
-import type { BillingAccountLifecycleStatus } from '../types';
+import type { BillingAccountLifecycleStatus, BillingCharge } from '../types';
 
 interface BillingActionsRowProps {
   adminClientId: string;
   lifecycleStatus: BillingAccountLifecycleStatus;
+  charges: BillingCharge[];
   onStartTrial: () => void;
   isStartingTrial: boolean;
   onCreateSubscription: () => void;
@@ -17,6 +18,7 @@ interface BillingActionsRowProps {
 export function BillingActionsRow({
   adminClientId,
   lifecycleStatus,
+  charges,
   onStartTrial,
   isStartingTrial,
   onCreateSubscription,
@@ -54,7 +56,7 @@ export function BillingActionsRow({
         Nova cobrança avulsa
       </Button>
 
-      <GenerateTokenButton adminClientId={adminClientId} />
+      <GenerateTokenButton adminClientId={adminClientId} charges={charges} />
 
       <Button
         variant="outline"

@@ -106,6 +106,7 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
           <BillingActionsRow
             adminClientId={adminClientId}
             lifecycleStatus={account.lifecycle_status}
+            charges={charges}
             onStartTrial={handleStartTrial}
             isStartingTrial={startTrial.isPending}
             onCreateSubscription={() => setSubscriptionOpen(true)}

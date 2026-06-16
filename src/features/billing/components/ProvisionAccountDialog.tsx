@@ -10,27 +10,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { Tenant } from '@/features/clients/types';
-import { useBillingActions, useBillingPlans } from '../hooks';
-import type { BillingPlan } from '../types';
-
-function planLabel(plan: BillingPlan): string {
-  const range = plan.max_socios_to
-    ? `${plan.max_socios_from}–${plan.max_socios_to} sócios`
-    : `a partir de ${plan.max_socios_from} sócios`;
-  const price = plan.price_monthly.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  return `${plan.name} — ${range} — ${price}/mês`;
-}
+import { useBillingActions } from '../hooks';
 
 interface ProvisionAccountDialogProps {
   cliente: Tenant;
@@ -44,15 +25,13 @@ export function ProvisionAccountDialog({
   onOpenChange,
 }: Readonly<ProvisionAccountDialogProps>) {
   const { provisionAccount } = useBillingActions(cliente.id);
-  const { data: plans = [] } = useBillingPlans();
 
   const [name, setName] = useState(cliente.nome_entidade);
   const [email, setEmail] = useState(cliente.email ?? '');
   const [cpfCnpj, setCpfCnpj] = useState(cliente.cnpj_cpf ?? '');
   const [phone, setPhone] = useState(cliente.telefone ?? '');
-  const [planId, setPlanId] = useState('');
 
-  const canSubmit = name.trim() && email.trim() && cpfCnpj.trim() && planId;
+  const canSubmit = name.trim() && email.trim() && cpfCnpj.trim();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +39,6 @@ export function ProvisionAccountDialog({
 
     provisionAccount.mutate(
       {
-        plan_id: planId,
         customer_name: name.trim(),
         customer_email: email.trim(),
         customer_cpf_cnpj: cpfCnpj.trim(),
@@ -128,28 +106,6 @@ export function ProvisionAccountDialog({
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(99) 99999-9999"
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>
-              Plano <span className="text-destructive">*</span>
-            </Label>
-            {plans.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum plano disponível.</p>
-            ) : (
-              <Select value={planId} onValueChange={setPlanId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar plano" />
-                </SelectTrigger>
-                <SelectContent>
-                  {plans.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {planLabel(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
 
           {(!cliente.email || !cliente.cnpj_cpf) && (

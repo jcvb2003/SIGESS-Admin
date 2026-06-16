@@ -9,7 +9,6 @@ import { log } from './logger.ts';
 
 export interface ProvisionBillingAccountInput {
   adminClientId: string;
-  planId: string;
   customerInfo: {
     name: string;
     email: string;
@@ -48,7 +47,7 @@ export async function provisionBillingAccount(
       trial_ends_at: null,
       current_period_start: null,
       current_period_end: null,
-      current_plan_id: input.planId,
+      current_plan_id: null,
     })
     .select()
     .single();
@@ -172,7 +171,10 @@ export async function createInitialSubscription(
     ends_at: null,
   });
 
-  await repo.updateAccount(db, account.id, { lifecycle_status: 'payment_pending' });
+  await repo.updateAccount(db, account.id, {
+    lifecycle_status: 'payment_pending',
+    current_plan_id: input.planId,
+  });
 
   return sub;
 }

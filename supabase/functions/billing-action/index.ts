@@ -226,14 +226,12 @@ async function handleUpsertProviderSettings(
 
 async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.admin_client_id, 'admin_client_id');
-  assert(params.plan_id, 'plan_id');
   assert(params.customer_name, 'customer_name');
   assert(params.customer_email, 'customer_email');
   assert(params.customer_cpf_cnpj, 'customer_cpf_cnpj');
 
   const { account, created, pending } = await svc.provisionBillingAccount(db, provider, {
     adminClientId: params.admin_client_id as string,
-    planId: params.plan_id as string,
     customerInfo: {
       name: params.customer_name as string,
       email: params.customer_email as string,

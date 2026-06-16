@@ -127,7 +127,6 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
 
       <CreateSubscriptionDialog
         adminClientId={adminClientId}
-        planId={account.current_plan_id}
         open={subscriptionOpen}
         onOpenChange={setSubscriptionOpen}
       />

@@ -19,13 +19,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useBillingActions, useBillingPlans } from '../hooks';
-import type { BillingInterval } from '../types';
+import type { BillingInterval, BillingPlan } from '../types';
 
 interface CreateSubscriptionDialogProps {
   adminClientId: string;
-  planId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function planLabel(plan: BillingPlan, interval: BillingInterval): string {
+  const range = plan.max_socios_to
+    ? `${plan.max_socios_from}–${plan.max_socios_to} sócios`
+    : `${plan.max_socios_from}+ sócios`;
+  const price = interval === 'annual' ? plan.price_annual : plan.price_monthly;
+  return `${plan.name} · ${range} · R$ ${price.toFixed(2).replace('.', ',')}`;
 }
 
 function todayPlusDays(days: number): string {
@@ -36,20 +43,19 @@ function todayPlusDays(days: number): string {
 
 export function CreateSubscriptionDialog({
   adminClientId,
-  planId,
   open,
   onOpenChange,
 }: Readonly<CreateSubscriptionDialogProps>) {
   const { createSubscription } = useBillingActions(adminClientId);
   const { data: plans = [] } = useBillingPlans();
 
+  const [planId, setPlanId] = useState('');
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [amount, setAmount] = useState('');
   const [nextDueDate, setNextDueDate] = useState(todayPlusDays(1));
 
   const plan = plans.find((p) => p.id === planId);
 
-  // Auto-fill amount when interval or plan changes
   useEffect(() => {
     if (!plan) return;
     const price = interval === 'annual' ? plan.price_annual : plan.price_monthly;
@@ -57,6 +63,7 @@ export function CreateSubscriptionDialog({
   }, [plan, interval]);
 
   const reset = () => {
+    setPlanId('');
     setInterval('monthly');
     setAmount('');
     setNextDueDate(todayPlusDays(1));
@@ -95,14 +102,6 @@ export function CreateSubscriptionDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Plano: read-only, já definido na provisão */}
-          <div className="space-y-1.5">
-            <Label>Plano</Label>
-            <div className="flex h-9 items-center rounded-md border border-input bg-secondary/40 px-3 text-sm text-foreground">
-              {plan ? plan.name : <span className="text-muted-foreground">—</span>}
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <Label>Periodicidade <span className="text-destructive">*</span></Label>
             <Select value={interval} onValueChange={(v) => setInterval(v as BillingInterval)}>
@@ -112,6 +111,22 @@ export function CreateSubscriptionDialog({
               <SelectContent>
                 <SelectItem value="monthly">Mensal</SelectItem>
                 <SelectItem value="annual">Anual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Plano <span className="text-destructive">*</span></Label>
+            <Select value={planId} onValueChange={setPlanId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um plano" />
+              </SelectTrigger>
+              <SelectContent>
+                {plans.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {planLabel(p, interval)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

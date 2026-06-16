@@ -11,7 +11,6 @@ export function useBillingActions(adminClientId: string) {
 
   const provisionAccount = useMutation({
     mutationFn: (params: {
-      plan_id: string;
       customer_name: string;
       customer_email: string;
       customer_cpf_cnpj: string;

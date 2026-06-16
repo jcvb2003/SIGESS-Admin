@@ -12,8 +12,7 @@ import {
   UserMinus,
   Users,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatDate, formatDateTime } from "@/shared/utils/date";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -271,7 +270,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                     )}
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      Criado em {format(new Date(user.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                      Criado em {formatDate(user.created_at)}
                     </span>
                     <span className="flex items-center gap-1">
                       <Shield className="h-3 w-3" />
@@ -312,7 +311,7 @@ function UsersTabContent({ clientId, connectionError, onUsersLoaded }: UsersTabP
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Ultimo Acesso</p>
                     <p className="text-sm font-medium mt-1">
                       {user.last_sign_in_at
-                        ? format(new Date(user.last_sign_in_at), "dd/MM 'as' HH:mm", { locale: ptBR })
+                        ? formatDateTime(user.last_sign_in_at)
                         : "Nunca"}
                     </p>
                   </div>

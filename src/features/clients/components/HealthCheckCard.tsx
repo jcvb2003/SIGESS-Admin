@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { formatDateTime } from "@/shared/utils/date";
 import { ShieldCheck, ShieldAlert, Wifi, WifiOff, RefreshCw, HelpCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -58,10 +59,7 @@ function initialStateFromProject(project: Project): HealthState {
 
 function formatCheckedAt(iso: string | null | undefined): string {
   if (!iso) return "Nunca verificado";
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  }).format(new Date(iso));
+  return formatDateTime(iso);
 }
 
 export function HealthCheckCard({ project }: HealthCheckCardProps) {

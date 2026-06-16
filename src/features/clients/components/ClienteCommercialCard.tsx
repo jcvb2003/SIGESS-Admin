@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
-import { format, differenceInDays, isPast } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { differenceInDays, isPast } from "date-fns";
+import { formatDate } from "@/shared/utils/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -120,7 +120,7 @@ export function ClienteCommercialCard({
         {cliente.telefone && <InfoRow label="Telefone">{cliente.telefone}</InfoRow>}
         {cliente.cnpj_cpf && <InfoRow label="CNPJ / CPF">{cliente.cnpj_cpf}</InfoRow>}
         <InfoRow label="Cadastrado em">
-          {format(new Date(cliente.data_cadastro), "dd/MM/yyyy", { locale: ptBR })}
+          {formatDate(cliente.data_cadastro)}
         </InfoRow>
       </div>
     </Card>

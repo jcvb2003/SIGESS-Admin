@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatDateTime } from "@/shared/utils/date";
 import { Settings2, Loader2, CheckCircle2, Circle } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -131,7 +132,7 @@ export function BillingProviderSettings() {
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Última atualização</span>
               <span>
-                {new Date(meta.updated_at).toLocaleString("pt-BR")}
+                {formatDateTime(meta.updated_at)}
                 {meta.updated_by ? ` por ${meta.updated_by}` : ""}
               </span>
             </div>

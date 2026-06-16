@@ -1,4 +1,6 @@
-export function formatDateTime(value: string | null | undefined) {
+import { formatDateTime as fmt } from '@/shared/utils/date';
+
+export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "Nunca";
-  return new Date(value).toLocaleString("pt-BR");
+  return fmt(value);
 }

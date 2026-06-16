@@ -1,6 +1,5 @@
 import { ExternalLink } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDate } from '@/shared/utils/date';
 import {
   Table,
   TableBody,
@@ -53,7 +52,7 @@ export function ChargesTable({ charges }: Readonly<ChargesTableProps>) {
           {charges.map((c) => (
             <TableRow key={c.id} className={c.status === 'cancelled' || c.status === 'failed' ? 'opacity-40' : ''}>
               <TableCell className="text-sm">
-                {format(new Date(c.due_date), 'dd/MM/yyyy', { locale: ptBR })}
+                {formatDate(c.due_date)}
               </TableCell>
               <TableCell className="max-w-[200px] truncate text-sm">{c.description ?? '—'}</TableCell>
               <TableCell className="text-right text-sm">{formatBRL(c.amount)}</TableCell>

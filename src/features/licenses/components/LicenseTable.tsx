@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Copy, Check, KeyRound, Trash2, Pencil, Monitor, Save, X, Calendar, History, Cpu, User } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatDate } from "@/shared/utils/date";
 import { toast } from "sonner";
 import { 
   Dialog, 
@@ -241,7 +242,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
             const plan = planConfig[lic.plan] || planConfig.trial;
             const status = statusConfig[lic.status] || statusConfig.active;
             const expiry = lic.expires_at
-              ? format(new Date(lic.expires_at), "dd/MM/yyyy", { locale: ptBR })
+              ? formatDate(lic.expires_at)
               : "—";
 
             return (
@@ -277,7 +278,7 @@ export function LicenseTable({ licenses }: LicenseTableProps) {
                 <TableCell>
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">
-                      {lic.created_at ? format(new Date(lic.created_at), "dd/MM/yy") : "—"}
+                      {lic.created_at ? formatDate(lic.created_at) : "—"}
                     </span>
                     {lic.created_at && (
                       <span className="text-[10px] text-muted-foreground/60">

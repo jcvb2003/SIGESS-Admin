@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Copy, Loader2, Key, X } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDateTime } from '@/shared/utils/date';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useBillingActions } from '../hooks';
@@ -80,7 +79,7 @@ export function GenerateTokenButton({ adminClientId, charges }: Readonly<Generat
         )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted-foreground">
-            Expira em {format(new Date(result.expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+            Expira em {formatDateTime(result.expires_at)}
           </span>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleCopy}>
             <Copy className="mr-1.5 h-3 w-3" />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatDate } from "@/shared/utils/date";
 import { CreditCard, Plus, Trash2, Pencil, Loader2, Infinity } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -278,7 +279,7 @@ export function BillingPlansSettings() {
                     <td className="py-3 pr-4 tabular-nums">{fmtBRL(plan.price_monthly)}</td>
                     <td className="py-3 pr-4 tabular-nums">{fmtBRL(plan.price_annual)}</td>
                     <td className="py-3 pr-4 text-muted-foreground">
-                      {new Date(plan.effective_from).toLocaleDateString("pt-BR")}
+                      {formatDate(plan.effective_from)}
                     </td>
                     <td className="py-3 pr-4">
                       <Switch

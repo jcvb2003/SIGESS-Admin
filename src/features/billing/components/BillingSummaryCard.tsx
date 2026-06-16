@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDate } from '@/shared/utils/date';
 import type { BillingAccount, BillingSubscription } from '../types';
 import {
   LIFECYCLE_LABEL,
@@ -42,7 +41,7 @@ export function BillingSummaryCard({ account, subscription }: Readonly<BillingSu
 
       {account.trial_ends_at && (
         <InfoRow label="Vencimento trial">
-          {format(new Date(account.trial_ends_at), 'dd/MM/yyyy', { locale: ptBR })}
+          {formatDate(account.trial_ends_at)}
         </InfoRow>
       )}
 
@@ -62,7 +61,7 @@ export function BillingSummaryCard({ account, subscription }: Readonly<BillingSu
 
       <InfoRow label="Próxima cobrança">
         {subscription?.next_billing_date ? (
-          format(new Date(subscription.next_billing_date), 'dd/MM/yyyy', { locale: ptBR })
+          {formatDate(subscription.next_billing_date)}
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

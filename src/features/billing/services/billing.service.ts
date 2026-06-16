@@ -32,7 +32,6 @@ export async function getBillingCharges(billingAccountId: string): Promise<Billi
     .from('billing_charges')
     .select('*')
     .eq('billing_account_id', billingAccountId)
-    .not('status', 'in', '("cancelled","failed")')
     .order('due_date', { ascending: false })
     .limit(20);
   if (error) throw new Error(`billing_charges lookup failed: ${error.message}`);

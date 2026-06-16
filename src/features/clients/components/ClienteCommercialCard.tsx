@@ -61,11 +61,11 @@ export function ClienteCommercialCard({
     if (daysLeft !== null && daysLeft <= 30) {
       return (
         <span className="font-medium text-amber-500">
-          {format(expiresAt, "dd/MM/yyyy")} - {daysLeft}d restantes
+          {formatDate(expiresAt)} - {daysLeft}d restantes
         </span>
       );
     }
-    return <span>{format(expiresAt, "dd/MM/yyyy", { locale: ptBR })}</span>;
+    return <span>{formatDate(expiresAt)}</span>;
   };
 
   return (

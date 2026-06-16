@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
+import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { log } from '../_shared/billing/logger.ts';
 import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
 
@@ -99,6 +100,49 @@ Deno.serve(async (req: Request) => {
     }
 
     await svc.applyWebhookEvent(db, eventId, event);
+
+    // Sync billing_summary to runtime after state change so Web tab reflects immediately.
+    // Resolve admin_client_id from whichever identifier the event carries.
+    try {
+      let adminClientId: string | null = null;
+
+      if (event.providerChargeId) {
+        const { data: charge } = await db
+          .from('billing_charges')
+          .select('billing_account_id')
+          .eq('provider_charge_id', event.providerChargeId)
+          .maybeSingle();
+        if (charge) {
+          const { data: account } = await db
+            .from('billing_accounts')
+            .select('admin_client_id')
+            .eq('id', charge.billing_account_id)
+            .maybeSingle();
+          adminClientId = account?.admin_client_id ?? null;
+        }
+      } else if (event.providerSubscriptionId) {
+        const { data: sub } = await db
+          .from('billing_subscriptions')
+          .select('billing_account_id')
+          .eq('provider_subscription_id', event.providerSubscriptionId)
+          .maybeSingle();
+        if (sub) {
+          const { data: account } = await db
+            .from('billing_accounts')
+            .select('admin_client_id')
+            .eq('id', sub.billing_account_id)
+            .maybeSingle();
+          adminClientId = account?.admin_client_id ?? null;
+        }
+      }
+
+      if (adminClientId) {
+        await syncBillingSummaryToRuntime(db, adminClientId);
+      }
+    } catch (syncErr) {
+      log('error', 'billing-webhook', 'summary_sync_failed', { event_id: eventId, err: String(syncErr) });
+      // Non-fatal: event was applied correctly, projection failure must not cause retry
+    }
 
     log('info', 'billing-webhook', 'done', {
       event_type: event.eventType,

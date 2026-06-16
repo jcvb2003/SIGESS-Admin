@@ -23,6 +23,7 @@ import type { BillingInterval } from '../types';
 
 interface CreateSubscriptionDialogProps {
   adminClientId: string;
+  planId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -35,36 +36,37 @@ function todayPlusDays(days: number): string {
 
 export function CreateSubscriptionDialog({
   adminClientId,
+  planId,
   open,
   onOpenChange,
 }: Readonly<CreateSubscriptionDialogProps>) {
   const { createSubscription } = useBillingActions(adminClientId);
   const { data: plans = [] } = useBillingPlans();
 
-  const [planId, setPlanId] = useState('');
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [amount, setAmount] = useState('');
   const [nextDueDate, setNextDueDate] = useState(todayPlusDays(1));
 
-  // Auto-fill amount when plan or interval changes
+  const plan = plans.find((p) => p.id === planId);
+
+  // Auto-fill amount when interval or plan changes
   useEffect(() => {
-    const plan = plans.find((p) => p.id === planId);
     if (!plan) return;
     const price = interval === 'annual' ? plan.price_annual : plan.price_monthly;
     setAmount(price.toFixed(2));
-  }, [planId, interval, plans]);
+  }, [plan, interval]);
 
   const reset = () => {
-    setPlanId('');
     setInterval('monthly');
     setAmount('');
     setNextDueDate(todayPlusDays(1));
   };
 
-  const canSubmit = planId && interval && amount && nextDueDate;
+  const canSubmit = planId && amount && nextDueDate;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!planId) return;
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum <= 0) {
       toast.error('Valor deve ser maior que zero');
@@ -89,28 +91,16 @@ export function CreateSubscriptionDialog({
         <DialogHeader>
           <DialogTitle>Criar assinatura</DialogTitle>
           <DialogDescription>
-            Cria a assinatura recorrente no provedor de cobrança.
+            Ativa a cobrança recorrente no provedor para este cliente.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Plano: read-only, já definido na provisão */}
           <div className="space-y-1.5">
-            <Label>Plano <span className="text-destructive">*</span></Label>
-            {plans.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum plano disponível.</p>
-            ) : (
-              <Select value={planId} onValueChange={setPlanId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar plano" />
-                </SelectTrigger>
-                <SelectContent>
-                  {plans.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <Label>Plano</Label>
+            <div className="flex h-9 items-center rounded-md border border-input bg-secondary/40 px-3 text-sm text-foreground">
+              {plan ? plan.name : <span className="text-muted-foreground">—</span>}
+            </div>
           </div>
 
           <div className="space-y-1.5">

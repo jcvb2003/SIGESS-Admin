@@ -197,15 +197,22 @@ export class AsaasAdapter implements BillingProvider {
         ? sub
         : undefined;
 
+    // Asaas sends the pre-event payment.status (e.g. PENDING) for deletion/refund events,
+    // not the final status. Force the correct outcome from the event type instead.
+    const FORCE_CANCELLED = new Set(['PAYMENT_DELETED', 'PAYMENT_REFUNDED', 'PAYMENT_PARTIALLY_REFUNDED']);
+    const chargeStatus = FORCE_CANCELLED.has(body.event)
+      ? 'cancelled'
+      : body.payment?.status
+        ? mapAsaasChargeStatus(body.payment.status)
+        : undefined;
+
     return {
       providerEventId: body.id,
       eventType: mapAsaasWebhookEventType(body.event),
       rawEventType: body.event,
       providerChargeId: body.payment?.id,
       providerSubscriptionId,
-      chargeStatus: body.payment?.status
-        ? mapAsaasChargeStatus(body.payment.status)
-        : undefined,
+      chargeStatus,
       paidAt: normalizePaymentDate(body.payment?.paymentDate),
     };
   }

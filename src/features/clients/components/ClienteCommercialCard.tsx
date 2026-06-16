@@ -1,22 +1,13 @@
-import { type ReactNode, useState } from "react";
-import { CheckCircle2, Loader2, Pencil, RefreshCw, X, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { differenceInDays, isPast } from "date-fns";
 import { formatDate } from "@/shared/utils/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Cliente } from "../types";
 import { TOPOLOGY_LABEL } from "../types";
 import type { RuntimeProjectMetadata } from "@/services/runtime-tenants.service";
-import { useUpdateTenant } from "../hooks/useClienteMutations";
 
 function InfoCell({ label, children, full }: Readonly<{ label: string; children: ReactNode; full?: boolean }>) {
   return (
@@ -29,7 +20,6 @@ function InfoCell({ label, children, full }: Readonly<{ label: string; children:
 
 interface ClienteCommercialCardProps {
   cliente: Cliente;
-  projectId: string;
   runtimeMetadata: RuntimeProjectMetadata | null;
   onSyncRuntime: () => void;
   isSyncingRuntime: boolean;
@@ -37,35 +27,10 @@ interface ClienteCommercialCardProps {
 
 export function ClienteCommercialCard({
   cliente,
-  projectId,
   runtimeMetadata,
   onSyncRuntime,
   isSyncingRuntime,
 }: Readonly<ClienteCommercialCardProps>) {
-  const { mutate: update, isPending: isSaving } = useUpdateTenant(projectId);
-
-  const [editingAssinatura, setEditingAssinatura] = useState(false);
-  const [assinaturaVal, setAssinaturaVal] = useState(cliente.assinatura);
-
-  const [editingExpira, setEditingExpira] = useState(false);
-  const [expiraVal, setExpiraVal] = useState(
-    cliente.acesso_expira_em ? cliente.acesso_expira_em.split('T')[0] : ''
-  );
-
-  const saveAssinatura = () => {
-    update(
-      { id: cliente.id, input: { assinatura: assinaturaVal } },
-      { onSuccess: () => setEditingAssinatura(false) },
-    );
-  };
-
-  const saveExpira = () => {
-    update(
-      { id: cliente.id, input: { acesso_expira_em: expiraVal ? new Date(expiraVal).toISOString() : null } },
-      { onSuccess: () => setEditingExpira(false) },
-    );
-  };
-
   const effectiveRuntimeMetadata = runtimeMetadata ?? {
     runtime_tenant_id: cliente.runtime_tenant_id,
     runtime_tenants_count: cliente.runtime_tenants_count ?? 0,
@@ -86,7 +51,7 @@ export function ClienteCommercialCard({
   }[cliente.status];
   const statusLabel = { active: "Ativo", inactive: "Inativo", suspended: "Suspenso" }[cliente.status];
 
-  const expiryDisplay = () => {
+  const expiryEl = () => {
     if (!expiresAt) return <span className="text-muted-foreground">Sem expiração</span>;
     if (expired) return <span className="font-medium text-destructive">Expirado em {formatDate(expiresAt)}</span>;
     if (daysLeft !== null && daysLeft <= 30) {
@@ -124,59 +89,11 @@ export function ClienteCommercialCard({
         </InfoCell>
 
         <InfoCell label="Assinatura">
-          {editingAssinatura ? (
-            <div className="flex items-center gap-1.5">
-              <Select value={assinaturaVal} onValueChange={(v) => setAssinaturaVal(v as typeof assinaturaVal)}>
-                <SelectTrigger className="h-7 w-32 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trial">Trial</SelectItem>
-                  <SelectItem value="monthly">Mensal</SelectItem>
-                  <SelectItem value="annual">Anual</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={saveAssinatura} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <span className="text-xs font-bold text-primary">✓</span>}
-              </Button>
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingAssinatura(false); setAssinaturaVal(cliente.assinatura); }}>
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ) : (
-            <div className="group flex items-center gap-1.5">
-              <Badge variant="outline" className="text-[11px]">{planLabel}</Badge>
-              <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setEditingAssinatura(true)}>
-                <Pencil className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
+          <Badge variant="outline" className="text-[11px]">{planLabel}</Badge>
         </InfoCell>
 
         <InfoCell label="Acesso expira">
-          {editingExpira ? (
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                className="h-7 w-36 text-xs"
-                value={expiraVal}
-                onChange={(e) => setExpiraVal(e.target.value)}
-              />
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={saveExpira} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <span className="text-xs font-bold text-primary">✓</span>}
-              </Button>
-              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingExpira(false); setExpiraVal(cliente.acesso_expira_em ? cliente.acesso_expira_em.split('T')[0] : ''); }}>
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ) : (
-            <div className="group flex items-center gap-1.5">
-              {expiryDisplay()}
-              <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setEditingExpira(true)}>
-                <Pencil className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
+          {expiryEl()}
         </InfoCell>
 
         <InfoCell label="Limite de sócios">

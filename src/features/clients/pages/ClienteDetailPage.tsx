@@ -80,7 +80,6 @@ export default function ClienteDetailPage() {
 
         <ClienteCommercialCard
           cliente={cliente}
-          projectId={projectId}
           runtimeMetadata={runtimeMetadata}
           onSyncRuntime={handleSyncRuntime}
           isSyncingRuntime={syncRuntime.isPending}

@@ -437,7 +437,7 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
           status: pc.status,
           amount: pc.amount,
           due_date: pc.dueDate,
-          paid_at: pc.paidAt ?? null,
+          paid_at: null,   // nunca inserir paid_at retroativo — webhook atualiza quando confirmado
           description: null,
           payment_url: pc.paymentUrl ?? null,
         });

@@ -9,6 +9,7 @@ import { BillingSummaryCard } from './BillingSummaryCard';
 import { BillingActionsRow } from './BillingActionsRow';
 import { ChargesTable } from './ChargesTable';
 import { NewChargeDialog } from './NewChargeDialog';
+import { CreateSubscriptionDialog } from './CreateSubscriptionDialog';
 import { ProvisionAccountDialog } from './ProvisionAccountDialog';
 import { LIFECYCLE_LABEL } from '../types';
 
@@ -23,6 +24,7 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
   const { startTrial, syncAccount } = useBillingActions(adminClientId);
 
   const [provisionOpen, setProvisionOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
 
   if (isLoading) {
@@ -106,6 +108,7 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
             lifecycleStatus={account.lifecycle_status}
             onStartTrial={handleStartTrial}
             isStartingTrial={startTrial.isPending}
+            onCreateSubscription={() => setSubscriptionOpen(true)}
             onNewCharge={() => setChargeOpen(true)}
             onSync={handleSync}
             isSyncing={syncAccount.isPending}
@@ -121,6 +124,12 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
           </div>
         )}
       </Card>
+
+      <CreateSubscriptionDialog
+        adminClientId={adminClientId}
+        open={subscriptionOpen}
+        onOpenChange={setSubscriptionOpen}
+      />
 
       <NewChargeDialog
         adminClientId={adminClientId}

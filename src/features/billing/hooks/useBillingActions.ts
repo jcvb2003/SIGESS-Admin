@@ -53,6 +53,18 @@ export function useBillingActions(adminClientId: string) {
     // Não invalida overview — token é dado efêmero
   });
 
+  const createSubscription = useMutation({
+    mutationFn: (params: {
+      plan_id: string;
+      interval: 'monthly' | 'annual';
+      amount: number;
+      next_due_date: string;
+      description?: string;
+    }) => invokeBillingAction('create_subscription', { admin_client_id: adminClientId, ...params }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao criar assinatura'),
+  });
+
   const syncAccount = useMutation({
     mutationFn: () =>
       invokeBillingAction('sync_account', { admin_client_id: adminClientId }),
@@ -60,5 +72,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
-  return { provisionAccount, startTrial, createCharge, generateToken, syncAccount };
+  return { provisionAccount, startTrial, createSubscription, createCharge, generateToken, syncAccount };
 }

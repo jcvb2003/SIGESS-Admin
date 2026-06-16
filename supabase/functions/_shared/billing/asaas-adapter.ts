@@ -13,6 +13,7 @@ import type {
   EnsureCustomerInput,
   FetchChargeInput,
   FetchSubscriptionInput,
+  ListSubscriptionChargesInput,
   ParseWebhookInput,
 } from './provider.interface.ts';
 import { AsaasApiError, AsaasClient } from './asaas-client.ts';
@@ -168,6 +169,14 @@ export class AsaasAdapter implements BillingProvider {
   async fetchCharge(input: FetchChargeInput): Promise<ProviderCharge> {
     const res = await this.client.get<AsaasPayment>(`/payments/${input.providerChargeId}`);
     return mapPayment(res);
+  }
+
+  async listSubscriptionCharges(input: ListSubscriptionChargesInput): Promise<ProviderCharge[]> {
+    const res = await this.client.get<AsaasListResponse<AsaasPayment>>(
+      `/subscriptions/${input.providerSubscriptionId}/payments`,
+      { limit: '20' },
+    );
+    return (res.data ?? []).map(mapPayment);
   }
 
   parseWebhookEvent(input: ParseWebhookInput): BillingWebhookEvent {

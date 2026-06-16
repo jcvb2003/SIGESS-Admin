@@ -48,6 +48,10 @@ export interface FetchChargeInput {
   providerChargeId: string;
 }
 
+export interface ListSubscriptionChargesInput {
+  providerSubscriptionId: string;
+}
+
 export interface ParseWebhookInput {
   rawBody: string;
   headers: Record<string, string>;
@@ -69,6 +73,9 @@ export interface BillingProvider {
 
   fetchSubscription(input: FetchSubscriptionInput): Promise<ProviderSubscription>;
   fetchCharge(input: FetchChargeInput): Promise<ProviderCharge>;
+
+  // Returns all charges for a subscription from the provider (for reconciliation/discovery).
+  listSubscriptionCharges(input: ListSubscriptionChargesInput): Promise<ProviderCharge[]>;
 
   // Parses and normalizes an incoming webhook payload.
   // Throws if signature is invalid or payload is unrecognized.

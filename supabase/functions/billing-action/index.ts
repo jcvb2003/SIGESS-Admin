@@ -62,6 +62,9 @@ class StubBillingProvider implements BillingProvider {
       dueDate: new Date().toISOString().split('T')[0],
     };
   }
+  async listSubscriptionCharges(): Promise<ProviderCharge[]> {
+    return [];
+  }
   parseWebhookEvent(): BillingWebhookEvent {
     throw new Error('StubBillingProvider does not handle webhooks');
   }
@@ -399,6 +402,7 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     .maybeSingle();
 
   let syncedSubscription: string | null = null;
+  let discoveredCharges = 0;
   if (activeSub?.provider_subscription_id) {
     await svc.syncSubscriptionFromProvider(
       db,
@@ -408,10 +412,43 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
       activeSub.billing_account_id,
     );
     syncedSubscription = activeSub.provider_subscription_id;
+
+    // Discover charges that exist in the provider but have no local row yet.
+    // This covers the gap between subscription creation and first webhook delivery.
+    const providerCharges = await provider.listSubscriptionCharges({
+      providerSubscriptionId: activeSub.provider_subscription_id,
+    });
+
+    for (const pc of providerCharges) {
+      if (pc.status === 'paid' || pc.status === 'cancelled' || pc.status === 'failed') continue;
+
+      const { data: existing } = await db
+        .from('billing_charges')
+        .select('id')
+        .eq('provider_charge_id', pc.providerChargeId)
+        .maybeSingle();
+
+      if (!existing) {
+        await db.from('billing_charges').insert({
+          billing_account_id: account.id,
+          subscription_id: activeSub.id,
+          provider_charge_id: pc.providerChargeId,
+          type: 'subscription_renewal',
+          status: pc.status,
+          amount: pc.amount,
+          due_date: pc.dueDate,
+          paid_at: pc.paidAt ?? null,
+          description: null,
+          payment_url: pc.paymentUrl ?? null,
+        });
+        discoveredCharges++;
+      }
+    }
   }
 
   const result = {
     synced_charges: syncedCharges.length,
+    discovered_charges: discoveredCharges,
     provider_charge_ids: syncedCharges,
     synced_subscription: syncedSubscription,
   };

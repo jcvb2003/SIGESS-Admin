@@ -61,7 +61,7 @@ export function BillingSummaryCard({ account, subscription }: Readonly<BillingSu
 
       <InfoRow label="Próxima cobrança">
         {subscription?.next_billing_date ? (
-          {formatDate(subscription.next_billing_date)}
+          formatDate(subscription.next_billing_date)
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

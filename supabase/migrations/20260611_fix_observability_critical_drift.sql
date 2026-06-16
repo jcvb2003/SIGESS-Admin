@@ -149,6 +149,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  IF NEW.tenant_role = 'owner' THEN
+    RETURN NEW;
+  END IF;
+
   SELECT id
   INTO v_unit_id
   FROM public.tenant_units

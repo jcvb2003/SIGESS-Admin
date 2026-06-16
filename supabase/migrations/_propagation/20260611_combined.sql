@@ -1141,6 +1141,11 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- owner governa o tenant e nao participa de user_unit_memberships.
+  IF NEW.tenant_role = 'owner' THEN
+    RETURN NEW;
+  END IF;
+
   SELECT id
   INTO v_unit_id
   FROM public.tenant_units

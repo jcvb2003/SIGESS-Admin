@@ -51,7 +51,7 @@ export function ChargesTable({ charges }: Readonly<ChargesTableProps>) {
         </TableHeader>
         <TableBody>
           {charges.map((c) => (
-            <TableRow key={c.id} className={c.status === 'cancelled' || c.status === 'failed' ? 'opacity-40' : ''}>
+            <TableRow key={c.id}>
               <TableCell className="text-sm">
                 {format(new Date(c.due_date), 'dd/MM/yyyy', { locale: ptBR })}
               </TableCell>

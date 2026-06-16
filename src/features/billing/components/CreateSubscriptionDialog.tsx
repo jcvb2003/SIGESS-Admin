@@ -81,7 +81,7 @@ export function CreateSubscriptionDialog({
     }
 
     createSubscription.mutate(
-      { plan_id: planId, interval, amount: amountNum, next_due_date: nextDueDate },
+      { plan_id: planId, interval, amount: amountNum, next_due_date: nextDueDate, description: plan ? planLabel(plan, interval) : undefined },
       {
         onSuccess: () => {
           toast.success('Assinatura criada');

@@ -43,7 +43,7 @@ export async function getBillingPlans(): Promise<BillingPlan[]> {
     .from('billing_plans')
     .select('*')
     .eq('active', true)
-    .order('max_socios_from', { ascending: true });
+    .order('max_socios_to', { ascending: true, nullsFirst: false });
   if (error) throw new Error(`billing_plans lookup failed: ${error.message}`);
   return (data ?? []) as BillingPlan[];
 }
@@ -52,14 +52,13 @@ export async function getAllBillingPlans(): Promise<BillingPlan[]> {
   const { data, error } = await supabase
     .from('billing_plans')
     .select('*')
-    .order('max_socios_from', { ascending: true });
+    .order('max_socios_to', { ascending: true, nullsFirst: false });
   if (error) throw new Error(`billing_plans lookup failed: ${error.message}`);
   return (data ?? []) as BillingPlan[];
 }
 
 export interface BillingPlanInput {
   name: string;
-  max_socios_from: number;
   max_socios_to: number | null;
   price_monthly: number;
   price_annual: number;

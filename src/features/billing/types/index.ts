@@ -74,7 +74,6 @@ export interface BillingCharge {
 export interface BillingPlan {
   id: string;
   name: string;
-  max_socios_from: number;
   max_socios_to: number | null;
   price_monthly: number;
   price_annual: number;

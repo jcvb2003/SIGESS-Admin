@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatDate } from "@/shared/utils/date";
-import { CreditCard, Plus, Trash2, Pencil, Loader2, Infinity } from "lucide-react";
+import { CreditCard, Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ import type { BillingPlanInput } from "@/features/billing/services/billing.servi
 
 const EMPTY_FORM: BillingPlanInput = {
   name: "",
-  max_socios_from: 0,
   max_socios_to: null,
   price_monthly: 0,
   price_annual: 0,
@@ -38,8 +37,8 @@ function fmtBRL(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function fmtFaixa(from: number, to: number | null) {
-  return to == null ? `${from}+` : `${from}–${to}`;
+function fmtLimite(to: number | null) {
+  return to == null ? 'ilimitado' : `até ${to}`;
 }
 
 interface PlanFormProps {
@@ -73,30 +72,19 @@ function PlanForm({ initial, onSubmit, onCancel, isPending }: PlanFormProps) {
           placeholder="ex: Básico"
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="plan-from">Sócios (de)</Label>
-          <Input
-            id="plan-from"
-            type="number"
-            min={0}
-            value={form.max_socios_from}
-            onChange={(e) => set("max_socios_from", Number(e.target.value))}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="plan-to">Sócios (até)</Label>
-          <Input
-            id="plan-to"
-            type="number"
-            min={0}
-            placeholder="ilimitado"
-            value={form.max_socios_to ?? ""}
-            onChange={(e) =>
-              set("max_socios_to", e.target.value === "" ? null : Number(e.target.value))
-            }
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="plan-to">Limite de sócios</Label>
+        <Input
+          id="plan-to"
+          type="number"
+          min={1}
+          placeholder="ilimitado"
+          value={form.max_socios_to ?? ""}
+          onChange={(e) =>
+            set("max_socios_to", e.target.value === "" ? null : Number(e.target.value))
+          }
+        />
+        <p className="text-[11px] text-muted-foreground">Deixe em branco para ilimitado.</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -213,7 +201,6 @@ export function BillingPlansSettings() {
   const editInitial: BillingPlanInput = editing
     ? {
         name: editing.name,
-        max_socios_from: editing.max_socios_from,
         max_socios_to: editing.max_socios_to,
         price_monthly: editing.price_monthly,
         price_annual: editing.price_annual,
@@ -270,11 +257,7 @@ export function BillingPlansSettings() {
                   <tr key={plan.id} className="group">
                     <td className="py-3 pr-4 font-medium">{plan.name}</td>
                     <td className="py-3 pr-4 text-muted-foreground tabular-nums">
-                      <span className="flex items-center gap-0.5">
-                        {plan.max_socios_to == null
-                          ? <>{plan.max_socios_from}+<Infinity className="h-3.5 w-3.5" /></>
-                          : fmtFaixa(plan.max_socios_from, plan.max_socios_to)}
-                      </span>
+                      {fmtLimite(plan.max_socios_to)}
                     </td>
                     <td className="py-3 pr-4 tabular-nums">{fmtBRL(plan.price_monthly)}</td>
                     <td className="py-3 pr-4 tabular-nums">{fmtBRL(plan.price_annual)}</td>

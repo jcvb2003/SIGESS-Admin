@@ -28,11 +28,9 @@ interface CreateSubscriptionDialogProps {
 }
 
 function planLabel(plan: BillingPlan, interval: BillingInterval): string {
-  const range = plan.max_socios_to
-    ? `${plan.max_socios_from}–${plan.max_socios_to} sócios`
-    : `${plan.max_socios_from}+ sócios`;
+  const limite = plan.max_socios_to ? `até ${plan.max_socios_to} sócios` : 'ilimitado';
   const price = interval === 'annual' ? plan.price_annual : plan.price_monthly;
-  return `${plan.name} · ${range} · R$ ${price.toFixed(2).replace('.', ',')}`;
+  return `${plan.name} · ${limite} · R$ ${price.toFixed(2).replace('.', ',')}`;
 }
 
 function todayPlusDays(days: number): string {

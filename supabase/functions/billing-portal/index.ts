@@ -53,8 +53,14 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, reason: 'token_expired' }, 410);
   }
 
-  // `billing_portal_tokens` ainda não tem `accessed_at` no schema aplicado.
-  // O token continua reutilizável até expirar; por ora não registramos acesso aqui.
+  // Tokens são multi-uso dentro do prazo de validade por design —
+  // o cliente pode abrir o link múltiplas vezes sem perder acesso ao portal de pagamento.
+  // `used_at` está reservado no schema para futura implementação de single-use se necessário.
+  log('info', 'billing-portal', 'token_accessed', {
+    token_id: pt.id,
+    has_charge: !!pt.charge_id,
+    duration_ms: Date.now() - t0,
+  });
 
   // 3. Resolve dados da conta — obrigatório
   const { data: account } = await supabase

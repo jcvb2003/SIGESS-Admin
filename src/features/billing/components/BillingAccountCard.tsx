@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { CreditCard, Loader2 } from 'lucide-react';
+import { AlertTriangle, CreditCard, Loader2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { Tenant } from '@/features/clients/types';
-import { useBillingOverview, useBillingActions } from '../hooks';
+import { useBillingOverview, useBillingActions, useProviderSettings } from '../hooks';
 import { BillingSummaryCard } from './BillingSummaryCard';
 import { BillingActionsRow } from './BillingActionsRow';
 import { ChargesTable } from './ChargesTable';
@@ -21,7 +21,8 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
   const adminClientId = cliente.id;
 
   const { data, isLoading, error } = useBillingOverview(adminClientId);
-  const { startTrial, syncAccount } = useBillingActions(adminClientId);
+  const { data: providerSettings } = useProviderSettings();
+  const { cancelCharge, syncAccount } = useBillingActions(adminClientId);
 
   const [provisionOpen, setProvisionOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
@@ -46,6 +47,12 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
   }
 
   const { account, subscription, charges } = data ?? { account: null, subscription: null, charges: [] };
+
+  const providerMismatch =
+    account !== null &&
+    providerSettings !== undefined &&
+    providerSettings !== null &&
+    account.provider !== providerSettings.provider;
 
   if (!account) {
     return (
@@ -75,12 +82,6 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
     );
   }
 
-  const handleStartTrial = () => {
-    startTrial.mutate(undefined, {
-      onSuccess: () => toast.success('Trial iniciado'),
-    });
-  };
-
   const handleSync = () => {
     syncAccount.mutate(undefined, {
       onSuccess: () => toast.success('Cobrança sincronizada'),
@@ -100,16 +101,38 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
           </span>
         </div>
 
-        <BillingSummaryCard account={account} subscription={subscription} />
+        <BillingSummaryCard account={account} subscription={subscription} cliente={cliente} />
+
+        {providerMismatch && (
+          <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-700/50 dark:bg-amber-950/30">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                Provider desatualizado
+              </p>
+              <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
+                Conta provisionada com <span className="font-mono">{account.provider}</span>, provider atual é <span className="font-mono">{providerSettings!.provider}</span>. Re-provisione para atualizar o cliente.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
+              onClick={() => setProvisionOpen(true)}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              Re-provisionar
+            </Button>
+          </div>
+        )}
 
         <div className="mt-4">
           <BillingActionsRow
             adminClientId={adminClientId}
             lifecycleStatus={account.lifecycle_status}
             charges={charges}
-            onStartTrial={handleStartTrial}
-            isStartingTrial={startTrial.isPending}
             onCreateSubscription={() => setSubscriptionOpen(true)}
+            onReprovision={() => setProvisionOpen(true)}
             onNewCharge={() => setChargeOpen(true)}
             onSync={handleSync}
             isSyncing={syncAccount.isPending}
@@ -121,7 +144,15 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
             <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Últimas cobranças
             </p>
-            <ChargesTable charges={charges} />
+            <ChargesTable
+              charges={charges}
+              onCancelCharge={(providerChargeId) =>
+                cancelCharge.mutate(providerChargeId, {
+                  onSuccess: () => toast.success('Cobrança cancelada'),
+                })
+              }
+              isCancellingId={cancelCharge.isPending ? (cancelCharge.variables ?? null) : null}
+            />
           </div>
         )}
       </Card>
@@ -136,6 +167,12 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
         adminClientId={adminClientId}
         open={chargeOpen}
         onOpenChange={setChargeOpen}
+      />
+
+      <ProvisionAccountDialog
+        cliente={cliente}
+        open={provisionOpen}
+        onOpenChange={setProvisionOpen}
       />
     </>
   );

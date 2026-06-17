@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
 import { formatDate } from '@/shared/utils/date';
 import type { BillingAccount, BillingSubscription } from '../types';
-import {
-  LIFECYCLE_LABEL,
-  INTERVAL_LABEL,
-} from '../types';
+import type { Tenant } from '@/features/clients/types';
+import { INTERVAL_LABEL } from '../types';
 
 function InfoRow({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
@@ -20,23 +18,29 @@ function InfoRow({ label, children }: Readonly<{ label: string; children: ReactN
 interface BillingSummaryCardProps {
   account: BillingAccount;
   subscription: BillingSubscription | null;
+  cliente: Tenant;
 }
 
-export function BillingSummaryCard({ account, subscription }: Readonly<BillingSummaryCardProps>) {
+export function BillingSummaryCard({ account, subscription, cliente }: Readonly<BillingSummaryCardProps>) {
   return (
     <div className="divide-y divide-border/40">
-      <InfoRow label="Status">
-        <span className="font-medium">{LIFECYCLE_LABEL[account.lifecycle_status]}</span>
-      </InfoRow>
+      <InfoRow label="Cliente">{cliente.nome_entidade}</InfoRow>
 
-      <InfoRow label="Provider ID">
-        {account.provider_customer_id ? (
-          <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs font-mono">
-            {account.provider_customer_id}
-          </code>
-        ) : (
-          <span className="text-muted-foreground">Não provisionado</span>
-        )}
+      {cliente.cnpj_cpf && (
+        <InfoRow label="CPF / CNPJ">
+          <code className="font-mono text-xs">{cliente.cnpj_cpf}</code>
+        </InfoRow>
+      )}
+
+      {cliente.email && (
+        <InfoRow label="E-mail">{cliente.email}</InfoRow>
+      )}
+
+      <InfoRow label="Provider">
+        <code className="rounded bg-secondary/50 px-1.5 py-0.5 text-xs font-mono">
+          {account.provider}
+          {account.provider_customer_id ? ` · ${account.provider_customer_id}` : ' · não provisionado'}
+        </code>
       </InfoRow>
 
       {account.trial_ends_at && (
@@ -49,10 +53,7 @@ export function BillingSummaryCard({ account, subscription }: Readonly<BillingSu
         {subscription ? (
           <span>
             {INTERVAL_LABEL[subscription.interval]} —{' '}
-            {subscription.amount.toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            })}
+            {subscription.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </span>
         ) : (
           <span className="text-muted-foreground">Sem assinatura</span>

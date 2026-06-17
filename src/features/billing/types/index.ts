@@ -60,6 +60,7 @@ export interface BillingSubscription {
 export interface BillingCharge {
   id: string;
   billing_account_id: string;
+  provider_charge_id: string | null;
   type: BillingChargeType;
   status: BillingChargeStatus;
   amount: number;

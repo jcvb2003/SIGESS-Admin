@@ -1,14 +1,33 @@
 // @ts-expect-error: Deno-specific URL imports
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { BillingProvider, CreateChargeInput } from './provider.interface.ts';
-import type { BillingInterval, BillingWebhookEvent } from './types.ts';
+import type { BillingAccountLifecycleStatus, BillingInterval, BillingWebhookEvent } from './types.ts';
 import * as repo from './repositories.ts';
 import { log } from './logger.ts';
+
+// ─── assertLifecycle ─────────────────────────────────────────────────────────
+// Official guard for all billing mutations. Call before any side effect.
+// billing-action is the only external entry point — all callers go through here.
+
+export function assertLifecycle(
+  account: repo.BillingAccountRow,
+  allowed: BillingAccountLifecycleStatus[],
+  action: string,
+): void {
+  if (!allowed.includes(account.lifecycle_status)) {
+    const err = Object.assign(
+      new Error(`Ação '${action}' não permitida no status '${account.lifecycle_status}'. Permitido: ${allowed.join(', ')}`),
+      { status: 409 },
+    );
+    throw err;
+  }
+}
 
 // ─── ProvisionBillingAccount ──────────────────────────────────────────────────
 
 export interface ProvisionBillingAccountInput {
   adminClientId: string;
+  startAsTrial?: boolean;
   customerInfo: {
     name: string;
     email: string;
@@ -54,11 +73,52 @@ export async function provisionBillingAccount(
 
   if (insertErr) {
     if (insertErr.code === '23505') {
-      // Outro processo ganhou a corrida — retornar existente
       const existing = await repo.findAccountByClientId(db, input.adminClientId);
       if (!existing) throw new Error('billing_account disappeared after conflict — investigate immediately');
-      const pending = existing.provider_customer_id === null;
-      return { account: existing, created: false, pending };
+
+      if (existing.provider_customer_id === null) {
+        return { account: existing, created: false, pending: true };
+      }
+
+      // Re-provisão só permitida em estados internos — não interromper billing ativo.
+      const REPROVISION_ALLOWED: BillingAccountLifecycleStatus[] = ['draft', 'trial_active', 'provisioning'];
+      if (!REPROVISION_ALLOWED.includes(existing.lifecycle_status)) {
+        const err = Object.assign(
+          new Error(`Não é possível re-provisionar conta em status '${existing.lifecycle_status}'. Cancele o billing ativo primeiro.`),
+          { status: 409 },
+        );
+        throw err;
+      }
+
+      const customer = await provider.ensureCustomer({
+        ...input.customerInfo,
+        externalRef: input.adminClientId,
+      });
+
+      const providerChanged = provider.name !== existing.provider;
+      const customerChanged = customer.providerCustomerId !== existing.provider_customer_id;
+      const targetStatus: BillingAccountLifecycleStatus = input.startAsTrial ? 'trial_active' : 'draft';
+      const statusChanged = existing.lifecycle_status !== targetStatus;
+      const now = new Date().toISOString();
+
+      if (customerChanged || providerChanged || statusChanged) {
+        const patch: Record<string, unknown> = { updated_at: now };
+        if (customerChanged || providerChanged) {
+          patch.provider = provider.name;
+          patch.provider_customer_id = customer.providerCustomerId;
+        }
+        if (statusChanged) {
+          patch.lifecycle_status = targetStatus;
+          if (input.startAsTrial && !existing.trial_starts_at) {
+            patch.trial_starts_at = now;
+          }
+        }
+        await db.from('billing_accounts').update(patch).eq('id', existing.id);
+        existing.provider_customer_id = customer.providerCustomerId;
+        existing.lifecycle_status = targetStatus;
+      }
+
+      return { account: existing, created: false, pending: false };
     }
     throw new Error(`billing_accounts insert failed: ${insertErr.message}`);
   }
@@ -89,9 +149,16 @@ export async function provisionBillingAccount(
   }
 
   // 3. Persistir provider_customer_id — se falhar, conta fica em 'provisioning' (detectável)
+  const finalStatus: BillingAccountLifecycleStatus = input.startAsTrial ? 'trial_active' : 'draft';
+  const now = new Date().toISOString();
   const { error: updateErr } = await db
     .from('billing_accounts')
-    .update({ provider_customer_id: providerCustomerId, lifecycle_status: 'draft', updated_at: new Date().toISOString() })
+    .update({
+      provider_customer_id: providerCustomerId,
+      lifecycle_status: finalStatus,
+      trial_starts_at: input.startAsTrial ? now : null,
+      updated_at: now,
+    })
     .eq('id', draft.id);
 
   if (updateErr) {
@@ -104,30 +171,8 @@ export async function provisionBillingAccount(
     throw new Error(`billing_accounts update failed after provider customer created: ${updateErr.message}`);
   }
 
-  const account: repo.BillingAccountRow = { ...draft, provider_customer_id: providerCustomerId, lifecycle_status: 'draft' };
+  const account: repo.BillingAccountRow = { ...draft, provider_customer_id: providerCustomerId, lifecycle_status: finalStatus };
   return { account, created: true, pending: false };
-}
-
-// ─── StartTrial ───────────────────────────────────────────────────────────────
-
-export interface StartTrialInput {
-  adminClientId: string;
-  trialDays: number;
-}
-
-export async function startTrial(db: SupabaseClient, input: StartTrialInput) {
-  const account = await repo.findAccountByClientId(db, input.adminClientId);
-  if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
-  if (account.lifecycle_status === 'provisioning') throw new Error(`billing_account for client ${input.adminClientId} is still provisioning`);
-
-  const now = new Date();
-  const trialEnd = new Date(now.getTime() + input.trialDays * 86_400_000);
-
-  await repo.updateAccount(db, account.id, {
-    lifecycle_status: 'trial_active',
-    trial_starts_at: now.toISOString(),
-    trial_ends_at: trialEnd.toISOString(),
-  });
 }
 
 // ─── CreateInitialSubscription ────────────────────────────────────────────────
@@ -148,8 +193,17 @@ export async function createInitialSubscription(
 ) {
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
-  if (account.lifecycle_status === 'provisioning') throw new Error(`billing_account for client ${input.adminClientId} is still provisioning`);
+  assertLifecycle(account, ['draft', 'trial_active'], 'create_subscription');
   if (!account.provider_customer_id) throw new Error('Account has no provider_customer_id');
+
+  const existingSub = await repo.findActiveSubscriptionByAccountId(db, account.id);
+  if (existingSub) {
+    const err = Object.assign(
+      new Error(`billing_account ${account.id} já possui assinatura ativa: ${existingSub.id}. Cancele antes de criar outra.`),
+      { status: 409 },
+    );
+    throw err;
+  }
 
   const providerSub = await provider.createSubscription({
     providerCustomerId: account.provider_customer_id,
@@ -197,7 +251,7 @@ export async function createOneOffCharge(
 ) {
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
-  if (account.lifecycle_status === 'provisioning') throw new Error(`billing_account for client ${input.adminClientId} is still provisioning`);
+  assertLifecycle(account, ['draft', 'trial_active', 'payment_pending', 'active', 'past_due'], 'create_charge');
   if (!account.provider_customer_id) throw new Error('Account has no provider_customer_id');
 
   const providerCharge = await provider.createCharge({
@@ -242,6 +296,10 @@ export async function cancelSubscription(
     billing_status: 'cancelled',
     ends_at: new Date().toISOString(),
   });
+
+  // Atualizar lifecycle da conta imediatamente — não aguardar webhook.
+  // Garante que guards subsequentes e a projeção reflitam o cancelamento sem depender de reconciliação.
+  await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'cancelled' });
 }
 
 // ─── RecordWebhookEvent (idempotent) ──────────────────────────────────────────
@@ -397,20 +455,28 @@ export async function issuePortalToken(
 ) {
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
-  if (account.lifecycle_status === 'provisioning') throw new Error(`billing_account for client ${input.adminClientId} is still provisioning`);
+  assertLifecycle(account, ['payment_pending', 'active', 'past_due'], 'generate_portal_token');
 
-  // Guard: chargeId, when provided, must belong to this account.
-  // Prevents token for account A pointing at a charge from account B.
+  // Guard: chargeId, when provided, must belong to this account and be actionable.
+  // Prevents token for account A pointing at a charge from account B,
+  // and prevents emitting tokens for charges that are already paid/cancelled/failed.
   if (input.chargeId) {
     const { data: charge, error } = await db
       .from('billing_charges')
-      .select('id, billing_account_id')
+      .select('id, billing_account_id, status')
       .eq('id', input.chargeId)
       .maybeSingle();
     if (error) throw new Error(`billing_charges lookup failed: ${error.message}`);
     if (!charge) throw new Error(`charge ${input.chargeId} not found`);
     if (charge.billing_account_id !== account.id) {
       throw new Error(`charge ${input.chargeId} does not belong to billing_account ${account.id}`);
+    }
+    if (!['pending', 'overdue'].includes(charge.status)) {
+      const err = Object.assign(
+        new Error(`Não é possível gerar token para cobrança com status '${charge.status}'. Apenas cobranças pendentes ou vencidas são aceitas.`),
+        { status: 409 },
+      );
+      throw err;
     }
   }
 

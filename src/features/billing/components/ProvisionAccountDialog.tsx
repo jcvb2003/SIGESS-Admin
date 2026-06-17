@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,7 @@ export function ProvisionAccountDialog({
   const [email, setEmail] = useState(cliente.email ?? '');
   const [cpfCnpj, setCpfCnpj] = useState(cliente.cnpj_cpf ?? '');
   const [phone, setPhone] = useState(cliente.telefone ?? '');
+  const [startAsTrial, setStartAsTrial] = useState(false);
 
   const canSubmit = name.trim() && email.trim() && cpfCnpj.trim();
 
@@ -43,6 +45,7 @@ export function ProvisionAccountDialog({
         customer_email: email.trim(),
         customer_cpf_cnpj: cpfCnpj.trim(),
         ...(phone.trim() ? { customer_phone: phone.trim() } : {}),
+        ...(startAsTrial ? { start_as_trial: true } : {}),
       },
       {
         onSuccess: () => {
@@ -106,6 +109,23 @@ export function ProvisionAccountDialog({
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(99) 99999-9999"
             />
+          </div>
+
+          <div className="flex items-start gap-3 rounded-lg border border-border/50 bg-secondary/20 p-3">
+            <Checkbox
+              id="prov-trial"
+              checked={startAsTrial}
+              onCheckedChange={(v) => setStartAsTrial(v === true)}
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="prov-trial" className="cursor-pointer font-medium">
+                Iniciar cobrança em modo trial
+              </Label>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                A conta nasce em <code className="font-mono">trial_active</code> em vez de <code className="font-mono">draft</code>. Não afeta licença nem acesso ao sistema.
+              </p>
+            </div>
           </div>
 
           {(!cliente.email || !cliente.cnpj_cpf) && (

@@ -5,6 +5,7 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 import type { BillingProvider } from '../_shared/billing/provider.interface.ts';
 import type {
+  BillingDriftNote,
   BillingWebhookEvent,
   ProviderCharge,
   ProviderCustomer,
@@ -138,11 +139,13 @@ function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): 
 
 // ─── Summary sync helper ──────────────────────────────────────────────────────
 
-async function trySyncSummary(db: SupabaseClient, adminClientId: string): Promise<void> {
+async function syncSummaryOrThrow(db: SupabaseClient, adminClientId: string): Promise<void> {
   try {
     await syncBillingSummaryToRuntime(db, adminClientId);
   } catch (e) {
     console.error('[billing-action] summary sync failed for', adminClientId, ':', e);
+    const detail = e instanceof Error ? e.message : String(e);
+    throw createHttpError(`Falha ao sincronizar billing_summary: ${detail}`, 500);
   }
 }
 
@@ -235,6 +238,7 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
 
   const { account, created, pending } = await svc.provisionBillingAccount(db, provider, {
     adminClientId: params.admin_client_id as string,
+    startAsTrial: params.start_as_trial === true,
     customerInfo: {
       name: params.customer_name as string,
       email: params.customer_email as string,
@@ -248,21 +252,10 @@ async function handleProvisionAccount(db: SupabaseClient, provider: BillingProvi
     created,
     pending,
   });
-  if (!pending) await trySyncSummary(db, params.admin_client_id as string);
+  if (!pending) await syncSummaryOrThrow(db, params.admin_client_id as string);
   return { ...account, created, pending };
 }
 
-async function handleStartTrial(db: SupabaseClient, params: Record<string, unknown>) {
-  assert(params.admin_client_id, 'admin_client_id');
-  const trialDays = typeof params.trial_days === 'number' ? params.trial_days : 7;
-
-  const result = await svc.startTrial(db, {
-    adminClientId: params.admin_client_id as string,
-    trialDays,
-  });
-  await trySyncSummary(db, params.admin_client_id as string);
-  return result;
-}
 
 async function handleCreateSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.admin_client_id, 'admin_client_id');
@@ -281,7 +274,7 @@ async function handleCreateSubscription(db: SupabaseClient, provider: BillingPro
     nextDueDate: params.next_due_date as string,
     description: params.description as string | undefined,
   });
-  await trySyncSummary(db, params.admin_client_id as string);
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
   return result;
 }
 
@@ -291,15 +284,21 @@ async function handleCancelSubscription(db: SupabaseClient, provider: BillingPro
 
   const { data: sub } = await db
     .from('billing_subscriptions')
-    .select('billing_account_id')
+    .select('billing_account_id, billing_status')
     .eq('id', subId)
     .maybeSingle();
+
+  if (!sub) throw createHttpError(`Assinatura '${subId}' não encontrada`, 404);
+  if (!['active', 'pending_payment', 'overdue'].includes(sub.billing_status)) {
+    throw createHttpError(`Não é possível cancelar assinatura com status '${sub.billing_status}'`, 409);
+  }
+
   const { data: account } = sub?.billing_account_id
     ? await db.from('billing_accounts').select('admin_client_id').eq('id', sub.billing_account_id).maybeSingle()
     : { data: null };
 
   const result = await svc.cancelSubscription(db, provider, subId);
-  if (account?.admin_client_id) await trySyncSummary(db, account.admin_client_id);
+  if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
   return result;
 }
 
@@ -324,7 +323,7 @@ async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider,
     type: chargeType as 'one_off' | 'adjustment' | 'tier_upgrade',
     billingType: billingType as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
   });
-  await trySyncSummary(db, params.admin_client_id as string);
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
   return result;
 }
 
@@ -334,9 +333,15 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
 
   const { data: charge } = await db
     .from('billing_charges')
-    .select('billing_account_id')
+    .select('billing_account_id, status')
     .eq('provider_charge_id', providerChargeId)
     .maybeSingle();
+
+  if (!charge) throw createHttpError(`Cobrança com provider_charge_id '${providerChargeId}' não encontrada`, 404);
+  if (!['pending', 'overdue'].includes(charge.status)) {
+    throw createHttpError(`Não é possível cancelar cobrança com status '${charge.status}'. Apenas 'pending' ou 'overdue' podem ser canceladas.`, 409);
+  }
+
   const { data: account } = charge?.billing_account_id
     ? await db.from('billing_accounts').select('admin_client_id').eq('id', charge.billing_account_id).maybeSingle()
     : { data: null };
@@ -349,7 +354,7 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
     .eq('provider_charge_id', providerChargeId);
   if (error) throw createHttpError(`billing_charges update failed: ${error.message}`, 500);
 
-  if (account?.admin_client_id) await trySyncSummary(db, account.admin_client_id);
+  if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
 
   return { cancelled: true };
 }
@@ -446,13 +451,42 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     }
   }
 
+  // Drift detection — classifica divergências operacionais para observabilidade
+  // Não corrige automaticamente — estado provider-driven requer revisão manual
+  let driftNote: BillingDriftNote | null = null;
+
+  const { data: refreshedAccount } = await db
+    .from('billing_accounts')
+    .select('lifecycle_status')
+    .eq('id', account.id)
+    .maybeSingle();
+
+  if (refreshedAccount?.lifecycle_status === 'active') {
+    const { data: activeSub } = await db
+      .from('billing_subscriptions')
+      .select('id')
+      .eq('billing_account_id', account.id)
+      .in('billing_status', ['active', 'trialing'])
+      .limit(1)
+      .maybeSingle();
+    if (!activeSub) {
+      driftNote = 'account_active_but_no_active_subscription';
+      log('warn', 'billing-action', 'drift_detected', {
+        admin_client_id: params.admin_client_id,
+        account_id: account.id,
+        drift: driftNote,
+      });
+    }
+  }
+
   const result = {
     synced_charges: syncedCharges.length,
     discovered_charges: discoveredCharges,
     provider_charge_ids: syncedCharges,
     synced_subscription: syncedSubscription,
+    drift_note: driftNote,
   };
-  await trySyncSummary(db, params.admin_client_id as string);
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
   return result;
 }
 
@@ -515,9 +549,6 @@ Deno.serve(async (req: Request) => {
     switch (action) {
       case 'provision_account':
         result = await handleProvisionAccount(db, provider, params);
-        break;
-      case 'start_trial':
-        result = await handleStartTrial(db, params);
         break;
       case 'create_subscription':
         result = await handleCreateSubscription(db, provider, params);

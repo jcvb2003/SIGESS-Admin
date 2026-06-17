@@ -93,6 +93,27 @@ export async function deleteBillingPlan(id: string): Promise<void> {
   if (error) throw new Error(`billing_plans delete failed: ${error.message}`);
 }
 
+export interface ProviderSettings {
+  provider: string;
+  sandbox: boolean;
+  api_key_configured: boolean;
+}
+
+export async function getProviderSettings(): Promise<ProviderSettings | null> {
+  const { data, error } = await supabase
+    .from('billing_provider_settings')
+    .select('provider, sandbox, api_key')
+    .eq('id', 'default')
+    .maybeSingle();
+  if (error) throw new Error(`provider_settings lookup failed: ${error.message}`);
+  if (!data) return null;
+  return {
+    provider: data.provider,
+    sandbox: data.sandbox,
+    api_key_configured: Boolean(data.api_key),
+  };
+}
+
 // ─── Writes (via billing-action edge function) ────────────────────────────────
 
 export async function invokeBillingAction(

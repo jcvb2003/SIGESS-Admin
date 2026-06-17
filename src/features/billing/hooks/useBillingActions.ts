@@ -20,16 +20,6 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao provisionar conta'),
   });
 
-  const startTrial = useMutation({
-    mutationFn: (trialDays?: number) =>
-      invokeBillingAction('start_trial', {
-        admin_client_id: adminClientId,
-        ...(trialDays !== undefined ? { trial_days: trialDays } : {}),
-      }),
-    onSuccess: invalidate,
-    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao iniciar trial'),
-  });
-
   const createCharge = useMutation({
     mutationFn: (params: {
       amount: number;
@@ -64,6 +54,13 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao criar assinatura'),
   });
 
+  const cancelCharge = useMutation({
+    mutationFn: (providerChargeId: string) =>
+      invokeBillingAction('cancel_charge', { provider_charge_id: providerChargeId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao cancelar cobrança'),
+  });
+
   const syncAccount = useMutation({
     mutationFn: () =>
       invokeBillingAction('sync_account', { admin_client_id: adminClientId }),
@@ -71,5 +68,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
-  return { provisionAccount, startTrial, createSubscription, createCharge, generateToken, syncAccount };
+  return { provisionAccount, createSubscription, createCharge, cancelCharge, generateToken, syncAccount };
 }

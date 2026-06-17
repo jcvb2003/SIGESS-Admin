@@ -15,6 +15,7 @@ import type {
   FetchSubscriptionInput,
   ListSubscriptionChargesInput,
   ParseWebhookInput,
+  UpdateSubscriptionInput,
 } from './provider.interface.ts';
 import { AsaasApiError, AsaasClient } from './asaas-client.ts';
 import {
@@ -97,7 +98,15 @@ export class AsaasAdapter implements BillingProvider {
         '/customers',
         { externalReference: input.externalRef, limit: '1' },
       );
-      if (found.data[0]) return { providerCustomerId: found.data[0].id };
+      if (found.data[0]) {
+        await this.client.post<AsaasCustomer>(`/customers/${found.data[0].id}`, {
+          name: input.name,
+          cpfCnpj: input.cpfCnpj,
+          email: input.email,
+          ...(input.phone ? { mobilePhone: input.phone } : {}),
+        });
+        return { providerCustomerId: found.data[0].id };
+      }
     }
 
     const res = await this.client.post<AsaasCustomer>('/customers', {
@@ -117,6 +126,23 @@ export class AsaasAdapter implements BillingProvider {
       value: input.amount,
       nextDueDate: input.nextDueDate,
       cycle: input.interval === 'annual' ? 'YEARLY' : 'MONTHLY',
+      ...(input.description ? { description: input.description } : {}),
+    });
+    return {
+      providerSubscriptionId: res.id,
+      billingStatus: mapAsaasSubscriptionStatus(res.status),
+      nextBillingDate: res.nextDueDate,
+    };
+  }
+
+  async updateSubscription(input: UpdateSubscriptionInput): Promise<ProviderSubscription> {
+    const res = await this.client.post<AsaasSubscription>(`/subscriptions/${input.providerSubscriptionId}`, {
+      customer: input.providerCustomerId,
+      billingType: 'BOLETO',
+      value: input.amount,
+      nextDueDate: input.nextDueDate,
+      cycle: input.interval === 'annual' ? 'YEARLY' : 'MONTHLY',
+      updatePendingPayments: input.updatePendingPayments === true,
       ...(input.description ? { description: input.description } : {}),
     });
     return {

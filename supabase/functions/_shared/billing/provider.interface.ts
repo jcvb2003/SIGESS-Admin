@@ -24,6 +24,11 @@ export interface CreateSubscriptionInput {
   description?: string;
 }
 
+export interface UpdateSubscriptionInput extends CreateSubscriptionInput {
+  providerSubscriptionId: string;
+  updatePendingPayments?: boolean;
+}
+
 export interface CreateChargeInput {
   providerCustomerId: string;
   amount: number;
@@ -63,9 +68,12 @@ export interface BillingProvider {
   readonly name: string; // persisted in billing_accounts.provider — must be stable
 
   // Idempotent: creates or returns existing customer for the given cpfCnpj.
+  // If the customer already exists for the tenant, provider data must be refreshed
+  // with the latest local name/email/phone/cpfCnpj to avoid nomenclature drift.
   ensureCustomer(input: EnsureCustomerInput): Promise<ProviderCustomer>;
 
   createSubscription(input: CreateSubscriptionInput): Promise<ProviderSubscription>;
+  updateSubscription(input: UpdateSubscriptionInput): Promise<ProviderSubscription>;
   cancelSubscription(input: CancelSubscriptionInput): Promise<void>;
 
   createCharge(input: CreateChargeInput): Promise<ProviderCharge>;

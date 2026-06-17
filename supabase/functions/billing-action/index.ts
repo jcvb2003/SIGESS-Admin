@@ -15,6 +15,7 @@ import * as svc from '../_shared/billing/billing-service.ts';
 import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
+import { AsaasApiError } from '../_shared/billing/asaas-client.ts';
 import { log } from '../_shared/billing/logger.ts';
 import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
 
@@ -37,6 +38,13 @@ class StubBillingProvider implements BillingProvider {
   async createSubscription(input: Parameters<BillingProvider['createSubscription']>[0]): Promise<ProviderSubscription> {
     return {
       providerSubscriptionId: `stub_sub_${crypto.randomUUID()}`,
+      billingStatus: 'pending_payment',
+      nextBillingDate: input.nextDueDate,
+    };
+  }
+  async updateSubscription(input: Parameters<BillingProvider['updateSubscription']>[0]): Promise<ProviderSubscription> {
+    return {
+      providerSubscriptionId: input.providerSubscriptionId,
       billingStatus: 'pending_payment',
       nextBillingDate: input.nextDueDate,
     };
@@ -135,6 +143,10 @@ function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): 
     );
   }
   return value;
+}
+
+function isProviderNotFound(err: unknown): err is AsaasApiError {
+  return err instanceof AsaasApiError && err.status === 404;
 }
 
 // ─── Summary sync helper ──────────────────────────────────────────────────────
@@ -278,6 +290,28 @@ async function handleCreateSubscription(db: SupabaseClient, provider: BillingPro
   return result;
 }
 
+async function handleChangeSubscriptionPlan(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
+  assert(params.admin_client_id, 'admin_client_id');
+  assert(params.plan_id, 'plan_id');
+  assert(params.interval, 'interval');
+  assert(params.amount, 'amount');
+  assert(params.next_due_date, 'next_due_date');
+
+  const interval = assertDomain(params.interval, 'interval', VALID_INTERVALS);
+
+  const result = await svc.changeSubscriptionPlan(db, provider, {
+    adminClientId: params.admin_client_id as string,
+    planId: params.plan_id as string,
+    interval: interval as 'monthly' | 'annual',
+    amount: params.amount as number,
+    nextDueDate: params.next_due_date as string,
+    description: params.description as string | undefined,
+    updatePendingPayments: params.update_pending_payments === true,
+  });
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
+  return result;
+}
+
 async function handleCancelSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.subscription_id, 'subscription_id');
   const subId = params.subscription_id as string;
@@ -391,10 +425,24 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     .limit(10);
 
   const syncedCharges: string[] = [];
+  const missingRemoteChargeIds: string[] = [];
   for (const charge of (charges ?? [])) {
     if (!charge.provider_charge_id) continue;
-    await svc.syncChargeFromProvider(db, provider, charge.provider_charge_id);
-    syncedCharges.push(charge.provider_charge_id);
+    try {
+      await svc.syncChargeFromProvider(db, provider, charge.provider_charge_id);
+      syncedCharges.push(charge.provider_charge_id);
+    } catch (err) {
+      if (isProviderNotFound(err)) {
+        missingRemoteChargeIds.push(charge.provider_charge_id);
+        log('warn', 'billing-action', 'missing_remote_charge_during_sync', {
+          admin_client_id: params.admin_client_id,
+          account_id: account.id,
+          provider_charge_id: charge.provider_charge_id,
+        });
+        continue;
+      }
+      throw err;
+    }
   }
 
   const { data: activeSub } = await db
@@ -408,45 +456,59 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
 
   let syncedSubscription: string | null = null;
   let discoveredCharges = 0;
+  let missingRemoteSubscriptionId: string | null = null;
   if (activeSub?.provider_subscription_id) {
-    await svc.syncSubscriptionFromProvider(
-      db,
-      provider,
-      activeSub.id,
-      activeSub.provider_subscription_id,
-      activeSub.billing_account_id,
-    );
-    syncedSubscription = activeSub.provider_subscription_id;
+    try {
+      await svc.syncSubscriptionFromProvider(
+        db,
+        provider,
+        activeSub.id,
+        activeSub.provider_subscription_id,
+        activeSub.billing_account_id,
+      );
+      syncedSubscription = activeSub.provider_subscription_id;
 
-    // Discover charges that exist in the provider but have no local row yet.
-    // This covers the gap between subscription creation and first webhook delivery.
-    const providerCharges = await provider.listSubscriptionCharges({
-      providerSubscriptionId: activeSub.provider_subscription_id,
-    });
+      // Discover charges that exist in the provider but have no local row yet.
+      // This covers the gap between subscription creation and first webhook delivery.
+      const providerCharges = await provider.listSubscriptionCharges({
+        providerSubscriptionId: activeSub.provider_subscription_id,
+      });
 
-    for (const pc of providerCharges) {
-      if (pc.status === 'paid' || pc.status === 'cancelled' || pc.status === 'failed') continue;
+      for (const pc of providerCharges) {
+        if (pc.status === 'paid' || pc.status === 'cancelled' || pc.status === 'failed') continue;
 
-      const { data: existing } = await db
-        .from('billing_charges')
-        .select('id')
-        .eq('provider_charge_id', pc.providerChargeId)
-        .maybeSingle();
+        const { data: existing } = await db
+          .from('billing_charges')
+          .select('id')
+          .eq('provider_charge_id', pc.providerChargeId)
+          .maybeSingle();
 
-      if (!existing) {
-        await db.from('billing_charges').insert({
-          billing_account_id: account.id,
-          subscription_id: activeSub.id,
-          provider_charge_id: pc.providerChargeId,
-          type: 'subscription_renewal',
-          status: pc.status,
-          amount: pc.amount,
-          due_date: pc.dueDate,
-          paid_at: null,   // nunca inserir paid_at retroativo — webhook atualiza quando confirmado
-          description: null,
-          payment_url: pc.paymentUrl ?? null,
+        if (!existing) {
+          await db.from('billing_charges').insert({
+            billing_account_id: account.id,
+            subscription_id: activeSub.id,
+            provider_charge_id: pc.providerChargeId,
+            type: 'subscription_renewal',
+            status: pc.status,
+            amount: pc.amount,
+            due_date: pc.dueDate,
+            paid_at: null,   // nunca inserir paid_at retroativo — webhook atualiza quando confirmado
+            description: null,
+            payment_url: pc.paymentUrl ?? null,
+          });
+          discoveredCharges++;
+        }
+      }
+    } catch (err) {
+      if (isProviderNotFound(err)) {
+        missingRemoteSubscriptionId = activeSub.provider_subscription_id;
+        log('warn', 'billing-action', 'missing_remote_subscription_during_sync', {
+          admin_client_id: params.admin_client_id,
+          account_id: account.id,
+          provider_subscription_id: activeSub.provider_subscription_id,
         });
-        discoveredCharges++;
+      } else {
+        throw err;
       }
     }
   }
@@ -485,6 +547,8 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     provider_charge_ids: syncedCharges,
     synced_subscription: syncedSubscription,
     drift_note: driftNote,
+    missing_remote_charge_ids: missingRemoteChargeIds,
+    missing_remote_subscription_id: missingRemoteSubscriptionId,
   };
   await syncSummaryOrThrow(db, params.admin_client_id as string);
   return result;
@@ -552,6 +616,9 @@ Deno.serve(async (req: Request) => {
         break;
       case 'create_subscription':
         result = await handleCreateSubscription(db, provider, params);
+        break;
+      case 'change_subscription_plan':
+        result = await handleChangeSubscriptionPlan(db, provider, params);
         break;
       case 'cancel_subscription':
         result = await handleCancelSubscription(db, provider, params);

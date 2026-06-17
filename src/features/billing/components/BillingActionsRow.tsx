@@ -6,8 +6,10 @@ import type { BillingAccountLifecycleStatus, BillingCharge } from '../types';
 interface BillingActionsRowProps {
   adminClientId: string;
   lifecycleStatus: BillingAccountLifecycleStatus;
+  hasSubscription: boolean;
   charges: BillingCharge[];
   onCreateSubscription: () => void;
+  onChangePlan: () => void;
   onReprovision: () => void;
   onNewCharge: () => void;
   onSync: () => void;
@@ -17,28 +19,45 @@ interface BillingActionsRowProps {
 export function BillingActionsRow({
   adminClientId,
   lifecycleStatus,
+  hasSubscription,
   charges,
   onCreateSubscription,
+  onChangePlan,
   onReprovision,
   onNewCharge,
   onSync,
   isSyncing,
 }: Readonly<BillingActionsRowProps>) {
-  const canSubscribe = lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active';
+  const canCreateSubscription =
+    lifecycleStatus === 'draft' ||
+    lifecycleStatus === 'trial_active' ||
+    lifecycleStatus === 'cancelled';
+  const canChangePlan =
+    hasSubscription &&
+    (lifecycleStatus === 'payment_pending' ||
+      lifecycleStatus === 'active' ||
+      lifecycleStatus === 'past_due');
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {(lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active') && (
+      {(lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active' || lifecycleStatus === 'cancelled') && (
         <Button variant="outline" size="sm" onClick={onReprovision}>
           <RotateCcw className="mr-2 h-3.5 w-3.5" />
           Re-provisionar
         </Button>
       )}
 
-      {canSubscribe && (
+      {canCreateSubscription && (
         <Button variant="default" size="sm" onClick={onCreateSubscription}>
           <CalendarCheck className="mr-2 h-3.5 w-3.5" />
           Criar assinatura
+        </Button>
+      )}
+
+      {canChangePlan && (
+        <Button variant="default" size="sm" onClick={onChangePlan}>
+          <CalendarCheck className="mr-2 h-3.5 w-3.5" />
+          Trocar plano
         </Button>
       )}
 

@@ -26,6 +26,7 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
 
   const [provisionOpen, setProvisionOpen] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [changePlanOpen, setChangePlanOpen] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
 
   if (isLoading) {
@@ -130,8 +131,10 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
           <BillingActionsRow
             adminClientId={adminClientId}
             lifecycleStatus={account.lifecycle_status}
+            hasSubscription={subscription !== null}
             charges={charges}
             onCreateSubscription={() => setSubscriptionOpen(true)}
+            onChangePlan={() => setChangePlanOpen(true)}
             onReprovision={() => setProvisionOpen(true)}
             onNewCharge={() => setChargeOpen(true)}
             onSync={handleSync}
@@ -161,6 +164,14 @@ export function BillingAccountCard({ cliente }: Readonly<BillingAccountCardProps
         adminClientId={adminClientId}
         open={subscriptionOpen}
         onOpenChange={setSubscriptionOpen}
+      />
+
+      <CreateSubscriptionDialog
+        adminClientId={adminClientId}
+        mode="change"
+        subscription={subscription}
+        open={changePlanOpen}
+        onOpenChange={setChangePlanOpen}
       />
 
       <NewChargeDialog

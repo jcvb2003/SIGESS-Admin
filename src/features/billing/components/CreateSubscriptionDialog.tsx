@@ -19,10 +19,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useBillingActions, useBillingPlans } from '../hooks';
-import type { BillingInterval, BillingPlan } from '../types';
+import type { BillingInterval, BillingPlan, BillingSubscription } from '../types';
 
 interface CreateSubscriptionDialogProps {
   adminClientId: string;
+  mode?: 'create' | 'change';
+  subscription?: BillingSubscription | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -41,10 +43,12 @@ function todayPlusDays(days: number): string {
 
 export function CreateSubscriptionDialog({
   adminClientId,
+  mode = 'create',
+  subscription = null,
   open,
   onOpenChange,
 }: Readonly<CreateSubscriptionDialogProps>) {
-  const { createSubscription } = useBillingActions(adminClientId);
+  const { createSubscription, changeSubscriptionPlan } = useBillingActions(adminClientId);
   const { data: plans = [] } = useBillingPlans();
 
   const [planId, setPlanId] = useState('');
@@ -53,6 +57,16 @@ export function CreateSubscriptionDialog({
   const [nextDueDate, setNextDueDate] = useState(todayPlusDays(1));
 
   const plan = plans.find((p) => p.id === planId);
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode !== 'change' || !subscription) return;
+
+    setPlanId(subscription.plan_id);
+    setInterval(subscription.interval);
+    setAmount(subscription.amount.toFixed(2));
+    setNextDueDate(subscription.next_billing_date ?? todayPlusDays(1));
+  }, [open, mode, subscription]);
 
   useEffect(() => {
     if (!plan) return;
@@ -78,25 +92,35 @@ export function CreateSubscriptionDialog({
       return;
     }
 
-    createSubscription.mutate(
-      { plan_id: planId, interval, amount: amountNum, next_due_date: nextDueDate, description: plan ? planLabel(plan, interval) : undefined },
-      {
-        onSuccess: () => {
-          toast.success('Assinatura criada');
-          reset();
-          onOpenChange(false);
-        },
+    const payload = {
+      plan_id: planId,
+      interval,
+      amount: amountNum,
+      next_due_date: nextDueDate,
+      description: plan ? planLabel(plan, interval) : undefined,
+    };
+
+    const mutation = mode === 'change' ? changeSubscriptionPlan : createSubscription;
+    mutation.mutate(payload, {
+      onSuccess: () => {
+        toast.success(mode === 'change' ? 'Plano atualizado' : 'Assinatura criada');
+        reset();
+        onOpenChange(false);
       },
-    );
+    });
   };
+
+  const isPending = createSubscription.isPending || changeSubscriptionPlan.isPending;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Criar assinatura</DialogTitle>
+          <DialogTitle>{mode === 'change' ? 'Trocar plano' : 'Criar assinatura'}</DialogTitle>
           <DialogDescription>
-            Ativa a cobrança recorrente no provedor para este cliente.
+            {mode === 'change'
+              ? 'Atualiza o plano e a configuração da assinatura recorrente no provedor.'
+              : 'Ativa a cobrança recorrente no provedor para este cliente.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,7 +168,9 @@ export function CreateSubscriptionDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cs-due">Primeiro vencimento <span className="text-destructive">*</span></Label>
+              <Label htmlFor="cs-due">
+                {mode === 'change' ? 'Próximo vencimento' : 'Primeiro vencimento'} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="cs-due"
                 type="date"
@@ -159,8 +185,10 @@ export function CreateSubscriptionDialog({
             <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={!canSubmit || createSubscription.isPending}>
-              {createSubscription.isPending ? 'Criando...' : 'Criar assinatura'}
+            <Button type="submit" disabled={!canSubmit || isPending}>
+              {mode === 'change'
+                ? (changeSubscriptionPlan.isPending ? 'Atualizando...' : 'Trocar plano')
+                : (createSubscription.isPending ? 'Criando...' : 'Criar assinatura')}
             </Button>
           </DialogFooter>
         </form>

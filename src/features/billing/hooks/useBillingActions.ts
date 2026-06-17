@@ -54,6 +54,19 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao criar assinatura'),
   });
 
+  const changeSubscriptionPlan = useMutation({
+    mutationFn: (params: {
+      plan_id: string;
+      interval: 'monthly' | 'annual';
+      amount: number;
+      next_due_date: string;
+      description?: string;
+      update_pending_payments?: boolean;
+    }) => invokeBillingAction('change_subscription_plan', { admin_client_id: adminClientId, ...params }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao trocar plano'),
+  });
+
   const cancelCharge = useMutation({
     mutationFn: (providerChargeId: string) =>
       invokeBillingAction('cancel_charge', { provider_charge_id: providerChargeId }),
@@ -68,5 +81,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
-  return { provisionAccount, createSubscription, createCharge, cancelCharge, generateToken, syncAccount };
+  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount };
 }

@@ -81,7 +81,7 @@ export async function provisionBillingAccount(
       }
 
       // Re-provisão só permitida em estados internos — não interromper billing ativo.
-      const REPROVISION_ALLOWED: BillingAccountLifecycleStatus[] = ['draft', 'trial_active', 'provisioning'];
+      const REPROVISION_ALLOWED: BillingAccountLifecycleStatus[] = ['draft', 'trial_active', 'provisioning', 'cancelled'];
       if (!REPROVISION_ALLOWED.includes(existing.lifecycle_status)) {
         const err = Object.assign(
           new Error(`Não é possível re-provisionar conta em status '${existing.lifecycle_status}'. Cancele o billing ativo primeiro.`),
@@ -186,6 +186,10 @@ export interface CreateInitialSubscriptionInput {
   description?: string;
 }
 
+export interface ChangeSubscriptionPlanInput extends CreateInitialSubscriptionInput {
+  updatePendingPayments?: boolean;
+}
+
 export async function createInitialSubscription(
   db: SupabaseClient,
   provider: BillingProvider,
@@ -193,7 +197,7 @@ export async function createInitialSubscription(
 ) {
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
-  assertLifecycle(account, ['draft', 'trial_active'], 'create_subscription');
+  assertLifecycle(account, ['draft', 'trial_active', 'cancelled'], 'create_subscription');
   if (!account.provider_customer_id) throw new Error('Account has no provider_customer_id');
 
   const existingSub = await repo.findActiveSubscriptionByAccountId(db, account.id);
@@ -231,6 +235,49 @@ export async function createInitialSubscription(
   });
 
   return sub;
+}
+
+export async function changeSubscriptionPlan(
+  db: SupabaseClient,
+  provider: BillingProvider,
+  input: ChangeSubscriptionPlanInput,
+) {
+  const account = await repo.findAccountByClientId(db, input.adminClientId);
+  if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
+  assertLifecycle(account, ['payment_pending', 'active', 'past_due'], 'change_subscription_plan');
+  if (!account.provider_customer_id) throw new Error('Account has no provider_customer_id');
+
+  const existingSub = await repo.findActiveSubscriptionByAccountId(db, account.id);
+  if (!existingSub) {
+    const err = Object.assign(
+      new Error(`billing_account ${account.id} não possui assinatura ativa para trocar de plano.`),
+      { status: 409 },
+    );
+    throw err;
+  }
+  if (!existingSub.provider_subscription_id) throw new Error('Active subscription has no provider_subscription_id');
+
+  const providerSub = await provider.updateSubscription({
+    providerSubscriptionId: existingSub.provider_subscription_id,
+    providerCustomerId: account.provider_customer_id,
+    amount: input.amount,
+    interval: input.interval,
+    nextDueDate: input.nextDueDate,
+    description: input.description,
+    updatePendingPayments: input.updatePendingPayments === true,
+  });
+
+  await repo.updateSubscription(db, existingSub.id, {
+    plan_id: input.planId,
+    billing_status: providerSub.billingStatus,
+    interval: input.interval,
+    amount: input.amount,
+    next_billing_date: providerSub.nextBillingDate ?? input.nextDueDate,
+  });
+
+  await repo.updateAccount(db, account.id, {
+    current_plan_id: input.planId,
+  });
 }
 
 // ─── CreateOneOffCharge ───────────────────────────────────────────────────────

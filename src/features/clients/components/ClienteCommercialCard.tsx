@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Loader2, RefreshCw, XCircle, Sprout, Fish } from "lucide-react";
 import { differenceInDays, isPast } from "date-fns";
 import { formatDate } from "@/shared/utils/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { Cliente } from "../types";
 import { TOPOLOGY_LABEL } from "../types";
 import type { RuntimeProjectMetadata } from "@/services/runtime-tenants.service";
+import { proxyAction } from "@/services/projects.service";
 
 function InfoCell({ label, children, full }: Readonly<{ label: string; children: ReactNode; full?: boolean }>) {
   return (
@@ -19,6 +23,7 @@ function InfoCell({ label, children, full }: Readonly<{ label: string; children:
 }
 
 interface ClienteCommercialCardProps {
+  projectId: string;
   cliente: Cliente;
   runtimeMetadata: RuntimeProjectMetadata | null;
   onSyncRuntime: () => void;
@@ -26,11 +31,13 @@ interface ClienteCommercialCardProps {
 }
 
 export function ClienteCommercialCard({
+  projectId,
   cliente,
   runtimeMetadata,
   onSyncRuntime,
   isSyncingRuntime,
 }: Readonly<ClienteCommercialCardProps>) {
+  const queryClient = useQueryClient();
   const effectiveRuntimeMetadata = runtimeMetadata ?? {
     runtime_tenant_id: cliente.runtime_tenant_id,
     runtime_tenants_count: cliente.runtime_tenants_count ?? 0,
@@ -38,6 +45,8 @@ export function ClienteCommercialCard({
     supports_units: cliente.supports_units,
     runtime_topology: cliente.runtime_topology,
   };
+
+  const tenantId = effectiveRuntimeMetadata.runtime_tenant_id;
 
   const expiresAt = cliente.acesso_expira_em ? new Date(cliente.acesso_expira_em) : null;
   const expired = expiresAt ? isPast(expiresAt) : false;
@@ -50,6 +59,30 @@ export function ClienteCommercialCard({
     suspended: "bg-destructive/10 text-destructive",
   }[cliente.status];
   const statusLabel = { active: "Ativo", inactive: "Inativo", suspended: "Suspenso" }[cliente.status];
+
+  const tenantModeQuery = useQuery({
+    queryKey: ["tenant-mode", projectId, tenantId],
+    queryFn: () => proxyAction(projectId, "get-tenant-mode", { tenantId }),
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [editingMode, setEditingMode] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<'pesca' | 'agricultura'>('pesca');
+
+  const updateModeMutation = useMutation({
+    mutationFn: () => proxyAction(projectId, "update-tenant-mode", { tenantId, tenantMode: selectedMode }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-mode", projectId, tenantId] });
+      toast.success(`Modalidade atualizada para ${selectedMode}.`);
+      setEditingMode(false);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar modalidade.");
+    },
+  });
+
+  const currentMode = (tenantModeQuery.data as any)?.tenantMode ?? 'pesca';
 
   const expiryEl = () => {
     if (!expiresAt) return <span className="text-muted-foreground">Sem expiração</span>;
@@ -102,6 +135,42 @@ export function ClienteCommercialCard({
 
         <InfoCell label="Polos">
           {cliente.supports_units ? "Com polos" : "Sem polos"}
+        </InfoCell>
+
+        <InfoCell label="Modalidade">
+          {!tenantId ? (
+            <span className="text-amber-600 text-xs">Indisponível — sincronize o runtime primeiro</span>
+          ) : tenantModeQuery.isLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          ) : editingMode ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                className="text-xs border rounded px-2 py-1 bg-background"
+                value={selectedMode}
+                onChange={(e) => setSelectedMode(e.target.value as 'pesca' | 'agricultura')}
+              >
+                <option value="pesca">Pesca</option>
+                <option value="agricultura">Agricultura</option>
+              </select>
+              <Button size="sm" className="h-6 text-xs px-2" onClick={() => updateModeMutation.mutate()} disabled={updateModeMutation.isPending}>
+                {updateModeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Salvar"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingMode(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-sm">
+                {currentMode === 'agricultura' ? <Sprout className="h-3.5 w-3.5 text-green-600" /> : <Fish className="h-3.5 w-3.5 text-blue-600" />}
+                {currentMode === 'agricultura' ? 'Agricultura' : 'Pesca'}
+              </span>
+              <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5 text-muted-foreground"
+                onClick={() => { setSelectedMode(currentMode); setEditingMode(true); }}>
+                Editar
+              </Button>
+            </div>
+          )}
         </InfoCell>
 
         {cliente.email && (

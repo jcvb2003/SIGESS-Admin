@@ -47,6 +47,7 @@ export async function proxyAction(
     | "sync-trial-limits"
     | "repair-user-sync" | "delete-client-member" | "ban-client-member"
     | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id"
+    | "get-tenant-mode" | "update-tenant-mode"
     | "create-shared-tenant"
     | "list-shared-tenants" | "sync-shared-tenant-license"
     | "list-shared-tenant-units" | "create-shared-tenant-unit" | "update-shared-tenant-unit" | "delete-shared-tenant-unit"
@@ -60,6 +61,8 @@ export async function proxyAction(
     check.data?.topology?.startsWith("shared")
     && ![
       "get-runtime-tenant-id",
+      "get-tenant-mode",
+      "update-tenant-mode",
       "create-shared-tenant",
       "list-shared-tenants",
       "sync-shared-tenant-license",

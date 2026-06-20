@@ -101,6 +101,129 @@ async function listClientMembers(clientUrl: string, clientKey: string) {
   return { users: merged };
 }
 
+function isMissingRelationOrColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: string }).code ?? "") : "";
+  const message = "message" in error ? String((error as { message?: string }).message ?? "") : "";
+  return code === "42P01" || code === "42703" || /relation .* does not exist/i.test(message) || /column .* does not exist/i.test(message);
+}
+
+async function cleanupRuntimeUserReferences(
+  runtimeAdmin: SupabaseClient,
+  userId: string,
+  tenantId?: string,
+) {
+  const scopedEq = <T extends { eq: (column: string, value: string) => T }>(query: T) =>
+    tenantId ? query.eq("tenant_id", tenantId) : query;
+
+  const operations: Array<{
+    table: string;
+    column: string;
+    query: () => PromiseLike<{ error: unknown }>;
+  }> = [
+    {
+      table: "audit_log_financeiro",
+      column: "changed_by",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("audit_log_financeiro")
+            .update({ changed_by: null })
+            .eq("changed_by", userId),
+        ),
+    },
+    {
+      table: "financeiro_cobrancas_geradas",
+      column: "cancelado_por",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("financeiro_cobrancas_geradas")
+            .update({ cancelado_por: null })
+            .eq("cancelado_por", userId),
+        ),
+    },
+    {
+      table: "financeiro_config_socio",
+      column: "liberacao_usuario_id",
+      query: () =>
+        runtimeAdmin
+          .from("financeiro_config_socio")
+          .update({ liberacao_usuario_id: null })
+          .eq("liberacao_usuario_id", userId),
+    },
+    {
+      table: "financeiro_dae",
+      column: "cancelado_por",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("financeiro_dae")
+            .update({ cancelado_por: null })
+            .eq("cancelado_por", userId),
+        ),
+    },
+    {
+      table: "financeiro_dae",
+      column: "registrado_por",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("financeiro_dae")
+            .update({ registrado_por: null })
+            .eq("registrado_por", userId),
+        ),
+    },
+    {
+      table: "financeiro_historico_regime",
+      column: "alterado_por",
+      query: () =>
+        runtimeAdmin
+          .from("financeiro_historico_regime")
+          .update({ alterado_por: null })
+          .eq("alterado_por", userId),
+    },
+    {
+      table: "financeiro_lancamentos",
+      column: "cancelado_por",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("financeiro_lancamentos")
+            .update({ cancelado_por: null })
+            .eq("cancelado_por", userId),
+        ),
+    },
+    {
+      table: "financeiro_lancamentos",
+      column: "registrado_por",
+      query: () =>
+        scopedEq(
+          runtimeAdmin
+            .from("financeiro_lancamentos")
+            .update({ registrado_por: null })
+            .eq("registrado_por", userId),
+        ),
+    },
+    {
+      table: "logs_eventos_requerimento",
+      column: "usuario_id",
+      query: () =>
+        runtimeAdmin
+          .from("logs_eventos_requerimento")
+          .update({ usuario_id: null })
+          .eq("usuario_id", userId),
+    },
+  ];
+
+  for (const operation of operations) {
+    const { error } = await operation.query();
+    if (!error) continue;
+    if (isMissingRelationOrColumnError(error)) continue;
+    throw new Error(`Falha ao limpar ${operation.table}.${operation.column} antes de excluir usuário: ${String("message" in (error as object) ? (error as { message?: string }).message ?? error : error)}`);
+  }
+}
+
 async function updateClientMember(clientUrl: string, clientKey: string, params?: Record<string, unknown>) {
   const { userId, updates } = params as { userId: string, updates: Record<string, unknown> };
   if (!userId || !updates) throw new Error("Missing userId or updates");
@@ -259,8 +382,10 @@ async function createClientUser(clientUrl: string, clientKey: string, params?: R
 
 async function deleteClientUser(clientUrl: string, clientKey: string, userId: string) {
   const supabase = createClient(clientUrl, clientKey);
-  
-  // 1. Delete from Auth (Triggers should handle cleanup if configured, but we'll be explicit)
+
+  await cleanupRuntimeUserReferences(supabase, userId);
+
+  // 1. Delete from Auth after nulling runtime FKs that can block auth.users deletion.
   const { error: authError } = await supabase.auth.admin.deleteUser(userId);
   if (authError) throw authError;
 
@@ -2446,6 +2571,8 @@ async function handleSharedRuntimeAction(
       .eq("tenant_id", tenantId);
     if (tenantUserError) throw tenantUserError;
 
+    await cleanupRuntimeUserReferences(runtimeAdmin, authUserId, tenantId);
+
     const { error: authDeleteError } = await runtimeAdmin.auth.admin.deleteUser(authUserId);
     if (authDeleteError) throw authDeleteError;
 
@@ -2797,6 +2924,41 @@ async function handleAction(clientId: string, action: string, params: Record<str
       throw createHttpError(`Service role key missing for project ${clientId}`, 400);
     }
     return await getRuntimeTenantId(supabaseAdmin, clientId, client.supabase_url, client.supabase_secret_keys);
+  }
+
+  if (action === "get-tenant-mode") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    const { tenantId } = params as { tenantId: string };
+    if (!tenantId) throw createHttpError("tenantId é obrigatório para get-tenant-mode", 400);
+    const runtimeAdmin = createClient(client.supabase_url, client.supabase_secret_keys);
+    const { data, error } = await runtimeAdmin
+      .from("entidade")
+      .select("tenant_mode")
+      .eq("tenant_id", tenantId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return { tenantMode: (data as any)?.tenant_mode ?? "pesca" };
+  }
+
+  if (action === "update-tenant-mode") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    const { tenantId, tenantMode } = params as { tenantId: string; tenantMode: string };
+    if (!tenantId) throw createHttpError("tenantId é obrigatório para update-tenant-mode", 400);
+    if (!["pesca", "agricultura"].includes(tenantMode)) {
+      throw createHttpError("tenantMode deve ser 'pesca' ou 'agricultura'", 400);
+    }
+    const runtimeAdmin = createClient(client.supabase_url, client.supabase_secret_keys);
+    const { error } = await runtimeAdmin
+      .from("entidade")
+      .update({ tenant_mode: tenantMode })
+      .eq("tenant_id", tenantId);
+    if (error) throw error;
+    return { success: true, tenantMode };
   }
 
   if (action === "create-shared-tenant") {

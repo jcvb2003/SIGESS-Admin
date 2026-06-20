@@ -13,6 +13,7 @@ const FUNCTION_OWNERS: Record<string, string> = {
   "manage-user":               path.join(REPO_ROOT, "Web"),
   "member-collection-action":  path.join(REPO_ROOT, "Web"),
   "member-collection-webhook": path.join(REPO_ROOT, "Web"),
+  "member-collection-batch":   path.join(REPO_ROOT, "Web"),
 };
 
 type ProjectRow = {

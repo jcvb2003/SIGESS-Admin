@@ -10,7 +10,9 @@ const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 const REPO_ROOT = path.resolve(process.cwd(), "..");
 
 const FUNCTION_OWNERS: Record<string, string> = {
-  "manage-user": path.join(REPO_ROOT, "Web"),
+  "manage-user":               path.join(REPO_ROOT, "Web"),
+  "member-collection-action":  path.join(REPO_ROOT, "Web"),
+  "member-collection-webhook": path.join(REPO_ROOT, "Web"),
 };
 
 type ProjectRow = {

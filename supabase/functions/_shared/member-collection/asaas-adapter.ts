@@ -53,6 +53,8 @@ function mapAsaasStatus(asaasStatus: string): MemberCharge['status'] {
     case 'AWAITING_CHARGEBACK_REVERSAL':
     case 'DUNNING_RECEIVED':
       return 'cancelada';
+    // DUNNING_REQUESTED: enviado para cobrança judicial — ainda não resolvido
+    // cai em 'pendente' como fallback seguro no V1
     default:
       return 'pendente';
   }
@@ -67,6 +69,7 @@ function mapAsaasWebhookEvent(asaasEvent: string): CollectionWebhookEventType {
     case 'PAYMENT_OVERDUE':
       return 'PAYMENT_OVERDUE';
     case 'PAYMENT_REFUNDED':
+    case 'PAYMENT_REFUND_REQUESTED':  // em trânsito para reembolso
     case 'PAYMENT_CHARGEBACK_REQUESTED':
     case 'PAYMENT_CHARGEBACK_DISPUTE':
       return 'PAYMENT_REFUNDED';
@@ -147,7 +150,13 @@ export class AsaasCollectionAdapter implements ICollectionProvider {
   }
 
   async cancelCharge(providerChargeId: string): Promise<void> {
-    await this.client.delete(`/payments/${providerChargeId}`);
+    try {
+      await this.client.delete(`/payments/${providerChargeId}`);
+    } catch (err) {
+      // 404 = cobrança não existe ou já foi cancelada — estado desejado atingido
+      if (err instanceof AsaasApiError && err.status === 404) return;
+      throw err;
+    }
   }
 
   async fetchCharge(providerChargeId: string): Promise<MemberCharge> {
@@ -168,15 +177,25 @@ export class AsaasCollectionAdapter implements ICollectionProvider {
     }
 
     const body = JSON.parse(rawBody) as AsaasWebhookBody;
-    const providerChargeId = body.payment?.id ?? '';
     const type = mapAsaasWebhookEvent(body.event ?? '');
+
+    // Eventos que afetam uma cobrança específica requerem payment.id
+    // Falhar cedo evita lookup ambíguo com string vazia nas próximas camadas
+    const requiresChargeId = type !== 'OTHER';
+    const providerChargeId = body.payment?.id;
+    if (requiresChargeId && !providerChargeId) {
+      throw new Error(
+        `Webhook malformado: evento '${body.event}' requer payment.id mas não o enviou`,
+      );
+    }
+
     const paidAt = body.payment?.paymentDate
       ? `${body.payment.paymentDate}T00:00:00Z`
       : undefined;
 
     return {
       type,
-      providerChargeId,
+      providerChargeId: providerChargeId ?? '',
       externalReference: body.payment?.externalReference ?? undefined,
       paidAt,
       rawPayload: body,

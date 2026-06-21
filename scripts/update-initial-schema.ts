@@ -95,13 +95,13 @@ function extractGrants(sql: string): string {
   const ROLES = '(anon|authenticated|service_role)';
   const grantRe = new RegExp(`^GRANT .+ TO ${ROLES}(;|\\s*$)`, 'i');
   const revokeRe = new RegExp(`^REVOKE .+ FROM ${ROLES}(;|\\s*$)`, 'i');
-  const defaultPrivRe = /^ALTER DEFAULT PRIVILEGES/i;
+  // ALTER DEFAULT PRIVILEGES excluído: requer permissões elevadas não disponíveis via Management API
 
   return sql
     .split('\n')
     .filter((line) => {
       const t = line.trim();
-      return grantRe.test(t) || revokeRe.test(t) || defaultPrivRe.test(t);
+      return grantRe.test(t) || revokeRe.test(t);
     })
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')

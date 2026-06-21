@@ -43,21 +43,17 @@ export async function deleteProject(id: string): Promise<void> {
 
   // Decrementar active_projects na conta Supabase associada
   if (proj?.supabase_account_id) {
-    await supabase.rpc("decrement_active_projects" as any, { account_id: proj.supabase_account_id })
-      .catch(async () => {
-        // Fallback: update direto se RPC não existir
-        const { data: acc } = await supabase
-          .from("supabase_accounts")
-          .select("active_projects")
-          .eq("id", proj.supabase_account_id)
-          .maybeSingle();
-        if (acc?.active_projects && acc.active_projects > 0) {
-          await supabase
-            .from("supabase_accounts")
-            .update({ active_projects: acc.active_projects - 1 })
-            .eq("id", proj.supabase_account_id);
-        }
-      });
+    const { data: acc } = await supabase
+      .from("supabase_accounts")
+      .select("active_projects")
+      .eq("id", proj.supabase_account_id)
+      .maybeSingle();
+    if (acc && typeof acc.active_projects === 'number' && acc.active_projects > 0) {
+      await supabase
+        .from("supabase_accounts")
+        .update({ active_projects: acc.active_projects - 1 })
+        .eq("id", proj.supabase_account_id);
+    }
   }
 }
 

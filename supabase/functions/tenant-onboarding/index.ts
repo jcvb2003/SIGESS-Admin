@@ -470,32 +470,16 @@ function sanitizeInitialSchemaSql(sql: string) {
     ? `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n\n${cleanedSql}`
     : cleanedSql;
 
-  // Idempotency transforms — limited to patterns confirmed present in initial_schema.sql.
-  // Uses ^ with multiline flag to anchor at line start, avoiding matches inside $$ function bodies.
-  // No CREATE TYPE transform: type count in baseline is 0.
+  // Contrato: schema só é aplicado em banco limpo OU em banco com sentinela _sigess_applied.
+  // Transforms simples garantem segurança; transforms complexos foram removidos.
   return withTrgm
-    // Functions and procedures
     .replace(/^CREATE FUNCTION /gm, "CREATE OR REPLACE FUNCTION ")
     .replace(/^CREATE PROCEDURE /gm, "CREATE OR REPLACE PROCEDURE ")
-    // Views
     .replace(/^CREATE VIEW /gm, "CREATE OR REPLACE VIEW ")
-    // Tables
     .replace(/^CREATE TABLE (?!IF NOT EXISTS)/gm, "CREATE TABLE IF NOT EXISTS ")
-    // Indexes — UNIQUE before plain to avoid double-matching
     .replace(/^CREATE UNIQUE INDEX (?!IF NOT EXISTS)/gm, "CREATE UNIQUE INDEX IF NOT EXISTS ")
     .replace(/^CREATE INDEX (?!IF NOT EXISTS)/gm, "CREATE INDEX IF NOT EXISTS ")
-    // Sequences
-    .replace(/^CREATE SEQUENCE (?!IF NOT EXISTS)/gm, "CREATE SEQUENCE IF NOT EXISTS ")
-    // Triggers — non-greedy .+? captures FIRST "ON public.table", not last
-    .replace(
-      /^(CREATE TRIGGER (\w+) .+? ON (public\.\w+))/gm,
-      "DROP TRIGGER IF EXISTS $2 ON $3;\n$1"
-    )
-    // Policies — only the opening line is captured; multi-line body is untouched
-    .replace(
-      /^(CREATE POLICY (\w+) ON (public\.\w+))/gm,
-      "DROP POLICY IF EXISTS $2 ON $3;\n$1"
-    );
+    .replace(/^CREATE SEQUENCE (?!IF NOT EXISTS)/gm, "CREATE SEQUENCE IF NOT EXISTS ");
 }
 
 async function runProjectMigrations(projectRef: string, accessToken: string, supabaseAdmin: SupabaseClient) {
@@ -512,12 +496,20 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
     }
   };
 
+  // Verificar no banco Admin se algum job anterior já concluiu migrations para este project_ref
+  const { data: pastJob } = await supabaseAdmin
+    .from('onboarding_jobs')
+    .select('id')
+    .eq('project_ref', projectRef)
+    .gte('last_completed_step', 2)
+    .limit(1)
+    .maybeSingle();
+  if (pastJob) return; // migrations já concluídas para este project_ref
+
   const initialSchema = sanitizeInitialSchemaSql(
     await fetchSqlFromStorage(supabaseAdmin, 'initial_schema.sql')
   );
   await runQuery(initialSchema);
-
-  return { success: true };
 }
 
 function escapeLiteral(value: string) {

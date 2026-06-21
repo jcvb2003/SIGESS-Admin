@@ -515,7 +515,16 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
   );
   await runQuery(initialSchema);
 
-  // Aplicar grants canônicos após schema (GRANT é idempotente em PostgreSQL)
+  // Normalizar defaults do Supabase antes do replay canônico:
+  // projetos novos nascem com grants de infraestrutura (REFERENCES, TRIGGER, TRUNCATE
+  // em tabelas; EXECUTE implícito em funções) que somam com os grants canônicos e
+  // impedem convergência com o baseline. REVOKE total → grants.sql reaplicam só o contrato.
+  await runQuery(`
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated, service_role;
+    REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated, service_role;
+  `);
+
+  // Replay canônico dos grants funcionais do baseline
   const grantsSql = await fetchSqlFromStorage(supabaseAdmin, 'grants.sql').catch(() => '');
   if (grantsSql.trim()) {
     await runQuery(grantsSql);

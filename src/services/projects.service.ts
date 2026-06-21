@@ -35,6 +35,9 @@ export async function deleteProject(id: string): Promise<void> {
     .eq("id", id)
     .maybeSingle();
 
+  // Remover FK de onboarding_jobs para permitir a exclusão (preserva histórico dos jobs)
+  await supabase.from("onboarding_jobs").update({ projeto_id: null }).eq("projeto_id", id);
+
   const { error } = await supabase.from("projetos").delete().eq("id", id);
   if (error) throw handleSupabaseError(error);
 

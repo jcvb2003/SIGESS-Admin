@@ -78,6 +78,12 @@ export async function updateSystemSetting(key: string, value: string) {
   return data;
 }
 
+export async function getInitialSchemaUpdatedAt(): Promise<string | null> {
+  const { data, error } = await supabase.storage.from("migrations").list("", { search: "initial_schema.sql" });
+  if (error || !data?.length) return null;
+  return data[0].updated_at ?? data[0].created_at ?? null;
+}
+
 export async function validateSupabaseToken(token: string) {
   const { data, error } = await supabase.functions.invoke("validate-token", {
     body: { token }

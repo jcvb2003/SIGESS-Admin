@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { startProjectOnboarding, getOnboardingJobStatus } from "@/services/projects.service";
-import { useSupabaseAccounts } from "../../settings/hooks/useSystemSettings";
+import { useSupabaseAccounts, useSystemSettings } from "../../settings/hooks/useSystemSettings";
 import { projectsQueryKey } from "../hooks/useProjects";
 
 interface AddProjectDialogProps {
@@ -47,6 +47,11 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
   const queryClient = useQueryClient();
   const navigate    = useNavigate();
   const { data: accounts = [] } = useSupabaseAccounts();
+  const { data: sysSettings = [] } = useSystemSettings();
+
+  const hasBaselineRef = sysSettings.some((s) => s.key === "baseline_project_ref" && s.value);
+  const hasBaselineUrl = sysSettings.some((s) => s.key === "baseline_database_url" && s.value === "••••••••");
+  const baselineReady  = hasBaselineRef && hasBaselineUrl;
 
   const [projectName, setProjectName]         = useState("");
   const [projectRef, setProjectRef]           = useState("");
@@ -122,6 +127,16 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
 
         {!isRunning && (
           <form onSubmit={handleStart} className="space-y-5 pt-2 overflow-y-auto flex-1 pr-1">
+
+            {!baselineReady && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Baseline de schema não configurado. Configure o projeto de referência e a Database URL em{" "}
+                  <strong>Configurações → Governança</strong> antes de provisionar.
+                </span>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Conta Supabase Destino</Label>
@@ -203,7 +218,7 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
               <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>
               <Button
                 type="submit"
-                disabled={isStarting || !supabaseAccountId || !projectName || !projectRef}
+                disabled={isStarting || !supabaseAccountId || !projectName || !projectRef || !baselineReady}
               >
                 {isStarting
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />

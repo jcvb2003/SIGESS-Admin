@@ -52,10 +52,18 @@ export function useSystemSettings() {
   });
 }
 
+export function useInitialSchemaUpdatedAt() {
+  return useQuery({
+    queryKey: ["initialSchema", "updatedAt"] as const,
+    queryFn: settingsService.getInitialSchemaUpdatedAt,
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useUpdateSystemSetting() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ key, value }: { key: string, value: string }) => 
+    mutationFn: ({ key, value }: { key: string; value: string }) =>
       settingsService.updateSystemSetting(key, value),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.system });

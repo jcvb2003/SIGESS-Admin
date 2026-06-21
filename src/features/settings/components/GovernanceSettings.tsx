@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Database, Save, Loader2, Copy, Check, Terminal } from "lucide-react";
+import { Database, Save, Loader2, Copy, Check, Terminal, Clock, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useSystemSettings, useUpdateSystemSetting } from "../hooks/useSystemSettings";
+import { Badge } from "@/components/ui/badge";
+import { useSystemSettings, useUpdateSystemSetting, useInitialSchemaUpdatedAt } from "../hooks/useSystemSettings";
 import { useProjects } from "@/features/clients/hooks/useProjects";
 import { toast } from "sonner";
 
@@ -16,6 +17,7 @@ const COMMAND = "npm run schema:update-initial -- --promote";
 export function GovernanceSettings() {
   const { data: settings, isLoading: loadingSettings } = useSystemSettings();
   const { data: projects = [], isLoading: loadingProjects } = useProjects();
+  const { data: schemaUpdatedAt } = useInitialSchemaUpdatedAt();
   const updateSetting = useUpdateSystemSetting();
 
   const savedProjectId = settings?.find((s) => s.key === KEY_PROJECT_REF)?.value ?? "";
@@ -73,12 +75,25 @@ export function GovernanceSettings() {
 
   return (
     <Card className="p-6">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+      <div className="mb-6 flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
           <Database className="h-5 w-5 text-primary" />
         </div>
-        <div>
-          <h2 className="font-semibold text-foreground">Governança — Baseline de Schema</h2>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-foreground">Governança — Baseline de Schema</h2>
+            {schemaUpdatedAt ? (
+              <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
+                <Clock className="h-2.5 w-2.5" />
+                Gerado em {new Date(schemaUpdatedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-400">
+                <AlertTriangle className="h-2.5 w-2.5" />
+                Schema não gerado
+              </Badge>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">
             Define o projeto de referência para geração do schema canônico.
           </p>

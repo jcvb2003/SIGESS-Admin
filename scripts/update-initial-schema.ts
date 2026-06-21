@@ -92,20 +92,45 @@ function showDiff(candidatePath: string, officialPath: string): void {
 }
 
 function extractGrants(sql: string): string {
-  const ROLES = '(anon|authenticated|service_role)';
-  const grantRe = new RegExp(`^GRANT .+ TO ${ROLES}(;|\\s*$)`, 'i');
-  const revokeRe = new RegExp(`^REVOKE .+ FROM ${ROLES}(;|\\s*$)`, 'i');
-  // ALTER DEFAULT PRIVILEGES excluído: requer permissões elevadas não disponíveis via Management API
+  // Apenas privilégios funcionais do app.
+  // USAGE excluído: sem caso real confirmado no baseline.
+  // REVOKE excluído por decisão explícita: onboarding só concede;
+  // Schema Sync é responsável por normalizar (revogar + reaplicar) quando necessário.
+  // ALTER DEFAULT PRIVILEGES excluído: requer permissões elevadas não disponíveis via Management API.
+  const FUNCTIONAL = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXECUTE']);
+  const APP_ROLES = new Set(['anon', 'authenticated', 'service_role']);
 
-  return sql
-    .split('\n')
-    .filter((line) => {
-      const t = line.trim();
-      return grantRe.test(t) || revokeRe.test(t);
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const result: string[] = [];
+
+  for (const line of sql.split('\n')) {
+    const t = line.trim();
+
+    if (!/^GRANT /i.test(t)) continue;
+
+    // Verificar se ao menos um role do app está na cláusula TO
+    const toMatch = t.match(/\bTO\s+(.+?)\s*;?\s*$/i);
+    if (!toMatch) continue;
+    const roles = toMatch[1].split(',').map(r => r.trim().toLowerCase());
+    if (!roles.some(r => APP_ROLES.has(r))) continue;
+
+    // Extrair lista de privilégios (entre "GRANT " e " ON ")
+    const privMatch = t.match(/^GRANT\s+(.+?)\s+ON\s+/i);
+    if (!privMatch) continue;
+
+    const allPrivs = privMatch[1].split(',').map(p => p.trim().toUpperCase());
+    const functionalPrivs = allPrivs.filter(p => FUNCTIONAL.has(p));
+
+    if (functionalPrivs.length === 0) continue;
+
+    if (functionalPrivs.length === allPrivs.length) {
+      result.push(t);
+    } else {
+      // Reconstruir statement com apenas os privilégios funcionais
+      result.push(t.replace(privMatch[1], functionalPrivs.join(', ')));
+    }
+  }
+
+  return result.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 async function updateInitialSchema() {

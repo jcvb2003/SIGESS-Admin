@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useObservability } from "../hooks/useObservability";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
+import { BackupDashboard } from "../components/BackupDashboard";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -115,6 +116,7 @@ export default function ObservabilityPage() {
         <Tabs defaultValue="schema" className="space-y-6">
           <TabsList className="bg-secondary/60">
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
+            <TabsTrigger value="backups">Backups</TabsTrigger>
           </TabsList>
 
           <TabsContent value="schema" className="space-y-4">
@@ -223,6 +225,10 @@ export default function ObservabilityPage() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="backups" className="space-y-4">
+            <BackupDashboard />
           </TabsContent>
 
         </Tabs>

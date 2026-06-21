@@ -9,22 +9,12 @@ dotenv.config({ path: path.join(process.cwd(), '.env') });
 const ADMIN_URL = process.env.VITE_SUPABASE_URL;
 const ADMIN_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
-// Fonte canonica desta rodada: MARANHAO.
-// BASELINE_DATABASE_URL continua aceito como alias neutro.
-// RAYSSA_DATABASE_URL permanece apenas como fallback legado para nao quebrar fluxos antigos.
-const BASELINE_DB_URL =
+// Override local de emergência (legado). Fonte primária é agora o banco Admin.
+// Mantidos apenas como escape se banco Admin não estiver acessível.
+const ENV_DB_URL =
   process.env.MARANHAO_DATABASE_URL ??
   process.env.BASELINE_DATABASE_URL ??
   process.env.RAYSSA_DATABASE_URL;
-
-const BASELINE_DB_SOURCE =
-  process.env.MARANHAO_DATABASE_URL
-    ? 'MARANHAO_DATABASE_URL'
-    : process.env.BASELINE_DATABASE_URL
-      ? 'BASELINE_DATABASE_URL'
-      : process.env.RAYSSA_DATABASE_URL
-        ? 'RAYSSA_DATABASE_URL'
-        : null;
 
 const CANDIDATE_FILE = 'initial_schema_candidate.sql';
 const OFFICIAL_FILE = 'initial_schema.sql';
@@ -116,18 +106,37 @@ async function updateInitialSchema() {
     process.exit(1);
   }
 
-  if (!BASELINE_DB_URL) {
-    console.error('Erro: MARANHAO_DATABASE_URL (ou BASELINE_DATABASE_URL / RAYSSA_DATABASE_URL legado) nao definido no .env');
-    console.log('Exemplo: MARANHAO_DATABASE_URL=postgresql://postgres.<ref>:[SENHA]@<host>:5432/postgres');
-    process.exit(1);
-  }
+  // Fonte primária: banco Admin (system_settings.baseline_database_url)
+  let BASELINE_DB_URL = ENV_DB_URL ?? null;
+  let dbSource = ENV_DB_URL ? 'variavel de ambiente (legado)' : null;
 
-  if (BASELINE_DB_SOURCE === 'RAYSSA_DATABASE_URL') {
-    console.warn('Aviso: usando RAYSSA_DATABASE_URL como fonte legada. Defina MARANHAO_DATABASE_URL no .env para fixar o baseline canonico.');
+  if (!BASELINE_DB_URL) {
+    console.log('Lendo baseline_database_url do banco Admin...');
+    const adminClient = createClient(ADMIN_URL, ADMIN_KEY);
+    const { data: setting, error } = await adminClient
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'baseline_database_url')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao ler system_settings do banco Admin:', error.message);
+      process.exit(1);
+    }
+
+    if (!setting?.value || setting.value === '••••••••') {
+      console.error('Erro: baseline_database_url nao configurado no banco Admin.');
+      console.error('Configure em: Admin > Configuracoes > Governanca — Baseline de Schema');
+      console.error('Alternativa emergencial: defina BASELINE_DATABASE_URL no .env local');
+      process.exit(1);
+    }
+
+    BASELINE_DB_URL = setting.value;
+    dbSource = 'banco Admin (system_settings.baseline_database_url)';
   }
 
   try {
-    console.log(`Gerando dump do schema baseline a partir de ${BASELINE_DB_SOURCE}...`);
+    console.log(`Gerando dump do schema baseline a partir de: ${dbSource}...`);
 
     // --no-comments: remove cabecalhos de comentario gerados pelo pg_dump
     // --schema-only: apenas estrutura, sem dados

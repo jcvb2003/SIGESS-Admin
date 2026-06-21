@@ -127,20 +127,16 @@ function extractGrants(sql: string): string {
       const isSchema   = /\bON\s+SCHEMA\b/i.test(t);
 
       // Schemas e sequences: pular
-      if (isSchema || isSequence) continue;
+      // Funções, schemas, sequences: pular — onboarding revoga tudo de funções;
+      // ALTER Default Privileges do projeto cobre authenticated; anon/service_role não devem ter.
+      if (isFunction || isSchema || isSequence) continue;
 
-      if (isFunction) {
-        // GRANT ALL ON FUNCTION = EXECUTE; após REVOKE FROM PUBLIC no onboarding,
-        // os grants explícitos do grants.sql replicam exatamente o estado do MARANHAO
-        result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, 'EXECUTE'));
-      } else {
-        result.push(t); // GRANT ALL ON TABLE/VIEW — preservar literal
-      }
+      result.push(t); // GRANT ALL ON TABLE/VIEW — preservar literal
       continue;
     }
 
-    // GRANT EXECUTE ON FUNCTION — preservar (captura grants explícitos do MARANHAO)
-    // Após REVOKE FROM PUBLIC, esses grants replicam exatamente o estado do baseline
+    // Pular grants de funções com lista explícita (GRANT EXECUTE ON FUNCTION ...)
+    if (/\bON\s+FUNCTION\b/i.test(t)) continue;
 
     const allPrivs = rawPrivs.split(',').map(p => p.trim());
     const functionalPrivs = allPrivs.filter(p => FUNCTIONAL.has(p));

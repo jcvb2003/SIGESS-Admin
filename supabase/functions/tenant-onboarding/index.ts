@@ -397,7 +397,7 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
     }, true);
 
     await runStep("finalizing_setup", 7, async () => {
-      const { id: projetoId, isNew } = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
+      const { id: projetoId, isNew } = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken, supabaseAccountId);
       if (isNew) await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
       await supabaseAdmin.from('onboarding_jobs').update({ projeto_id: projetoId }).eq('id', jobId);
     }, true);
@@ -717,7 +717,7 @@ async function seedInitialData(
   );
 }
 
-async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string) {
+async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string, accountId: string) {
   const { data: existing } = await admin.from('projetos').select('id').eq('supabase_url', url).single();
   if (existing) return { id: existing.id, isNew: false };
 
@@ -728,6 +728,7 @@ async function registerProjectInCentral(admin: SupabaseClient, label: string, ur
     supabase_secret_keys: sr,
     supabase_access_token: pat,
     topology: 'unconfigured',
+    supabase_account_id: accountId,
   }).select('id').single();
   if (error || !projeto) throw new Error("Failed to register project: " + (error ? error.message : ""));
 

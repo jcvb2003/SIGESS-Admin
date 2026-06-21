@@ -91,6 +91,23 @@ function showDiff(candidatePath: string, officialPath: string): void {
   }
 }
 
+function extractGrants(sql: string): string {
+  const ROLES = '(anon|authenticated|service_role)';
+  const grantRe = new RegExp(`^GRANT .+ TO ${ROLES}(;|\\s*$)`, 'i');
+  const revokeRe = new RegExp(`^REVOKE .+ FROM ${ROLES}(;|\\s*$)`, 'i');
+  const defaultPrivRe = /^ALTER DEFAULT PRIVILEGES/i;
+
+  return sql
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      return grantRe.test(t) || revokeRe.test(t) || defaultPrivRe.test(t);
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function updateInitialSchema() {
   const args = process.argv.slice(2);
   const promote = args.includes('--promote');
@@ -189,6 +206,30 @@ async function updateInitialSchema() {
       .upload(OFFICIAL_FILE, buffer, { upsert: true, contentType: 'text/plain' });
 
     if (officialError) throw new Error(`Erro ao subir oficial: ${officialError.message}`);
+
+    // Gerar e promover grants.sql
+    console.log('\nGerando grants canonicos...');
+    const grantsCommand = [
+      `pg_dump "${BASELINE_DB_URL}"`,
+      '--schema-only',
+      '--no-owner',
+      '--no-comments',
+      '--schema=public',
+    ].join(' ');
+
+    const rawGrants = execSync(grantsCommand, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 50 });
+    const grantsSql = extractGrants(rawGrants);
+
+    if (!grantsSql.trim()) {
+      console.warn('Aviso: nenhum grant extraido. Verifique o filtro extractGrants.');
+    } else {
+      const grantsBuffer = Buffer.from(grantsSql);
+      const { error: grantsError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload('grants.sql', grantsBuffer, { upsert: true, contentType: 'text/plain' });
+      if (grantsError) throw new Error(`Erro ao subir grants.sql: ${grantsError.message}`);
+      console.log(`grants.sql gerado (${(grantsSql.length / 1024).toFixed(2)} KB)`);
+    }
 
     console.log('\nSucesso! O novo onboarding usara este schema como base.');
   } catch (error: any) {

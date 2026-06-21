@@ -510,6 +510,12 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
     await fetchSqlFromStorage(supabaseAdmin, 'initial_schema.sql')
   );
   await runQuery(initialSchema);
+
+  // Aplicar grants canônicos após schema (GRANT é idempotente em PostgreSQL)
+  const grantsSql = await fetchSqlFromStorage(supabaseAdmin, 'grants.sql').catch(() => '');
+  if (grantsSql.trim()) {
+    await runQuery(grantsSql);
+  }
 }
 
 function escapeLiteral(value: string) {

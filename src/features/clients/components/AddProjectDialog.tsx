@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, X, Loader2, Rocket, Shield, AlertCircle, ExternalLink } from "lucide-react";
+import { Check, X, Loader2, Rocket, Shield, AlertCircle, ExternalLink, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -42,6 +42,56 @@ const STEPS: Record<string, string> = {
   completed:          "Tudo pronto!",
   failed:             "Falha no processo",
 };
+
+const PENDING_FUNCTIONS = [
+  "member-collection-action",
+  "member-collection-webhook",
+  "member-collection-batch",
+];
+
+function PendingFunctionsBlock({ projectRef }: { projectRef: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copy = (cmd: string) => {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(cmd);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2 dark:border-amber-800 dark:bg-amber-950/20">
+      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+        Pendência: deploy das funções de cobrança
+      </p>
+      <p className="text-[11px] text-amber-700 dark:text-amber-400">
+        Rode localmente na raiz do Admin:
+      </p>
+      <div className="space-y-1.5">
+        {PENDING_FUNCTIONS.map((fn) => {
+          const cmd = `npm run functions:deploy -- ${fn} --ref=${projectRef}`;
+          return (
+            <div key={fn} className="flex items-center gap-1.5">
+              <code className="flex-1 truncate rounded bg-background/60 px-2 py-1 text-[10px] font-mono text-foreground border border-border/40">
+                {cmd}
+              </code>
+              <button
+                type="button"
+                onClick={() => copy(cmd)}
+                className="shrink-0 rounded p-1 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                title="Copiar"
+              >
+                {copied === cmd
+                  ? <Check className="h-3 w-3" />
+                  : <Copy className="h-3 w-3" />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDialogProps>) {
   const queryClient = useQueryClient();
@@ -298,15 +348,18 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
                 )}
 
                 {isDone && (
-                  <Button
-                    onClick={() => {
-                      handleClose();
-                      if (job.entidade_id) navigate(`/clients/${job.entidade_id}`);
-                    }}
-                    className="w-full"
-                  >
-                    Ver projeto
-                  </Button>
+                  <div className="flex flex-col gap-3">
+                    <Button
+                      onClick={() => {
+                        handleClose();
+                        if (job.entidade_id) navigate(`/clients/${job.entidade_id}`);
+                      }}
+                      className="w-full"
+                    >
+                      Ver projeto
+                    </Button>
+                    <PendingFunctionsBlock projectRef={job.project_ref} />
+                  </div>
                 )}
                 {isFailed && (
                   <div className="flex flex-col gap-2">

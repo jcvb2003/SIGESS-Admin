@@ -496,12 +496,16 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
     }
   };
 
-  // Verificar no banco Admin se algum job anterior já concluiu migrations para este project_ref
+  // Verificar no banco Admin se algum job anterior já concluiu migrations para este project_ref.
+  // projeto_id não nulo garante que o projeto ainda está registrado — se foi excluído e
+  // re-provisionado com o mesmo project_ref, projeto_id foi nullado em deleteProject,
+  // então o sentinel não dispara e migrations rodam normalmente.
   const { data: pastJob } = await supabaseAdmin
     .from('onboarding_jobs')
     .select('id')
     .eq('project_ref', projectRef)
     .gte('last_completed_step', 2)
+    .not('projeto_id', 'is', null)
     .limit(1)
     .maybeSingle();
   if (pastJob) return; // migrations já concluídas para este project_ref

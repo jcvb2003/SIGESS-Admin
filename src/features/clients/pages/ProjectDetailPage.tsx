@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Trash2,
   Users,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
@@ -24,8 +25,10 @@ import { useClientes } from "../hooks/useClientes";
 import { useRuntimeMetadataSync } from "../hooks/useRuntimeMetadataSync";
 import { EditProjectModal } from "../components/EditProjectModal";
 import { AddClienteDialog } from "../components/AddClienteDialog";
+import { DeleteClientDialog } from "../components/DeleteClientDialog";
 import { HealthCheckCard } from "@/features/clients";
 import type { RuntimeProjectMetadata } from "@/services/runtime-tenants.service";
+import { deleteProject } from "@/services/projects.service";
 
 function extractProjectRef(project: Project): string {
   try {
@@ -231,6 +234,7 @@ export default function ProjectDetailPage() {
 
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [addClienteOpen, setAddClienteOpen] = useState(false);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeProjectMetadata | null>(null);
 
   const { data: project, isLoading, refetch: refetchProject } = useProjectDetail(id!);
@@ -294,10 +298,15 @@ export default function ProjectDetailPage() {
               <p className="text-xs text-muted-foreground">{TOPOLOGY_LABEL[project.topology]}</p>
             </div>
           </div>
-          <Button onClick={() => setEditProjectOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Editar Projeto
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteProjectOpen(true)} title="Excluir projeto">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => setEditProjectOpen(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar Projeto
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -365,6 +374,16 @@ export default function ProjectDetailPage() {
           onCreated={() => {
             refetchClientes();
             setAddClienteOpen(false);
+          }}
+        />
+
+        <DeleteClientDialog
+          open={deleteProjectOpen}
+          onOpenChange={setDeleteProjectOpen}
+          clientName={project.project_name}
+          onConfirm={async () => {
+            await deleteProject(project.id);
+            navigate("/clients");
           }}
         />
       </div>

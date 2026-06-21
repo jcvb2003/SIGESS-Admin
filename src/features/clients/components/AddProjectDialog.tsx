@@ -31,16 +31,17 @@ interface AddProjectDialogProps {
 }
 
 const STEPS: Record<string, string> = {
-  pending:            "Iniciando",
-  fetching_keys:      "Coletando chaves e configurando credenciais",
-  configuring_auth:   "Configurando Auth, SMTP e Segurança",
-  running_migrations: "Injetando estrutura de dados",
-  seeding:            "Carregando dados iniciais",
-  creating_admin:     "Criando usuário Master",
-  registering_tenant: "Registrando na Base Admin Central",
-  finalizing_setup:   "Finalizando configurações públicas",
-  completed:          "Tudo pronto!",
-  failed:             "Falha no processo",
+  pending:                  "Iniciando",
+  fetching_keys:            "Coletando chaves e configurando credenciais",
+  configuring_auth:         "Configurando Auth, SMTP e Segurança",
+  running_migrations:       "Injetando estrutura de dados e grants",
+  configuring_storage:      "Configurando Storage e políticas",
+  deploying_edge_functions: "Deployando Edge Functions",
+  creating_admin:           "Criando usuário Master",
+  registering_tenant:       "Registrando na Base Admin Central",
+  finalizing_setup:         "Finalizando configurações públicas",
+  completed:                "Tudo pronto!",
+  failed:                   "Falha no processo",
 };
 
 const PENDING_FUNCTIONS = [

@@ -112,6 +112,7 @@ export async function startProjectOnboarding(payload: {
   adminEmail?: string;
   maxSocios?: number | null;
   acessoExpiraEm?: string | null;
+  resumeFromJobId?: string;
 }): Promise<{ jobId: string }> {
   const { data, error } = await supabase.functions.invoke("tenant-onboarding", {
     body: payload,

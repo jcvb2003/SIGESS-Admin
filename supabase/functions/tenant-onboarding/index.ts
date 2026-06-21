@@ -216,6 +216,7 @@ interface OnboardingPayload {
   adminEmail?: string;
   maxSocios?: number | null;
   acessoExpiraEm?: string | null;
+  resumeFromJobId?: string;
 }
 
 interface SystemSetting {
@@ -268,6 +269,17 @@ serve(async (req: Request) => {
       throw new Error("Missing required payload fields");
     }
 
+    // Resolve resume point from a previous failed job
+    let resumeFrom = -1;
+    if (payload.resumeFromJobId) {
+      const { data: prevJob } = await supabaseAdmin
+        .from('onboarding_jobs')
+        .select('last_completed_step')
+        .eq('id', payload.resumeFromJobId)
+        .maybeSingle();
+      resumeFrom = (prevJob as { last_completed_step?: number } | null)?.last_completed_step ?? -1;
+    }
+
     const { data: job, error: jobError } = await supabaseAdmin
       .from("onboarding_jobs")
       .insert({
@@ -277,13 +289,14 @@ serve(async (req: Request) => {
         supabase_account_id: payload.supabaseAccountId,
         status: "pending",
         current_step: 0,
-        total_steps: 9
+        total_steps: 9,
+        resume_from_job_id: payload.resumeFromJobId || null,
       })
       .select("id")
       .single();
 
     if (jobError || !job) throw new Error("Failed to initialize job: " + (jobError ? jobError.message : ""));
-    EdgeRuntime.waitUntil(processOnboarding(job.id, payload, supabaseAdmin));
+    EdgeRuntime.waitUntil(processOnboarding(job.id, payload, supabaseAdmin, resumeFrom));
 
     return new Response(JSON.stringify({ jobId: job.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -320,7 +333,7 @@ async function updateJob(
 }
 
 // --- Main background processing ---
-async function processOnboarding(jobId: string, payload: OnboardingPayload, supabaseAdmin: SupabaseClient) {
+async function processOnboarding(jobId: string, payload: OnboardingPayload, supabaseAdmin: SupabaseClient, resumeFrom = -1) {
   try {
     const { projectRef, tenantLabel, adminEmail, supabaseAccountId, maxSocios, acessoExpiraEm } = payload;
     const projectUrl = `https://${projectRef}.supabase.co`;
@@ -339,46 +352,56 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       throw new Error("Configuracoes incompletas (Supabase ou Resend ausentes).");
     }
 
-    // 1. Keys
+    // Helper: executa um step resumível.
+    // - Atualiza status e progresso ANTES de executar.
+    // - Pula fn() se index <= resumeFrom (step já concluído em job anterior).
+    // - Grava last_completed_step APÓS fn() resolver sem erro.
+    const runStep = async (name: string, index: number, fn: () => Promise<void>, alwaysRun = false) => {
+      await updateJob(supabaseAdmin, jobId, name, 1);
+      if (!alwaysRun && index <= resumeFrom) return;
+      await fn();
+      await supabaseAdmin.from('onboarding_jobs').update({ last_completed_step: index }).eq('id', jobId);
+    };
+
+    // Pré-condição — sempre executa (read-only, produz anonKey/serviceRoleKey para os demais steps)
     await updateJob(supabaseAdmin, jobId, "fetching_keys", 1);
     const { anonKey, serviceRoleKey } = await fetchProjectKeys(projectRef, managementToken);
 
-    // 2. Auth & SMTP
-    await updateJob(supabaseAdmin, jobId, "configuring_auth", 1);
-    await setupProjectAuth(projectRef, managementToken, resendApiKey, sysConfig.resend_from_email);
+    // Steps 1–5: skippáveis no resume
+    await runStep("configuring_auth", 1, async () => {
+      await setupProjectAuth(projectRef, managementToken, resendApiKey, sysConfig.resend_from_email);
+    });
 
-    // 3. Database (Migrations & Seed)
-    await updateJob(supabaseAdmin, jobId, "running_migrations", 1);
-    await runProjectMigrations(projectRef, managementToken, supabaseAdmin);
+    await runStep("running_migrations", 2, async () => {
+      await runProjectMigrations(projectRef, managementToken, supabaseAdmin);
+    });
 
-    await updateJob(supabaseAdmin, jobId, "configuring_storage", 1);
-    await syncProjectStorage(projectRef, projectUrl, serviceRoleKey, managementToken, supabaseAdmin);
+    await runStep("configuring_storage", 3, async () => {
+      await syncProjectStorage(projectRef, projectUrl, serviceRoleKey, managementToken, supabaseAdmin, sysConfig.baseline_project_ref);
+    });
 
-    await updateJob(supabaseAdmin, jobId, "deploying_edge_functions", 1);
-    await deployProjectEdgeFunctions(projectRef, managementToken);
+    await runStep("deploying_edge_functions", 4, async () => {
+      await deployProjectEdgeFunctions(projectRef, managementToken);
+    });
 
-    // 4. Admin User
-    if (adminEmail) {
-      await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
-      const tempPass = sysConfig.default_admin_password || Deno.env.get("DEFAULT_ADMIN_PASSWORD") || "Mudar@12345";
-      await createAdminUser(projectUrl, serviceRoleKey, adminEmail, tempPass);
-    } else {
-      // Pular passo do admin se não fornecido para manter contagem consistente
-      await updateJob(supabaseAdmin, jobId, "creating_admin", 1);
-    }
+    await runStep("creating_admin", 5, async () => {
+      if (adminEmail) {
+        const tempPass = sysConfig.default_admin_password || Deno.env.get("DEFAULT_ADMIN_PASSWORD") || "Mudar@12345";
+        await createAdminUser(projectUrl, serviceRoleKey, adminEmail, tempPass);
+      }
+    });
 
-    // 5. Seed initial data + sync license limits
-    await updateJob(supabaseAdmin, jobId, "registering_tenant", 1);
-    await seedInitialData(projectUrl, serviceRoleKey, tenantLabel, maxSocios ?? null, acessoExpiraEm ?? null);
+    // Steps 6–7: sempre executam — idempotentes por design e necessários para gravar projeto_id
+    await runStep("registering_tenant", 6, async () => {
+      await seedInitialData(projectUrl, serviceRoleKey, tenantLabel, maxSocios ?? null, acessoExpiraEm ?? null);
+    }, true);
 
-    // 6. Registration
-    const projetoId = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
+    await runStep("finalizing_setup", 7, async () => {
+      const { id: projetoId, isNew } = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken);
+      if (isNew) await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
+      await supabaseAdmin.from('onboarding_jobs').update({ projeto_id: projetoId }).eq('id', jobId);
+    }, true);
 
-    // 7. Finalization
-    await updateJob(supabaseAdmin, jobId, "finalizing_setup", 1, undefined, projetoId);
-    await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
-
-    // 8. Finalização
     await updateJob(supabaseAdmin, jobId, "completed", 1);
   } catch (error) {
     console.error(`[Job ${jobId}] Failed:`, error);
@@ -443,11 +466,36 @@ function sanitizeInitialSchemaSql(sql: string) {
     cleanedSql.includes("public.gin_trgm_ops") &&
     !/CREATE EXTENSION IF NOT EXISTS pg_trgm/i.test(cleanedSql);
 
-  if (!needsPgTrgm) {
-    return cleanedSql;
-  }
+  const withTrgm = needsPgTrgm
+    ? `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n\n${cleanedSql}`
+    : cleanedSql;
 
-  return `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n\n${cleanedSql}`;
+  // Idempotency transforms — limited to patterns confirmed present in initial_schema.sql.
+  // Uses ^ with multiline flag to anchor at line start, avoiding matches inside $$ function bodies.
+  // No CREATE TYPE transform: type count in baseline is 0.
+  return withTrgm
+    // Functions and procedures
+    .replace(/^CREATE FUNCTION /gm, "CREATE OR REPLACE FUNCTION ")
+    .replace(/^CREATE PROCEDURE /gm, "CREATE OR REPLACE PROCEDURE ")
+    // Views
+    .replace(/^CREATE VIEW /gm, "CREATE OR REPLACE VIEW ")
+    // Tables
+    .replace(/^CREATE TABLE (?!IF NOT EXISTS)/gm, "CREATE TABLE IF NOT EXISTS ")
+    // Indexes — UNIQUE before plain to avoid double-matching
+    .replace(/^CREATE UNIQUE INDEX (?!IF NOT EXISTS)/gm, "CREATE UNIQUE INDEX IF NOT EXISTS ")
+    .replace(/^CREATE INDEX (?!IF NOT EXISTS)/gm, "CREATE INDEX IF NOT EXISTS ")
+    // Sequences
+    .replace(/^CREATE SEQUENCE (?!IF NOT EXISTS)/gm, "CREATE SEQUENCE IF NOT EXISTS ")
+    // Triggers — non-greedy .+? captures FIRST "ON public.table", not last
+    .replace(
+      /^(CREATE TRIGGER (\w+) .+? ON (public\.\w+))/gm,
+      "DROP TRIGGER IF EXISTS $2 ON $3;\n$1"
+    )
+    // Policies — only the opening line is captured; multi-line body is untouched
+    .replace(
+      /^(CREATE POLICY (\w+) ON (public\.\w+))/gm,
+      "DROP POLICY IF EXISTS $2 ON $3;\n$1"
+    );
 }
 
 async function runProjectMigrations(projectRef: string, accessToken: string, supabaseAdmin: SupabaseClient) {
@@ -508,9 +556,9 @@ async function runManagementQuery(projectRef: string, accessToken: string, query
   return await res.json();
 }
 
-async function fetchReferenceStorageBlueprint(supabaseAdmin: SupabaseClient) {
-  const refId = Deno.env.get("REFERENCE_PROJECT_ID");
-  if (!refId) throw new Error("REFERENCE_PROJECT_ID não configurado nos secrets da função");
+async function fetchReferenceStorageBlueprint(supabaseAdmin: SupabaseClient, referenceProjectId?: string) {
+  const refId = referenceProjectId ?? Deno.env.get("REFERENCE_PROJECT_ID");
+  if (!refId) throw new Error("baseline_project_ref não configurado em Configurações → Governança");
 
   const { data: reference, error } = await supabaseAdmin
     .from("projetos")
@@ -558,8 +606,9 @@ async function syncProjectStorage(
   serviceRoleKey: string,
   accessToken: string,
   supabaseAdmin: SupabaseClient,
+  referenceProjectId?: string,
 ) {
-  const blueprint = await fetchReferenceStorageBlueprint(supabaseAdmin);
+  const blueprint = await fetchReferenceStorageBlueprint(supabaseAdmin, referenceProjectId);
   const targetClient = createClient(projectUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -672,7 +721,7 @@ async function seedInitialData(
 
 async function registerProjectInCentral(admin: SupabaseClient, label: string, url: string, anon: string, sr: string, pat: string) {
   const { data: existing } = await admin.from('projetos').select('id').eq('supabase_url', url).single();
-  if (existing) return existing.id;
+  if (existing) return { id: existing.id, isNew: false };
 
   const { data: projeto, error } = await admin.from('projetos').insert({
     project_name: label,
@@ -684,5 +733,5 @@ async function registerProjectInCentral(admin: SupabaseClient, label: string, ur
   }).select('id').single();
   if (error || !projeto) throw new Error("Failed to register project: " + (error ? error.message : ""));
 
-  return projeto.id;
+  return { id: projeto.id, isNew: true };
 }

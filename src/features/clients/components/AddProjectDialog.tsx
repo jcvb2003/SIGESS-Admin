@@ -73,20 +73,23 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
     },
   });
 
-  const handleStart = async (e?: React.FormEvent) => {
+  const handleStart = async (e?: React.FormEvent, resumeFromJobId?: string) => {
     if (e) e.preventDefault();
     if (!projectName || !projectRef || !supabaseAccountId) return;
 
     setIsStarting(true);
+    const prevJobId = jobId;
     setJobId(null);
     try {
       const response = await startProjectOnboarding({
         tenantLabel:  projectName,
         projectRef,
         supabaseAccountId,
+        resumeFromJobId: resumeFromJobId ?? undefined,
       });
       setJobId(response.jobId);
     } catch (error) {
+      setJobId(prevJobId);
       toast.error(error instanceof Error ? error.message : "Falha ao iniciar o processo.");
     } finally {
       setIsStarting(false);
@@ -307,9 +310,9 @@ export function AddProjectDialog({ open, onOpenChange }: Readonly<AddProjectDial
                 )}
                 {isFailed && (
                   <div className="flex flex-col gap-2">
-                    <Button onClick={() => void handleStart()} className="w-full">
+                    <Button onClick={() => void handleStart(undefined, jobId ?? undefined)} className="w-full">
                       <Rocket className="mr-2 h-4 w-4" />
-                      Tentar novamente
+                      Retomar onboarding
                     </Button>
                     <Button onClick={() => setJobId(null)} variant="outline" className="w-full">
                       Corrigir dados e reiniciar

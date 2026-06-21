@@ -126,18 +126,17 @@ function extractGrants(sql: string): string {
       const isSequence = /\bON\s+SEQUENCE\b/i.test(t);
       const isSchema   = /\bON\s+SCHEMA\b/i.test(t);
 
-      // Schemas e sequences: pular — acesso é implícito ou gerenciado fora do grants.sql
-      if (isSchema || isSequence) continue;
+      // Funções, schemas e sequences: pular.
+      // Funções: Supabase defaults (ALTER Default Privileges) cobrem o contrato de EXECUTE;
+      // adicionar EXECUTE explícito causa "Extra no Tenant" no Schema Sync.
+      if (isFunction || isSchema || isSequence) continue;
 
-      // Funções: ALL = EXECUTE. Tabelas/views: manter ALL — com REVOKE antes do replay,
-      // o estado é limpo e ALL reflete exatamente o contrato canônico do MARANHAO.
-      if (isFunction) {
-        result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, 'EXECUTE'));
-      } else {
-        result.push(t); // GRANT ALL ON TABLE ... — preservar literal
-      }
+      result.push(t); // GRANT ALL ON TABLE/VIEW — preservar literal
       continue;
     }
+
+    // Pular grants de funções com lista explícita (GRANT EXECUTE ON FUNCTION ...)
+    if (/\bON\s+FUNCTION\b/i.test(t)) continue;
 
     const allPrivs = rawPrivs.split(',').map(p => p.trim());
     const functionalPrivs = allPrivs.filter(p => FUNCTIONAL.has(p));
@@ -212,14 +211,37 @@ async function updateInitialSchema() {
       return !lower.includes('_migrations') && !lower.includes('supabase_migrations');
     });
 
-    const filtered = filteredBlocks
-      .join('\n\n')
-      .split('\n')
-      .filter((line) => {
-        const trimmed = line.trim();
-        return !trimmed.startsWith('\\') && !trimmed.startsWith('--');
-      })
-      .join('\n');
+    // Filtrar linhas -- fora de blocos dollar-quoted.
+    // Rastreia o delimitador atual ($$ ou $func$) para preservar comentários dentro de corpos de função.
+    let currentDelimiter: string | null = null;
+    const filteredLines: string[] = [];
+    for (const line of filteredBlocks.join('\n\n').split('\n')) {
+      const trimmed = line.trim();
+
+      if (currentDelimiter !== null) {
+        // Dentro de bloco dollar-quoted — preservar tudo (incluindo --)
+        filteredLines.push(line);
+        if (line.includes(currentDelimiter)) currentDelimiter = null;
+        continue;
+      }
+
+      // Fora de bloco — verificar se esta linha abre um
+      const dollarMatch = line.match(/\$([A-Za-z0-9_]*)\$/);
+      if (dollarMatch) {
+        const delimiter = dollarMatch[0];
+        const firstIdx = line.indexOf(delimiter);
+        const secondIdx = line.indexOf(delimiter, firstIdx + delimiter.length);
+        if (secondIdx === -1) currentDelimiter = delimiter; // abre mas não fecha nesta linha
+        filteredLines.push(line);
+        continue;
+      }
+
+      // Linha normal fora de bloco — filtrar metacomandos e comentários de cabeçalho
+      if (!trimmed.startsWith('\\') && !trimmed.startsWith('--')) {
+        filteredLines.push(line);
+      }
+    }
+    const filtered = filteredLines.join('\n');
 
     const finalSql = sanitizeInitialSchema(filtered);
 

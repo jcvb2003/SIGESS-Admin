@@ -53,8 +53,8 @@ export default function ClienteDetailPage() {
     );
   }
 
-  const showUnits = hasClientePolos(project.topology);
-  const showUsers = hasClienteUsers(project.topology);
+  const showUnits = hasClientePolos(project.topology, cliente.supports_units);
+  const showUsers = hasClienteUsers(project.topology, cliente.supports_units);
   const defaultTab = showUsers ? "users" : "units";
   const activeRuntimeTenantId = runtimeMetadata?.runtime_tenant_id ?? cliente.runtime_tenant_id;
 
@@ -107,7 +107,7 @@ export default function ClienteDetailPage() {
 
             {showUsers && (
               <TabsContent value="users">
-                {project.topology === "shared_multi_single" ? (
+                {(project.topology === "shared_multi_single" || (project.topology === "shared_hybrid" && !cliente.supports_units)) ? (
                   activeRuntimeTenantId ? (
                     <SharedUsersTab project={project} tenantId={activeRuntimeTenantId} showGestor={showUnits} />
                   ) : (

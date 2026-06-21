@@ -108,9 +108,10 @@ function extractGrants(sql: string): string {
     if (!/^GRANT /i.test(t)) continue;
 
     // Verificar se ao menos um role do app está na cláusula TO
+    // pg_dump pode citar nomes com aspas (ex: "service_role") — normalizar antes de comparar
     const toMatch = t.match(/\bTO\s+(.+?)\s*;?\s*$/i);
     if (!toMatch) continue;
-    const roles = toMatch[1].split(',').map(r => r.trim().toLowerCase());
+    const roles = toMatch[1].split(',').map(r => r.trim().toLowerCase().replace(/['"]/g, ''));
     if (!roles.some(r => APP_ROLES.has(r))) continue;
 
     // Extrair lista de privilégios (entre "GRANT " e " ON ")

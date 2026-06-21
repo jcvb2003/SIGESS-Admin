@@ -120,9 +120,15 @@ function extractGrants(sql: string): string {
 
     const rawPrivs = privMatch[1].trim().toUpperCase();
 
-    // pg_dump usa ALL para service_role e alguns outros roles — expandir para subset funcional
+    // pg_dump usa ALL para service_role e outros roles — expandir para subset funcional por tipo
     if (rawPrivs === 'ALL' || rawPrivs === 'ALL PRIVILEGES') {
       const isFunction = /\bON\s+FUNCTION\b/i.test(t);
+      const isSequence = /\bON\s+SEQUENCE\b/i.test(t);
+      const isSchema   = /\bON\s+SCHEMA\b/i.test(t);
+
+      // Schemas e sequences: pular — acesso é implícito ou gerenciado fora do grants.sql
+      if (isSchema || isSequence) continue;
+
       const expanded = isFunction ? 'EXECUTE' : 'SELECT, INSERT, UPDATE, DELETE';
       result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, expanded));
       continue;

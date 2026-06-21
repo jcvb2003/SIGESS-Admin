@@ -513,12 +513,15 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
   );
   await runQuery(initialSchema);
 
-  // Normalizar defaults de TABELAS antes do replay canônico.
-  // Funções são excluídas do REVOKE: Supabase aplica ALTER Default Privileges no projeto
-  // que cobre o contrato de EXECUTE; adicionar EXECUTE explícito causa divergência no
-  // Schema Sync ("Extra no Tenant") vs MARANHAO que usa o mesmo mecanismo de defaults.
+  // Normalizar defaults antes do replay canônico:
+  // - TABELAS: REVOKE total → grants.sql reaplica o contrato canônico
+  // - FUNÇÕES anon/service_role: MARANHAO não concede EXECUTE a esses roles em funções;
+  //   Supabase injeta esses grants por padrão em projetos novos → REVOKE para alinhar
+  // - FUNÇÕES authenticated: mantido (MARANHAO tem via defaults de criação, tenant também)
   await runQuery(`
     REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated, service_role;
+    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM anon;
+    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM service_role;
   `);
 
   // Replay canônico dos grants funcionais do baseline

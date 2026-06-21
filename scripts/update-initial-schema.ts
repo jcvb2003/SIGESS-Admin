@@ -126,17 +126,21 @@ function extractGrants(sql: string): string {
       const isSequence = /\bON\s+SEQUENCE\b/i.test(t);
       const isSchema   = /\bON\s+SCHEMA\b/i.test(t);
 
-      // Funções, schemas e sequences: pular.
-      // Funções: Supabase defaults (ALTER Default Privileges) cobrem o contrato de EXECUTE;
-      // adicionar EXECUTE explícito causa "Extra no Tenant" no Schema Sync.
-      if (isFunction || isSchema || isSequence) continue;
+      // Schemas e sequences: pular
+      if (isSchema || isSequence) continue;
 
-      result.push(t); // GRANT ALL ON TABLE/VIEW — preservar literal
+      if (isFunction) {
+        // GRANT ALL ON FUNCTION = EXECUTE; após REVOKE FROM PUBLIC no onboarding,
+        // os grants explícitos do grants.sql replicam exatamente o estado do MARANHAO
+        result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, 'EXECUTE'));
+      } else {
+        result.push(t); // GRANT ALL ON TABLE/VIEW — preservar literal
+      }
       continue;
     }
 
-    // Pular grants de funções com lista explícita (GRANT EXECUTE ON FUNCTION ...)
-    if (/\bON\s+FUNCTION\b/i.test(t)) continue;
+    // GRANT EXECUTE ON FUNCTION — preservar (captura grants explícitos do MARANHAO)
+    // Após REVOKE FROM PUBLIC, esses grants replicam exatamente o estado do baseline
 
     const allPrivs = rawPrivs.split(',').map(p => p.trim());
     const functionalPrivs = allPrivs.filter(p => FUNCTIONAL.has(p));

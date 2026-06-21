@@ -129,8 +129,13 @@ function extractGrants(sql: string): string {
       // Schemas e sequences: pular — acesso é implícito ou gerenciado fora do grants.sql
       if (isSchema || isSequence) continue;
 
-      const expanded = isFunction ? 'EXECUTE' : 'SELECT, INSERT, UPDATE, DELETE';
-      result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, expanded));
+      // Funções: ALL = EXECUTE. Tabelas/views: manter ALL — com REVOKE antes do replay,
+      // o estado é limpo e ALL reflete exatamente o contrato canônico do MARANHAO.
+      if (isFunction) {
+        result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, 'EXECUTE'));
+      } else {
+        result.push(t); // GRANT ALL ON TABLE ... — preservar literal
+      }
       continue;
     }
 

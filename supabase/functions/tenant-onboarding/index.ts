@@ -515,13 +515,14 @@ async function runProjectMigrations(projectRef: string, accessToken: string, sup
 
   // Normalizar defaults antes do replay canônico:
   // - TABELAS: REVOKE total → grants.sql reaplica o contrato canônico
-  // - FUNÇÕES anon/service_role: MARANHAO não concede EXECUTE a esses roles em funções;
-  //   Supabase injeta esses grants por padrão em projetos novos → REVOKE para alinhar
-  // - FUNÇÕES authenticated: mantido (MARANHAO tem via defaults de criação, tenant também)
+  // - FUNÇÕES: PostgreSQL concede EXECUTE ao role PUBLIC por padrão na criação;
+  //   anon herda via PUBLIC mesmo sem grant direto. REVOKE FROM PUBLIC remove o acesso
+  //   base, depois GRANT TO authenticated restaura só o role que MARANHAO tem.
+  //   anon fica sem EXECUTE (alinhado com MARANHAO), service_role usa bypass superusuário.
   await runQuery(`
     REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated, service_role;
-    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM anon;
-    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM service_role;
+    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
+    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
   `);
 
   // Replay canônico dos grants funcionais do baseline

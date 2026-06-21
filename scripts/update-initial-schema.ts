@@ -118,7 +118,17 @@ function extractGrants(sql: string): string {
     const privMatch = t.match(/^GRANT\s+(.+?)\s+ON\s+/i);
     if (!privMatch) continue;
 
-    const allPrivs = privMatch[1].split(',').map(p => p.trim().toUpperCase());
+    const rawPrivs = privMatch[1].trim().toUpperCase();
+
+    // pg_dump usa ALL para service_role e alguns outros roles — expandir para subset funcional
+    if (rawPrivs === 'ALL' || rawPrivs === 'ALL PRIVILEGES') {
+      const isFunction = /\bON\s+FUNCTION\b/i.test(t);
+      const expanded = isFunction ? 'EXECUTE' : 'SELECT, INSERT, UPDATE, DELETE';
+      result.push(t.replace(/\bALL(\s+PRIVILEGES)?\b/i, expanded));
+      continue;
+    }
+
+    const allPrivs = rawPrivs.split(',').map(p => p.trim());
     const functionalPrivs = allPrivs.filter(p => FUNCTIONAL.has(p));
 
     if (functionalPrivs.length === 0) continue;

@@ -289,7 +289,7 @@ serve(async (req: Request) => {
         supabase_account_id: payload.supabaseAccountId,
         status: "pending",
         current_step: 0,
-        total_steps: 9,
+        total_steps: 7,
         resume_from_job_id: payload.resumeFromJobId || null,
       })
       .select("id")
@@ -391,16 +391,14 @@ async function processOnboarding(jobId: string, payload: OnboardingPayload, supa
       }
     });
 
-    // Steps 6–7: sempre executam — idempotentes por design e necessários para gravar projeto_id
-    await runStep("registering_tenant", 6, async () => {
-      await seedInitialData(projectUrl, serviceRoleKey, tenantLabel, maxSocios ?? null, acessoExpiraEm ?? null);
-    }, true);
+    // Steps 6–7: silenciosos na UI (executam rápido demais para o polling capturar).
+    // Não incrementam current_step — total_steps=7 conta só os 5 steps visíveis + fetching_keys + completed.
+    await seedInitialData(projectUrl, serviceRoleKey, tenantLabel, maxSocios ?? null, acessoExpiraEm ?? null);
+    await supabaseAdmin.from('onboarding_jobs').update({ last_completed_step: 6 }).eq('id', jobId);
 
-    await runStep("finalizing_setup", 7, async () => {
-      const { id: projetoId, isNew } = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken, supabaseAccountId);
-      if (isNew) await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
-      await supabaseAdmin.from('onboarding_jobs').update({ projeto_id: projetoId }).eq('id', jobId);
-    }, true);
+    const { id: projetoId, isNew } = await registerProjectInCentral(supabaseAdmin, tenantLabel, projectUrl, anonKey, serviceRoleKey, managementToken, supabaseAccountId);
+    if (isNew) await supabaseAdmin.rpc('increment_active_projects', { account_id: supabaseAccountId });
+    await supabaseAdmin.from('onboarding_jobs').update({ projeto_id: projetoId, last_completed_step: 7 }).eq('id', jobId);
 
     await updateJob(supabaseAdmin, jobId, "completed", 1);
   } catch (error) {

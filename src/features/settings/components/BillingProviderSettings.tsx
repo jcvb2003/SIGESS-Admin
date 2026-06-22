@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { formatDateTime } from "@/shared/utils/date";
-import { Settings2, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { Settings2, Loader2, CheckCircle2, Circle, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,10 +35,13 @@ function ConfiguredBadge({ configured }: { configured: boolean }) {
   );
 }
 
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/billing-webhook`;
+
 export function BillingProviderSettings() {
   const { data: meta, isLoading } = useBillingProviderSettings();
   const upsert = useUpsertBillingProviderSettings();
 
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [provider, setProvider] = useState<string>("");
   const [sandbox, setSandbox] = useState<boolean>(true);
   const [apiKey, setApiKey] = useState("");
@@ -122,6 +125,31 @@ export function BillingProviderSettings() {
             <span className="text-muted-foreground">Webhook Token</span>
             <ConfiguredBadge configured={meta?.webhook_token_configured ?? false} />
           </div>
+          {meta?.provider === "asaas" && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-muted-foreground text-sm">URL do Webhook</span>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded bg-secondary/60 px-3 py-1.5 text-xs font-mono text-foreground border border-border/50 select-all truncate">
+                  {WEBHOOK_URL}
+                </code>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0"
+                  title="Copiar URL"
+                  onClick={() => {
+                    navigator.clipboard.writeText(WEBHOOK_URL);
+                    setCopiedWebhook(true);
+                    setTimeout(() => setCopiedWebhook(false), 2000);
+                  }}
+                >
+                  {copiedWebhook
+                    ? <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between pt-1 border-t">
             <span className="text-muted-foreground">Fonte</span>
             <Badge variant={meta?.source === "db" ? "default" : "secondary"} className="text-xs">

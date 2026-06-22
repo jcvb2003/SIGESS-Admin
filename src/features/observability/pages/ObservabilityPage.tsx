@@ -2,7 +2,6 @@ import {
   Check,
   Copy,
   Loader2,
-  RefreshCw,
   Rocket,
   X,
 } from "lucide-react";
@@ -64,14 +63,12 @@ export default function ObservabilityPage() {
     isRunningAdHocAudit,
     handleRunAdHocAudit,
     handleClearAdHoc,
-    isRefreshing,
     isPreparingDrift,
     isApplyingDrift,
     driftPreview,
     driftApplyResults,
     setDriftPreview,
     setDriftApplyResults,
-    handleRefresh,
     handlePrepareSchemaSync,
     handleApplySchemaSync,
   } = useObservability();
@@ -91,26 +88,11 @@ export default function ObservabilityPage() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Observabilidade</h1>
-            <p className="text-muted-foreground">
-              Monitoramento em tempo real da saúde, schema e integridade dos dados de todos os projetos.
-            </p>
-          </div>
-          <Button 
-            onClick={handleRefresh} 
-            disabled={isRefreshing}
-            variant="outline"
-            className="w-full lg:w-auto"
-          >
-            {isRefreshing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Sincronizar Visão
-          </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Observabilidade</h1>
+          <p className="text-muted-foreground">
+            Monitoramento em tempo real da saúde, schema e integridade dos dados de todos os projetos.
+          </p>
         </div>
 
         <Tabs defaultValue="schema" className="space-y-6">

@@ -49,6 +49,7 @@ function localBackupPlugin(): Plugin {
         const child = spawn('tsx', scriptArgs, {
           cwd: process.cwd(),
           stdio: 'inherit',
+          shell: true,
           env: { ...process.env, PATH: `${bin}${sep}${process.env.PATH ?? ''}` },
         });
         // Impedir que erro no spawn derrube o Vite

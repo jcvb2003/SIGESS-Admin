@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { spawn } from "child_process";
+import { resolve } from "path";
 
 function localBackupPlugin(): Plugin {
   const isLocalHost = (h: string) =>
@@ -42,7 +43,18 @@ function localBackupPlugin(): Plugin {
         else if (projectRef) scriptArgs.push(`--project-ref=${projectRef}`);
         else scriptArgs.push(`--tenant=${tenant}`);
 
-        spawn('tsx', scriptArgs, { cwd: process.cwd(), stdio: 'inherit', env: { ...process.env } });
+        // tsx está em node_modules/.bin — adicionamos ao PATH do processo filho
+        const bin = resolve(process.cwd(), 'node_modules', '.bin');
+        const sep = process.platform === 'win32' ? ';' : ':';
+        const child = spawn('tsx', scriptArgs, {
+          cwd: process.cwd(),
+          stdio: 'inherit',
+          env: { ...process.env, PATH: `${bin}${sep}${process.env.PATH ?? ''}` },
+        });
+        // Impedir que erro no spawn derrube o Vite
+        child.on('error', (err) => {
+          console.error('[local-backup] falha ao iniciar backup:', err.message);
+        });
         res.writeHead(202, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ started: true }));
       });

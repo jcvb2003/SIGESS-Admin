@@ -7,10 +7,12 @@ import type { BillingProvider } from '../_shared/billing/provider.interface.ts';
 import type {
   BillingDriftNote,
   BillingWebhookEvent,
+  CommercialMode,
   ProviderCharge,
   ProviderCustomer,
   ProviderSubscription,
 } from '../_shared/billing/types.ts';
+import * as repo from '../_shared/billing/repositories.ts';
 import * as svc from '../_shared/billing/billing-service.ts';
 import { syncBillingSummaryToRuntime } from '../_shared/billing/projection-service.ts';
 import { AsaasClient } from '../_shared/billing/asaas-client.ts';
@@ -131,9 +133,11 @@ async function validateAdminSession(req: Request, db: SupabaseClient) {
 
 // ─── Domain validators ────────────────────────────────────────────────────────
 
-const VALID_INTERVALS = new Set(['monthly', 'annual']);
-const VALID_CHARGE_TYPES = new Set(['one_off', 'adjustment', 'tier_upgrade']);
+const VALID_INTERVALS     = new Set(['monthly', 'annual']);
+const VALID_CHARGE_TYPES  = new Set(['one_off', 'adjustment', 'tier_upgrade']);
 const VALID_BILLING_TYPES = new Set(['BOLETO', 'PIX', 'CREDIT_CARD']);
+const VALID_MODES         = new Set(['manual', 'recorrente_mensal', 'anual']);
+const VALID_BLOCK_REASONS = new Set(['billing_delinquent', 'manual_suspend']);
 
 function assertDomain(value: unknown, fieldName: string, allowed: Set<string>): string {
   if (typeof value !== 'string' || !allowed.has(value)) {
@@ -554,6 +558,74 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
   return result;
 }
 
+// ─── Commercial mode + billing block handlers ─────────────────────────────────
+
+async function handleUpdateCommercialMode(db: SupabaseClient, _provider: BillingProvider, params: Record<string, unknown>) {
+  assert(params.admin_client_id, 'admin_client_id');
+  const newMode = assertDomain(params.commercial_mode, 'commercial_mode', VALID_MODES) as CommercialMode;
+
+  const account = await repo.findAccountByClientId(db, params.admin_client_id as string);
+  if (!account) throw createHttpError('billing_account not found', 404);
+
+  if (['recorrente_mensal', 'anual'].includes(account.commercial_mode) && newMode === 'manual') {
+    throw createHttpError(
+      "Não é possível reverter para manual. Cancele a assinatura ativa primeiro.",
+      409,
+    );
+  }
+
+  await repo.updateAccount(db, account.id, { commercial_mode: newMode });
+  log('info', 'billing-action', 'update_commercial_mode', {
+    admin_client_id: params.admin_client_id,
+    from: account.commercial_mode,
+    to: newMode,
+  });
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
+  return { ok: true, commercial_mode: newMode };
+}
+
+async function handleSetBillingBlock(db: SupabaseClient, params: Record<string, unknown>) {
+  assert(params.admin_client_id, 'admin_client_id');
+  assert(params.reason, 'reason');
+  const reason = assertDomain(params.reason, 'reason', VALID_BLOCK_REASONS);
+
+  const account = await repo.findAccountByClientId(db, params.admin_client_id as string);
+  if (!account) throw createHttpError('billing_account not found', 404);
+
+  const patch: Record<string, unknown> = { is_billing_blocked: true, billing_blocked_reason: reason };
+  if (reason === 'manual_suspend') patch.lifecycle_status = 'suspended';
+
+  await repo.updateAccount(db, account.id, patch);
+  log('info', 'billing-action', 'set_billing_block', {
+    admin_client_id: params.admin_client_id,
+    reason,
+    lifecycle_changed: reason === 'manual_suspend',
+  });
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
+  return { ok: true };
+}
+
+async function handleClearBillingBlock(db: SupabaseClient, params: Record<string, unknown>) {
+  assert(params.admin_client_id, 'admin_client_id');
+
+  const account = await repo.findAccountByClientId(db, params.admin_client_id as string);
+  if (!account) throw createHttpError('billing_account not found', 404);
+
+  const patch: Record<string, unknown> = { is_billing_blocked: false, billing_blocked_reason: null };
+  // Round 2: retorno simplificado para 'active'.
+  // Estado anterior à suspensão não é restaurado — será refinado no Round 3
+  // quando billing_account_history permitir salvar o estado anterior no payload.
+  if (account.lifecycle_status === 'suspended') patch.lifecycle_status = 'active';
+
+  await repo.updateAccount(db, account.id, patch);
+  log('info', 'billing-action', 'clear_billing_block', {
+    admin_client_id: params.admin_client_id,
+    prev_lifecycle: account.lifecycle_status,
+  });
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
+  return { ok: true };
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -634,6 +706,15 @@ Deno.serve(async (req: Request) => {
         break;
       case 'sync_account':
         result = await handleSyncAccount(db, provider, params);
+        break;
+      case 'update_commercial_mode':
+        result = await handleUpdateCommercialMode(db, provider, params);
+        break;
+      case 'set_billing_block':
+        result = await handleSetBillingBlock(db, params);
+        break;
+      case 'clear_billing_block':
+        result = await handleClearBillingBlock(db, params);
         break;
       default:
         throw createHttpError(`Unknown action: ${action}`, 400);

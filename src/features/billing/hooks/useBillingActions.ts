@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { invokeBillingAction } from '../services/billing.service';
 import { billingOverviewKey } from './useBillingOverview';
+import type { CommercialMode } from '../types';
 
 export function useBillingActions(adminClientId: string) {
   const queryClient = useQueryClient();
@@ -81,5 +82,26 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
-  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount };
+  const updateCommercialMode = useMutation({
+    mutationFn: (mode: CommercialMode) =>
+      invokeBillingAction('update_commercial_mode', { admin_client_id: adminClientId, commercial_mode: mode }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao atualizar modo'),
+  });
+
+  const setBillingBlock = useMutation({
+    mutationFn: (reason: 'billing_delinquent' | 'manual_suspend') =>
+      invokeBillingAction('set_billing_block', { admin_client_id: adminClientId, reason }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao bloquear acesso'),
+  });
+
+  const clearBillingBlock = useMutation({
+    mutationFn: () =>
+      invokeBillingAction('clear_billing_block', { admin_client_id: adminClientId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao desbloquear acesso'),
+  });
+
+  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, updateCommercialMode, setBillingBlock, clearBillingBlock };
 }

@@ -40,13 +40,13 @@ function sqlDate(v: string | null): string {
 
 function buildSharedUpsert(
   runtimeTenantId: string,
-  p: { subscriptionStatus: string | null; planName: string | null; nextBillingDate: string | null; hasPendingCharge: boolean; pendingChargeAmount: number | null; paymentUrl: string | null; lastSyncedAt: string },
+  p: { subscriptionStatus: string | null; planName: string | null; nextBillingDate: string | null; hasPendingCharge: boolean; pendingChargeAmount: number | null; paymentUrl: string | null; lastSyncedAt: string; isBillingBlocked: boolean; billingBlockedReason: string | null },
 ): string {
   return `
 INSERT INTO public.billing_summary
   (tenant_id, subscription_status, plan_name, next_billing_date,
    has_pending_charge, pending_charge_amount, payment_url,
-   last_synced_at, updated_at)
+   last_synced_at, is_billing_blocked, billing_blocked_reason, updated_at)
 VALUES (
   ${sqlUuid(runtimeTenantId)},
   ${sqlText(p.subscriptionStatus)},
@@ -56,39 +56,45 @@ VALUES (
   ${sqlNumeric(p.pendingChargeAmount)},
   ${sqlText(p.paymentUrl)},
   ${sqlText(p.lastSyncedAt)},
+  ${sqlBool(p.isBillingBlocked)},
+  ${sqlText(p.billingBlockedReason)},
   now()
 )
 ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
-  subscription_status   = EXCLUDED.subscription_status,
-  plan_name             = EXCLUDED.plan_name,
-  next_billing_date     = EXCLUDED.next_billing_date,
-  has_pending_charge    = EXCLUDED.has_pending_charge,
-  pending_charge_amount = EXCLUDED.pending_charge_amount,
-  payment_url           = EXCLUDED.payment_url,
-  last_synced_at        = EXCLUDED.last_synced_at,
-  updated_at            = now();
+  subscription_status    = EXCLUDED.subscription_status,
+  plan_name              = EXCLUDED.plan_name,
+  next_billing_date      = EXCLUDED.next_billing_date,
+  has_pending_charge     = EXCLUDED.has_pending_charge,
+  pending_charge_amount  = EXCLUDED.pending_charge_amount,
+  payment_url            = EXCLUDED.payment_url,
+  last_synced_at         = EXCLUDED.last_synced_at,
+  is_billing_blocked     = EXCLUDED.is_billing_blocked,
+  billing_blocked_reason = EXCLUDED.billing_blocked_reason,
+  updated_at             = now();
 `.trim();
 }
 
 // UPDATE-then-INSERT (not DELETE+INSERT): safe for isolated topology's single row.
 // The INSERT ... WHERE NOT EXISTS only fires if no row exists yet (first projection).
 function buildIsolatedUpsert(
-  p: { subscriptionStatus: string | null; planName: string | null; nextBillingDate: string | null; hasPendingCharge: boolean; pendingChargeAmount: number | null; paymentUrl: string | null; lastSyncedAt: string },
+  p: { subscriptionStatus: string | null; planName: string | null; nextBillingDate: string | null; hasPendingCharge: boolean; pendingChargeAmount: number | null; paymentUrl: string | null; lastSyncedAt: string; isBillingBlocked: boolean; billingBlockedReason: string | null },
 ): string {
-  const cols = `subscription_status, plan_name, next_billing_date, has_pending_charge, pending_charge_amount, payment_url, last_synced_at, updated_at`;
-  const vals = `${sqlText(p.subscriptionStatus)}, ${sqlText(p.planName)}, ${sqlDate(p.nextBillingDate)}, ${sqlBool(p.hasPendingCharge)}, ${sqlNumeric(p.pendingChargeAmount)}, ${sqlText(p.paymentUrl)}, ${sqlText(p.lastSyncedAt)}, now()`;
+  const cols = `subscription_status, plan_name, next_billing_date, has_pending_charge, pending_charge_amount, payment_url, last_synced_at, is_billing_blocked, billing_blocked_reason, updated_at`;
+  const vals = `${sqlText(p.subscriptionStatus)}, ${sqlText(p.planName)}, ${sqlDate(p.nextBillingDate)}, ${sqlBool(p.hasPendingCharge)}, ${sqlNumeric(p.pendingChargeAmount)}, ${sqlText(p.paymentUrl)}, ${sqlText(p.lastSyncedAt)}, ${sqlBool(p.isBillingBlocked)}, ${sqlText(p.billingBlockedReason)}, now()`;
 
   return `
 UPDATE public.billing_summary
 SET
-  subscription_status   = ${sqlText(p.subscriptionStatus)},
-  plan_name             = ${sqlText(p.planName)},
-  next_billing_date     = ${sqlDate(p.nextBillingDate)},
-  has_pending_charge    = ${sqlBool(p.hasPendingCharge)},
-  pending_charge_amount = ${sqlNumeric(p.pendingChargeAmount)},
-  payment_url           = ${sqlText(p.paymentUrl)},
-  last_synced_at        = ${sqlText(p.lastSyncedAt)},
-  updated_at            = now()
+  subscription_status    = ${sqlText(p.subscriptionStatus)},
+  plan_name              = ${sqlText(p.planName)},
+  next_billing_date      = ${sqlDate(p.nextBillingDate)},
+  has_pending_charge     = ${sqlBool(p.hasPendingCharge)},
+  pending_charge_amount  = ${sqlNumeric(p.pendingChargeAmount)},
+  payment_url            = ${sqlText(p.paymentUrl)},
+  last_synced_at         = ${sqlText(p.lastSyncedAt)},
+  is_billing_blocked     = ${sqlBool(p.isBillingBlocked)},
+  billing_blocked_reason = ${sqlText(p.billingBlockedReason)},
+  updated_at             = now()
 WHERE tenant_id IS NULL;
 
 INSERT INTO public.billing_summary (tenant_id, ${cols})

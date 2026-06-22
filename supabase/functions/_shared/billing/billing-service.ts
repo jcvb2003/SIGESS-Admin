@@ -198,6 +198,15 @@ export async function createInitialSubscription(
   const account = await repo.findAccountByClientId(db, input.adminClientId);
   if (!account) throw new Error(`No billing_account for client ${input.adminClientId}`);
   assertLifecycle(account, ['draft', 'trial_active', 'cancelled'], 'create_subscription');
+
+  if (account.commercial_mode === 'manual') {
+    const err = Object.assign(
+      new Error("Cliente com modo manual não pode ter assinatura recorrente. Use create_charge para cobranças avulsas."),
+      { status: 409 },
+    );
+    throw err;
+  }
+
   if (!account.provider_customer_id) throw new Error('Account has no provider_customer_id');
 
   const existingSub = await repo.findActiveSubscriptionByAccountId(db, account.id);

@@ -60,6 +60,8 @@ export type BillingDriftNote =
   | 'account_active_but_no_active_subscription'
   | 'account_past_due_but_no_overdue_charge';
 
+export type CommercialMode = 'manual' | 'recorrente_mensal' | 'anual';
+
 export interface BillingWebhookEvent {
   providerEventId: string;
   eventType: string;                        // canonical internal type (e.g. 'charge.paid')

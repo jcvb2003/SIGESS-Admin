@@ -12,6 +12,8 @@ export interface BillingSummaryProjection {
   pendingChargeAmount: number | null;      // reais
   paymentUrl: string | null;
   lastSyncedAt: string;                    // ISO datetime
+  isBillingBlocked: boolean;
+  billingBlockedReason: 'billing_delinquent' | 'manual_suspend' | null;
 }
 
 // Builds a point-in-time snapshot of billing state from the Admin DB.
@@ -64,5 +66,7 @@ export async function buildBillingSummaryProjection(
     pendingChargeAmount: urgentCharge?.amount ?? null,
     paymentUrl: urgentCharge?.payment_url ?? null,
     lastSyncedAt: new Date().toISOString(),
+    isBillingBlocked: account.is_billing_blocked,
+    billingBlockedReason: account.billing_blocked_reason ?? null,
   };
 }

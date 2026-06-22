@@ -6,6 +6,7 @@ import type {
   BillingChargeType,
   BillingInterval,
   BillingSubscriptionStatus,
+  CommercialMode,
 } from './types.ts';
 
 // ─── Row shapes (mirrors DB schema) ──────────────────────────────────────────
@@ -21,6 +22,11 @@ export interface BillingAccountRow {
   current_period_start: string | null;
   current_period_end: string | null;
   current_plan_id: string | null;
+  commercial_mode: CommercialMode;
+  next_plan_id: string | null;
+  next_plan_effective_date: string | null;
+  is_billing_blocked: boolean;
+  billing_blocked_reason: 'billing_delinquent' | 'manual_suspend' | null;
   created_at: string;
   updated_at: string;
 }

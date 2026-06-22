@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, X, Loader2, Rocket, Shield, AlertCircle, ExternalLink, Copy } from "lucide-react";
+import { Check, X, Loader2, Rocket, Shield, AlertCircle, ExternalLink, Copy, Play } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -50,8 +50,11 @@ const PENDING_FUNCTIONS = [
   "member-collection-batch",
 ];
 
+const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
 function PendingFunctionsBlock({ projectRef }: { projectRef: string }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState<Record<string, boolean>>({});
 
   const copy = (cmd: string) => {
     navigator.clipboard.writeText(cmd).then(() => {
@@ -60,13 +63,32 @@ function PendingFunctionsBlock({ projectRef }: { projectRef: string }) {
     });
   };
 
+  const handleDeploy = async (fn: string) => {
+    setDeploying((prev) => ({ ...prev, [fn]: true }));
+    try {
+      const res = await fetch(
+        `/api/local/deploy-edge?fn=${encodeURIComponent(fn)}&project-ref=${encodeURIComponent(projectRef)}`,
+        { method: 'POST' },
+      );
+      if (res.status === 202) {
+        toast.info(`Deploy de ${fn} iniciado — acompanhe no terminal`);
+      } else {
+        toast.error(`Erro ao disparar deploy: ${await res.text()}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro de rede');
+    } finally {
+      setDeploying((prev) => ({ ...prev, [fn]: false }));
+    }
+  };
+
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2 dark:border-amber-800 dark:bg-amber-950/20">
       <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
         Pendência: deploy das funções de cobrança
       </p>
       <p className="text-[11px] text-amber-700 dark:text-amber-400">
-        Rode localmente na raiz do Admin:
+        {isLocal ? 'Clique para deployar ou copie o comando:' : 'Rode localmente na raiz do Admin:'}
       </p>
       <div className="space-y-1.5">
         {PENDING_FUNCTIONS.map((fn) => {
@@ -86,6 +108,20 @@ function PendingFunctionsBlock({ projectRef }: { projectRef: string }) {
                   ? <Check className="h-3 w-3" />
                   : <Copy className="h-3 w-3" />}
               </button>
+              {isLocal && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!!deploying[fn]}
+                  onClick={() => handleDeploy(fn)}
+                  className="h-6 shrink-0 px-2 text-[10px]"
+                >
+                  {deploying[fn]
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Play className="h-3 w-3" />}
+                </Button>
+              )}
             </div>
           );
         })}

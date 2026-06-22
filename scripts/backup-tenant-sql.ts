@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import path from 'path';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import { execSync, spawn } from 'child_process';
 
 dotenv.config({ path: path.join(process.cwd(), '.env') });
@@ -62,13 +63,16 @@ async function uploadBuffer(
   adminClient: ReturnType<typeof createClient>,
   storagePath: string,
   buf: Buffer,
-): Promise<void> {
-  // LIMITE: Supabase Storage aceita até ~50MB por upload.
-  // Para projetos grandes, data.sql pode exceder — o upload falhará com mensagem explícita.
+): Promise<string> {
+  // Comprimir antes do upload: reduz 80-90% em média, mitigando o limite de ~50MB do Storage.
+  // Se o arquivo comprimido ainda exceder 50MB, o upload falha com mensagem explícita.
+  const compressed = zlib.gzipSync(buf);
+  const gzPath = storagePath + '.gz';
   const { error } = await adminClient.storage
     .from('backups')
-    .upload(storagePath, buf, { contentType: 'application/sql', upsert: true });
-  if (error) throw new Error(`Upload falhou (${storagePath}): ${error.message}`);
+    .upload(gzPath, compressed, { contentType: 'application/gzip', upsert: true });
+  if (error) throw new Error(`Upload falhou (${gzPath}): ${error.message}`);
+  return gzPath;
 }
 
 interface ProjectRow {
@@ -132,17 +136,15 @@ async function backupProject(
   };
 
   try {
-    console.log(`   ➡ schema.sql...`);
+    console.log(`   ➡ schema.sql.gz...`);
     const schemaBuf = await runPgDump(runtime_db_url, ['--schema-only']);
-    const schemaPath = `${basePath}/schema.sql`;
-    await uploadBuffer(adminClient, schemaPath, schemaBuf);
-    console.log(`   ✅ schema.sql — ${(schemaBuf.length / 1024).toFixed(1)} KB`);
+    const schemaPath = await uploadBuffer(adminClient, `${basePath}/schema.sql`, schemaBuf);
+    console.log(`   ✅ schema.sql.gz — ${(schemaBuf.length / 1024).toFixed(1)} KB raw`);
 
-    console.log(`   ➡ data.sql...`);
+    console.log(`   ➡ data.sql.gz...`);
     const dataBuf = await runPgDump(runtime_db_url, ['--data-only']);
-    const dataPath = `${basePath}/data.sql`;
-    await uploadBuffer(adminClient, dataPath, dataBuf);
-    console.log(`   ✅ data.sql — ${(dataBuf.length / 1024).toFixed(1)} KB`);
+    const dataPath = await uploadBuffer(adminClient, `${basePath}/data.sql`, dataBuf);
+    console.log(`   ✅ data.sql.gz — ${(dataBuf.length / 1024).toFixed(1)} KB raw`);
 
     await updateRun({
       status: 'success',

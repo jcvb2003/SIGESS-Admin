@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Download, Loader2, ChevronRight, ChevronDown, FolderOpen, FileText, AlertCircle, Terminal, Copy, Check, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabase";
 import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useBackupTenants, useBackupDates, useBackupFiles } from "../hooks/useBackups";
 import { extractProjectRef, getBackupDownloadUrl } from "@/services/backups.service";
@@ -148,9 +150,10 @@ function TenantsAccordion({ projectRef }: { projectRef: string }) {
 
 const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
-function BackupExecutionSection({ project, projectRef }: {
+function BackupExecutionSection({ project, projectRef, tenantCode }: {
   project: { project_name: string; topology: string; supabase_url: string };
   projectRef: string;
+  tenantCode: string | null;
 }) {
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -158,10 +161,12 @@ function BackupExecutionSection({ project, projectRef }: {
   const isShared = project.topology.startsWith('shared');
   const label = isShared
     ? `Backup de ${project.project_name} — dump completo (_full)`
-    : `Backup de ${project.project_name}`;
+    : `Backup de ${project.project_name}${tenantCode ? ` (tenant: ${tenantCode})` : ''}`;
   const command = isShared
     ? `npm run backup:project -- --project-ref=${projectRef}`
-    : `npm run backup:project -- --project-ref=${projectRef}`;
+    : tenantCode
+      ? `npm run backup:tenant -- --tenant=${tenantCode}`
+      : `npm run backup:project -- --project-ref=${projectRef}`;
 
   const handleRun = async () => {
     setRunning(true);
@@ -236,6 +241,19 @@ export function BackupDashboard() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const projectRef = selectedProject ? extractProjectRef(selectedProject.supabase_url) : null;
 
+  const { data: tenantCode = null } = useQuery({
+    queryKey: ['tenant-code', selectedProjectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('tenants')
+        .select('tenant_code')
+        .eq('project_id', selectedProjectId)
+        .single();
+      return data?.tenant_code ?? null;
+    },
+    enabled: !!selectedProjectId && selectedProject?.topology === 'isolated_single',
+  });
+
   return (
     <div className="space-y-4">
       <Card className="p-5">
@@ -268,10 +286,10 @@ export function BackupDashboard() {
             <div>
               <p className="text-sm font-semibold text-foreground">Backups de {selectedProject.project_name}</p>
               <p className="text-xs text-muted-foreground">
-                Estrutura: label → data → schema.sql / data.sql
+                Estrutura: label → data → schema.sql.gz / data.sql.gz
               </p>
             </div>
-            <BackupExecutionSection project={selectedProject} projectRef={projectRef} />
+            <BackupExecutionSection project={selectedProject} projectRef={projectRef} tenantCode={tenantCode} />
             <TenantsAccordion projectRef={projectRef} />
           </div>
         </Card>

@@ -78,7 +78,11 @@ export async function provisionBillingAccount(
       const existing = await repo.findAccountByClientId(db, input.adminClientId);
       if (!existing) throw new Error('billing_account disappeared after conflict — investigate immediately');
 
-      if (existing.provider_customer_id === null) {
+      // provider_customer_id=null com lifecycle='provisioning' indica que outro request
+      // já está criando o cliente no provider — aguardar, não duplicar.
+      // Se lifecycle for outro (ex: 'cancelled' após detecção de cliente excluído),
+      // prosseguir com ensureCustomer normalmente.
+      if (existing.provider_customer_id === null && existing.lifecycle_status === 'provisioning') {
         return { account: existing, created: false, pending: true };
       }
 

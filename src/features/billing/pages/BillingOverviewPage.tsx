@@ -11,7 +11,7 @@ import { UpcomingChargesCard } from '../components/UpcomingChargesCard';
 
 export default function BillingOverviewPage() {
   const queryClient = useQueryClient();
-  const { accounts, openCharges, projectIdByClientId, mrr, isLoading } = useBillingDashboard();
+  const { accounts, openCharges, projectIdByClientId, mrr, isLoading, isError } = useBillingDashboard();
 
   const syncAll = useMutation({
     mutationFn: invokeSyncAll,
@@ -51,12 +51,20 @@ export default function BillingOverviewPage() {
           </Button>
         </div>
 
-        {isLoading ? (
+        {isError ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-destructive">Erro ao carregar dados de billing</p>
+            <p className="text-xs text-muted-foreground">
+              Uma ou mais queries falharam. Verifique a conexão e recarregue a página.
+            </p>
+          </div>
+        ) : isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <div className="space-y-6">
+
             <BillingKPICards accounts={accounts} mrr={mrr} />
             <UpcomingChargesCard charges={openCharges} />
             <div className="space-y-2">

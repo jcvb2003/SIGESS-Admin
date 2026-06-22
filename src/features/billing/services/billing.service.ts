@@ -210,19 +210,23 @@ export async function getBillingEvents(limit = 50): Promise<BillingEvent[]> {
   return (data ?? []) as BillingEvent[];
 }
 
+type TenantProjectRow = { id: string; project_id: string | null };
+
 export async function getTenantsProjectMap(): Promise<Record<string, string>> {
-  const { data } = await supabase.from('tenants').select('id, project_id');
+  const { data, error } = await supabase.from('tenants').select('id, project_id');
+  if (error) throw new Error(`tenants project map failed: ${error.message}`);
   const map: Record<string, string> = {};
-  (data ?? []).forEach((t: any) => { if (t.project_id) map[t.id] = t.project_id; });
+  ((data as TenantProjectRow[]) ?? []).forEach((t) => { if (t.project_id) map[t.id] = t.project_id; });
   return map;
 }
 
 export async function getBillingMRR(): Promise<number> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('billing_subscriptions')
     .select('amount, interval')
     .in('billing_status', ['active', 'pending_payment'])
     .eq('interval', 'monthly');
+  if (error) throw new Error(`billing MRR fetch failed: ${error.message}`);
   return ((data ?? []) as { amount: number }[]).reduce((sum, s) => sum + Number(s.amount), 0);
 }
 

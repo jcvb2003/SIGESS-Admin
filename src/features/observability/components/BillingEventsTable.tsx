@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { getBillingEvents } from '@/features/billing/services/billing.service';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,11 +28,24 @@ function formatTs(iso: string) {
 }
 
 export function BillingEventsTable() {
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, isError, error } = useQuery({
     queryKey: ['billing', 'events'],
     queryFn: () => getBillingEvents(50),
     refetchInterval: 30_000,
   });
+
+  if (isError) {
+    return (
+      <div className="flex items-center gap-2 py-6 text-sm text-destructive">
+        <AlertCircle className="h-4 w-4 shrink-0" />
+        <span>
+          Falha ao carregar eventos:{' '}
+          {error instanceof Error ? error.message : 'Erro desconhecido'}.
+          {' '}"Sem eventos" e "falha na leitura" são coisas diferentes.
+        </span>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

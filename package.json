@@ -11,8 +11,9 @@
     "preview": "vite preview",
     "migrate:propagate": "tsx scripts/propagate-from-reference.ts",
     "migrate:dry-run": "tsx scripts/propagate-from-reference.ts --dry-run",
-    "export:tenant": "tsx scripts/export-tenant.ts",
-    "export:all": "tsx scripts/export-tenant.ts --all",
+    "backup:tenant": "tsx scripts/backup-tenant-sql.ts",
+    "backup:project": "tsx scripts/backup-tenant-sql.ts",
+    "backup:all": "tsx scripts/backup-tenant-sql.ts --all",
     "schema:update-initial": "tsx scripts/update-initial-schema.ts",
     "functions:deploy": "tsx scripts/deploy-edge-function.ts"
   },

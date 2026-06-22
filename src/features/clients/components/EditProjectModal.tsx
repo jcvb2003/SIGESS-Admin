@@ -61,6 +61,7 @@ export function EditProjectModal({
     supabase_publishable_key: project.supabase_publishable_key,
     supabase_secret_keys:     "",
     supabase_access_token:    "",
+    runtime_db_url:           "",
   });
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const updateProject = useUpdateProject();
@@ -74,6 +75,7 @@ export function EditProjectModal({
         supabase_publishable_key: project.supabase_publishable_key,
         supabase_secret_keys:     "",
         supabase_access_token:    "",
+        runtime_db_url:           "",
       });
       setCredentialsOpen(false);
     }
@@ -84,6 +86,17 @@ export function EditProjectModal({
 
   const handleSave = async () => {
     try {
+      if (form.runtime_db_url) {
+        const u = form.runtime_db_url.trim();
+        const ok = (u.startsWith('postgres://') || u.startsWith('postgresql://'))
+          && u.includes('db.') && u.includes('.supabase.co')
+          && u.includes(':5432') && !u.includes(':6543');
+        if (!ok) {
+          toast.error('runtime_db_url inválida. Use postgresql://postgres:{pw}@db.{ref}.supabase.co:5432/postgres');
+          return;
+        }
+      }
+
       const payload: Record<string, unknown> = {
         project_name:             form.project_name,
         topology:                 form.topology,
@@ -92,6 +105,7 @@ export function EditProjectModal({
       };
       if (form.supabase_secret_keys)  payload.supabase_secret_keys  = form.supabase_secret_keys;
       if (form.supabase_access_token) payload.supabase_access_token = form.supabase_access_token;
+      if (form.runtime_db_url)        payload.runtime_db_url        = form.runtime_db_url.trim();
 
       const result = await updateProject.mutateAsync({ id: project.id, input: payload });
       toast.success("Projeto atualizado com sucesso");
@@ -190,6 +204,18 @@ export function EditProjectModal({
                     value={form.supabase_secret_keys}
                     onChange={(e) => update("supabase_secret_keys", e.target.value)}
                     placeholder="eyJ…"
+                  />
+                </FieldRow>
+                <FieldRow
+                  label="Conexão PostgreSQL direta (backup)"
+                  hint="Conexão direta porta 5432. Não use pooler 6543. Formato: postgresql://postgres:{pw}@db.{ref}.supabase.co:5432/postgres"
+                >
+                  <Input
+                    type="password"
+                    value={form.runtime_db_url}
+                    onChange={(e) => update("runtime_db_url", e.target.value)}
+                    placeholder="postgresql://postgres:…@db.xxx.supabase.co:5432/postgres"
+                    className="font-mono text-xs"
                   />
                 </FieldRow>
                 <FieldRow label="Access Token (PAT)">

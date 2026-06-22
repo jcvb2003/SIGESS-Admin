@@ -32,6 +32,7 @@ export interface Project {
   supabase_secret_keys: string | null;
   supabase_access_token: string | null;
   supabase_account_id: string | null;
+  runtime_db_url: string | null;
   key_status: "valid" | "broken" | "unknown";
   last_health_check_at: string | null;
   health_error_detail: string | null;

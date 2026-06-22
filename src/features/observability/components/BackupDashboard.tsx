@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Download, Loader2, ChevronRight, ChevronDown, FolderOpen, FileText, AlertCircle } from "lucide-react";
+import { Download, Loader2, ChevronRight, ChevronDown, FolderOpen, FileText, AlertCircle, Terminal, Copy, Check, Play } from "lucide-react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -146,6 +147,89 @@ function TenantsAccordion({ projectRef }: { projectRef: string }) {
   );
 }
 
+const isLocal = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
+function BackupExecutionSection({ project, projectRef }: {
+  project: { project_name: string; topology: string; supabase_url: string };
+  projectRef: string;
+}) {
+  const [running, setRunning] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isShared = project.topology.startsWith('shared');
+  const label = isShared
+    ? `Backup de ${project.project_name} — dump completo (_full)`
+    : `Backup de ${project.project_name}`;
+  const command = isShared
+    ? `npm run backup:project -- --project-ref=${projectRef}`
+    : `npm run backup:project -- --project-ref=${projectRef}`;
+
+  const handleRun = async () => {
+    setRunning(true);
+    try {
+      const res = await fetch(`/api/local/backup?project-ref=${encodeURIComponent(projectRef)}`, {
+        method: 'POST',
+      });
+      if (res.status === 202) {
+        toast.info(`Backup iniciado — acompanhe no terminal do "npm run dev"`);
+      } else {
+        const text = await res.text();
+        toast.error(`Erro ao disparar backup: ${text}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro de rede');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (isLocal) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-secondary/20 px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Terminal className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm text-foreground truncate">{label}</span>
+          {isShared && (
+            <span className="text-[10px] text-muted-foreground shrink-0">(N tenants)</span>
+          )}
+        </div>
+        <Button size="sm" variant="outline" disabled={running} onClick={handleRun}>
+          {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
+          {running ? 'Aguarde...' : 'Executar'}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border/50 bg-secondary/20 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <Terminal className="h-4 w-4 text-muted-foreground" />
+        Executar localmente (na pasta Admin/)
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 rounded bg-background px-3 py-2 text-xs font-mono text-foreground border border-border/50 select-all truncate">
+          {command}
+        </code>
+        <Button size="icon" variant="ghost" onClick={handleCopy} title="Copiar comando">
+          {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
+      </div>
+      {isShared && (
+        <p className="text-xs text-muted-foreground">
+          Projeto compartilhado — o dump cobre todos os tenants em <code className="font-mono">_full/</code>.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BackupDashboard() {
   const { data: projects = [], isLoading: loadingProjects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -179,15 +263,16 @@ export function BackupDashboard() {
         </div>
       </Card>
 
-      {projectRef && (
+      {projectRef && selectedProject && (
         <Card className="p-5">
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-semibold text-foreground">Backups de {selectedProject?.project_name}</p>
+              <p className="text-sm font-semibold text-foreground">Backups de {selectedProject.project_name}</p>
               <p className="text-xs text-muted-foreground">
-                Estrutura: tenant → data → schema.sql / data.sql
+                Estrutura: label → data → schema.sql / data.sql
               </p>
             </div>
+            <BackupExecutionSection project={selectedProject} projectRef={projectRef} />
             <TenantsAccordion projectRef={projectRef} />
           </div>
         </Card>

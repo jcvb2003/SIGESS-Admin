@@ -87,6 +87,7 @@ export default function BillingDetailPage() {
             commercialMode={account.commercial_mode}
             onCreateSubscription={() => setSubscriptionOpen(true)}
             onChangePlan={() => setChangePlanOpen(true)}
+            onReprovision={() => setProvisionOpen(true)}
             onCancelSubscription={() => {
               if (!subscription) return;
               cancelSubscription.mutate(subscription.id, {

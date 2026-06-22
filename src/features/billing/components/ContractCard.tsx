@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, RotateCcw, XCircle } from 'lucide-react';
 import { formatDate } from '@/shared/utils/date';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -34,6 +34,7 @@ interface ContractCardProps {
   onChangePlan: () => void;
   onCancelSubscription: () => void;
   onUpdateMode: (newMode: CommercialMode) => void;
+  onReprovision: () => void;
   isUpdatingMode: boolean;
   isCancellingSubscription: boolean;
 }
@@ -46,6 +47,7 @@ export function ContractCard({
   onChangePlan,
   onCancelSubscription,
   onUpdateMode,
+  onReprovision,
   isUpdatingMode,
   isCancellingSubscription,
 }: Readonly<ContractCardProps>) {
@@ -56,8 +58,12 @@ export function ContractCard({
 
   const isRecorrente = commercialMode === 'recorrente_mensal' || commercialMode === 'anual';
 
+  const needsReprovision =
+    account.lifecycle_status === 'cancelled' && !account.provider_customer_id;
+
   const canCreateSubscription =
     isRecorrente &&
+    !!account.provider_customer_id &&
     (account.lifecycle_status === 'draft' ||
       account.lifecycle_status === 'trial_active' ||
       account.lifecycle_status === 'cancelled');
@@ -134,6 +140,22 @@ export function ContractCard({
             </div>
           )}
         </div>
+
+        {/* Aviso: cliente excluído do provider */}
+        {needsReprovision && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-700/50 dark:bg-amber-950/30">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1 space-y-1.5">
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Cliente não encontrado no provider — provavelmente foi excluído do Asaas. Re-provisione para criar um novo registro antes de criar assinatura.
+              </p>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onReprovision}>
+                <RotateCcw className="mr-1.5 h-3 w-3" />
+                Re-provisionar
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Ações contratuais */}
         <div className="flex flex-wrap gap-2 border-t pt-3">

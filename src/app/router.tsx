@@ -5,6 +5,7 @@ import AuthPage from "@/features/auth/pages/AuthPage";
 import ProjectsPage from "@/features/clients/pages/ProjectsPage";
 import ProjectDetailPage from "@/features/clients/pages/ProjectDetailPage";
 import ClienteDetailPage from "@/features/clients/pages/ClienteDetailPage";
+import BillingDetailPage from "@/features/billing/pages/BillingDetailPage";
 import ObservabilityPage from "@/features/observability/pages/ObservabilityPage";
 import LicensesPage from "@/features/licenses/pages/LicensesPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
@@ -20,6 +21,7 @@ export function AppRouter() {
         <Route path="/clients/:id">
           <Route index element={<ProtectedRoute requireAdmin><ProjectDetailPage /></ProtectedRoute>} />
           <Route path="clientes/:clienteId" element={<ProtectedRoute requireAdmin><ClienteDetailPage /></ProtectedRoute>} />
+          <Route path="clientes/:clienteId/billing" element={<ProtectedRoute requireAdmin><BillingDetailPage /></ProtectedRoute>} />
         </Route>
         <Route path="/observability" element={<ProtectedRoute requireAdmin><ObservabilityPage /></ProtectedRoute>} />
         <Route path="/licenses" element={<ProtectedRoute requireAdmin><LicensesPage /></ProtectedRoute>} />

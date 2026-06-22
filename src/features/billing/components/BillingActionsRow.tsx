@@ -1,11 +1,12 @@
 import { CalendarCheck, Loader2, PlusCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GenerateTokenButton } from './GenerateTokenButton';
-import type { BillingAccountLifecycleStatus, BillingCharge } from '../types';
+import type { BillingAccountLifecycleStatus, BillingCharge, CommercialMode } from '../types';
 
 interface BillingActionsRowProps {
   adminClientId: string;
   lifecycleStatus: BillingAccountLifecycleStatus;
+  commercialMode: CommercialMode;
   hasSubscription: boolean;
   charges: BillingCharge[];
   onCreateSubscription: () => void;
@@ -19,6 +20,7 @@ interface BillingActionsRowProps {
 export function BillingActionsRow({
   adminClientId,
   lifecycleStatus,
+  commercialMode,
   hasSubscription,
   charges,
   onCreateSubscription,
@@ -28,19 +30,24 @@ export function BillingActionsRow({
   onSync,
   isSyncing,
 }: Readonly<BillingActionsRowProps>) {
+  const isManual = commercialMode === 'manual';
+
+  const canReprovision =
+    !isManual &&
+    (lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active' || lifecycleStatus === 'cancelled');
+
   const canCreateSubscription =
-    lifecycleStatus === 'draft' ||
-    lifecycleStatus === 'trial_active' ||
-    lifecycleStatus === 'cancelled';
+    !isManual &&
+    (lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active' || lifecycleStatus === 'cancelled');
+
   const canChangePlan =
+    !isManual &&
     hasSubscription &&
-    (lifecycleStatus === 'payment_pending' ||
-      lifecycleStatus === 'active' ||
-      lifecycleStatus === 'past_due');
+    (lifecycleStatus === 'payment_pending' || lifecycleStatus === 'active' || lifecycleStatus === 'past_due');
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {(lifecycleStatus === 'draft' || lifecycleStatus === 'trial_active' || lifecycleStatus === 'cancelled') && (
+      {canReprovision && (
         <Button variant="outline" size="sm" onClick={onReprovision}>
           <RotateCcw className="mr-2 h-3.5 w-3.5" />
           Re-provisionar
@@ -66,21 +73,18 @@ export function BillingActionsRow({
         Nova cobrança avulsa
       </Button>
 
-      <GenerateTokenButton adminClientId={adminClientId} charges={charges} />
+      {!isManual && <GenerateTokenButton adminClientId={adminClientId} charges={charges} />}
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onSync}
-        disabled={isSyncing}
-      >
-        {isSyncing ? (
-          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
-        )}
-        Sincronizar cobrança
-      </Button>
+      {!isManual && (
+        <Button variant="outline" size="sm" onClick={onSync} disabled={isSyncing}>
+          {isSyncing ? (
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+          )}
+          Sincronizar cobrança
+        </Button>
+      )}
     </div>
   );
 }

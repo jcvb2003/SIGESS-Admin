@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getBillingAccount, getActiveSubscription, getBillingCharges } from '../services/billing.service';
+import { getBillingAccount, getActiveSubscription, getBillingCharges, getAllBillingCharges } from '../services/billing.service';
 import type { BillingAccount, BillingCharge, BillingSubscription } from '../types';
 
 export const billingOverviewKey = (adminClientId: string) =>
@@ -9,6 +9,14 @@ interface BillingOverview {
   account: BillingAccount | null;
   subscription: BillingSubscription | null;
   charges: BillingCharge[];
+}
+
+export function useAllBillingCharges(billingAccountId: string | undefined) {
+  return useQuery({
+    queryKey: ['billing', 'all-charges', billingAccountId],
+    queryFn: () => getAllBillingCharges(billingAccountId!),
+    enabled: Boolean(billingAccountId),
+  });
 }
 
 export function useBillingOverview(adminClientId: string) {

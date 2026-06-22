@@ -558,6 +558,24 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
   return result;
 }
 
+// ─── Planned plan handler ─────────────────────────────────────────────────────
+
+async function handleClearPlannedPlan(db: SupabaseClient, params: Record<string, unknown>) {
+  assert(params.admin_client_id, 'admin_client_id');
+
+  const account = await repo.findAccountByClientId(db, params.admin_client_id as string);
+  if (!account) throw createHttpError('billing_account not found', 404);
+
+  if (!account.next_plan_id) {
+    throw createHttpError('Nenhum plano agendado para cancelar.', 409);
+  }
+
+  await repo.updateAccount(db, account.id, { next_plan_id: null, next_plan_effective_date: null });
+  log('info', 'billing-action', 'clear_planned_plan', { admin_client_id: params.admin_client_id });
+  await syncSummaryOrThrow(db, params.admin_client_id as string);
+  return { ok: true };
+}
+
 // ─── Commercial mode + billing block handlers ─────────────────────────────────
 
 async function handleUpdateCommercialMode(db: SupabaseClient, _provider: BillingProvider, params: Record<string, unknown>) {
@@ -706,6 +724,9 @@ Deno.serve(async (req: Request) => {
         break;
       case 'sync_account':
         result = await handleSyncAccount(db, provider, params);
+        break;
+      case 'clear_planned_plan':
+        result = await handleClearPlannedPlan(db, params);
         break;
       case 'update_commercial_mode':
         result = await handleUpdateCommercialMode(db, provider, params);

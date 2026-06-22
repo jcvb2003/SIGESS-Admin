@@ -82,6 +82,13 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
+  const clearPlannedPlan = useMutation({
+    mutationFn: () =>
+      invokeBillingAction('clear_planned_plan', { admin_client_id: adminClientId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao cancelar agendamento'),
+  });
+
   const updateCommercialMode = useMutation({
     mutationFn: (mode: CommercialMode) =>
       invokeBillingAction('update_commercial_mode', { admin_client_id: adminClientId, commercial_mode: mode }),
@@ -103,5 +110,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao desbloquear acesso'),
   });
 
-  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, updateCommercialMode, setBillingBlock, clearBillingBlock };
+  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
 }

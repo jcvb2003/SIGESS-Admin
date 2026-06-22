@@ -98,6 +98,16 @@ export interface ProviderSettings {
   api_key_configured: boolean;
 }
 
+export async function getAllBillingCharges(billingAccountId: string): Promise<BillingCharge[]> {
+  const { data, error } = await supabase
+    .from('billing_charges')
+    .select('*')
+    .eq('billing_account_id', billingAccountId)
+    .order('due_date', { ascending: false });
+  if (error) throw new Error(`billing_charges lookup failed: ${error.message}`);
+  return (data ?? []) as BillingCharge[];
+}
+
 export async function getProviderSettings(): Promise<ProviderSettings | null> {
   const { data, error } = await supabase
     .from('billing_provider_settings')

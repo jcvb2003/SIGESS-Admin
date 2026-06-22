@@ -1,4 +1,5 @@
-import { CalendarCheck } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarCheck, XCircle } from 'lucide-react';
 import { formatDate } from '@/shared/utils/date';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,12 +10,22 @@ function formatBRL(reais: number): string {
   return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const MODE_OPTIONS: { value: CommercialMode; label: string }[] = [
+  { value: 'manual',            label: 'Manual' },
+  { value: 'recorrente_mensal', label: 'Recorrente mensal' },
+  { value: 'anual',             label: 'Anual' },
+];
+
 interface ContractCardProps {
   account: BillingAccount;
   subscription: BillingSubscription | null;
   commercialMode: CommercialMode;
   onCreateSubscription: () => void;
   onChangePlan: () => void;
+  onCancelSubscription: () => void;
+  onUpdateMode: (newMode: CommercialMode) => void;
+  isUpdatingMode: boolean;
+  isCancellingSubscription: boolean;
 }
 
 export function ContractCard({
@@ -23,7 +34,14 @@ export function ContractCard({
   commercialMode,
   onCreateSubscription,
   onChangePlan,
+  onCancelSubscription,
+  onUpdateMode,
+  isUpdatingMode,
+  isCancellingSubscription,
 }: Readonly<ContractCardProps>) {
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const [pendingMode, setPendingMode] = useState<CommercialMode>(commercialMode);
+
   const isRecorrente = commercialMode === 'recorrente_mensal' || commercialMode === 'anual';
 
   const canCreateSubscription =
@@ -38,6 +56,23 @@ export function ContractCard({
     (account.lifecycle_status === 'payment_pending' ||
       account.lifecycle_status === 'active' ||
       account.lifecycle_status === 'past_due');
+
+  const canCancelSubscription =
+    subscription !== null &&
+    ['active', 'pending_payment', 'overdue'].includes(subscription.billing_status);
+
+  // manual não pode voltar de recorrente/anual — filtrar opções proibidas
+  const allowedModes = MODE_OPTIONS.filter((m) => {
+    if (isRecorrente && m.value === 'manual') return false;
+    return true;
+  });
+
+  const handleConfirmMode = () => {
+    if (pendingMode === commercialMode) { setShowModeSelector(false); return; }
+    if (!window.confirm(`Mudar modo para "${COMMERCIAL_MODE_LABEL[pendingMode]}"?`)) return;
+    onUpdateMode(pendingMode);
+    setShowModeSelector(false);
+  };
 
   return (
     <Card className="p-5 space-y-4">
@@ -58,7 +93,7 @@ export function ContractCard({
           <p className="text-xs text-muted-foreground">Provider</p>
           <p className="font-mono text-sm">{account.provider}</p>
         </div>
-        {subscription && (
+        {subscription ? (
           <>
             <div>
               <p className="text-xs text-muted-foreground">Intervalo</p>
@@ -81,8 +116,7 @@ export function ContractCard({
               <p className="text-sm">{subscription.billing_status}</p>
             </div>
           </>
-        )}
-        {!subscription && (
+        ) : (
           <div>
             <p className="text-xs text-muted-foreground">Assinatura</p>
             <p className="text-sm text-muted-foreground">Sem assinatura ativa</p>
@@ -90,20 +124,60 @@ export function ContractCard({
         )}
       </div>
 
-      {(canCreateSubscription || canChangePlan) && (
-        <div className="flex flex-wrap gap-2 border-t pt-3">
-          {canCreateSubscription && (
-            <Button size="sm" onClick={onCreateSubscription}>
-              <CalendarCheck className="mr-2 h-3.5 w-3.5" />
-              Criar assinatura
-            </Button>
-          )}
-          {canChangePlan && (
-            <Button size="sm" variant="outline" onClick={onChangePlan}>
-              <CalendarCheck className="mr-2 h-3.5 w-3.5" />
-              Trocar plano
-            </Button>
-          )}
+      {/* Ações contratuais */}
+      <div className="flex flex-wrap gap-2 border-t pt-3">
+        {canCreateSubscription && (
+          <Button size="sm" onClick={onCreateSubscription}>
+            <CalendarCheck className="mr-2 h-3.5 w-3.5" />
+            Criar assinatura
+          </Button>
+        )}
+        {canChangePlan && (
+          <Button size="sm" variant="outline" onClick={onChangePlan}>
+            <CalendarCheck className="mr-2 h-3.5 w-3.5" />
+            Trocar plano
+          </Button>
+        )}
+        {canCancelSubscription && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive border-destructive/40 hover:bg-destructive/10"
+            disabled={isCancellingSubscription}
+            onClick={onCancelSubscription}
+          >
+            <XCircle className="mr-2 h-3.5 w-3.5" />
+            Cancelar assinatura
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={isUpdatingMode}
+          onClick={() => { setPendingMode(commercialMode); setShowModeSelector((v) => !v); }}
+        >
+          Mudar modo
+        </Button>
+      </div>
+
+      {/* Seletor inline de modo */}
+      {showModeSelector && (
+        <div className="flex items-center gap-2 rounded-md border border-border/50 bg-secondary/20 p-3">
+          <select
+            value={pendingMode}
+            onChange={(e) => setPendingMode(e.target.value as CommercialMode)}
+            className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+          >
+            {allowedModes.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={handleConfirmMode} disabled={isUpdatingMode}>
+            Confirmar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowModeSelector(false)}>
+            Cancelar
+          </Button>
         </div>
       )}
     </Card>

@@ -7,8 +7,10 @@ import type { CommercialMode } from '../types';
 export function useBillingActions(adminClientId: string) {
   const queryClient = useQueryClient();
 
-  const invalidate = () =>
+  const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: billingOverviewKey(adminClientId) });
+    queryClient.invalidateQueries({ queryKey: ['billing', 'all-charges'] });
+  };
 
   const provisionAccount = useMutation({
     mutationFn: (params: {
@@ -82,6 +84,13 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao sincronizar'),
   });
 
+  const cancelSubscription = useMutation({
+    mutationFn: (subscriptionId: string) =>
+      invokeBillingAction('cancel_subscription', { subscription_id: subscriptionId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao cancelar assinatura'),
+  });
+
   const clearPlannedPlan = useMutation({
     mutationFn: () =>
       invokeBillingAction('clear_planned_plan', { admin_client_id: adminClientId }),
@@ -110,5 +119,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao desbloquear acesso'),
   });
 
-  return { provisionAccount, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
+  return { provisionAccount, cancelSubscription, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
 }

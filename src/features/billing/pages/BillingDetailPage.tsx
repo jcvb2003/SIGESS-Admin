@@ -27,7 +27,7 @@ export default function BillingDetailPage() {
   const { data, isLoading, error } = useBillingOverview(adminClientId);
   const { data: plans = [] } = useBillingPlans();
   const { data: allCharges = [], isLoading: loadingCharges } = useAllBillingCharges(data?.account?.id);
-  const { syncAccount, cancelCharge, clearPlannedPlan } = useBillingActions(adminClientId);
+  const { syncAccount, cancelCharge, cancelSubscription, clearPlannedPlan, updateCommercialMode } = useBillingActions(adminClientId);
 
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
@@ -87,6 +87,20 @@ export default function BillingDetailPage() {
             commercialMode={account.commercial_mode}
             onCreateSubscription={() => setSubscriptionOpen(true)}
             onChangePlan={() => setChangePlanOpen(true)}
+            onCancelSubscription={() => {
+              if (!subscription) return;
+              if (!window.confirm('Confirmar: cancelar a assinatura ativa?')) return;
+              cancelSubscription.mutate(subscription.id, {
+                onSuccess: () => toast.success('Assinatura cancelada'),
+              });
+            }}
+            onUpdateMode={(newMode) =>
+              updateCommercialMode.mutate(newMode, {
+                onSuccess: () => toast.success('Modo comercial atualizado'),
+              })
+            }
+            isUpdatingMode={updateCommercialMode.isPending}
+            isCancellingSubscription={cancelSubscription.isPending}
           />
 
           {account.next_plan_id && (

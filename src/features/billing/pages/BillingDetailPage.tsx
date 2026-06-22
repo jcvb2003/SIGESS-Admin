@@ -89,7 +89,6 @@ export default function BillingDetailPage() {
             onChangePlan={() => setChangePlanOpen(true)}
             onCancelSubscription={() => {
               if (!subscription) return;
-              if (!window.confirm('Confirmar: cancelar a assinatura ativa?')) return;
               cancelSubscription.mutate(subscription.id, {
                 onSuccess: () => toast.success('Assinatura cancelada'),
               });

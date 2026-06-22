@@ -50,7 +50,6 @@ export const BILLING_EVENT_TYPES = {
   SUBSCRIPTION_RENEWED: 'subscription.renewed',
   SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
   SUBSCRIPTION_OVERDUE: 'subscription.overdue',
-  CUSTOMER_DELETED: 'customer.deleted',
 } as const;
 
 // ─── Webhook event type mapping ───────────────────────────────────────────────
@@ -66,7 +65,6 @@ const ASAAS_WEBHOOK_EVENT_MAP: Record<string, string> = {
   PAYMENT_CHARGEBACK_REQUESTED: BILLING_EVENT_TYPES.CHARGE_FAILED,
   SUBSCRIPTION_RENEWED: BILLING_EVENT_TYPES.SUBSCRIPTION_RENEWED,
   SUBSCRIPTION_DELETED: BILLING_EVENT_TYPES.SUBSCRIPTION_CANCELLED,
-  CUSTOMER_DELETED: BILLING_EVENT_TYPES.CUSTOMER_DELETED,
 };
 
 export function mapAsaasWebhookEventType(asaasEvent: string): string {

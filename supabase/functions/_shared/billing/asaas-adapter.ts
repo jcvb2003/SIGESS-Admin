@@ -54,7 +54,6 @@ interface AsaasPayment {
 interface AsaasWebhookBody {
   id: string;
   event: string;
-  customer?: { id: string };
   payment?: {
     id?: string;
     status?: string;
@@ -250,7 +249,6 @@ export class AsaasAdapter implements BillingProvider {
       rawEventType: body.event,
       providerChargeId: body.payment?.id,
       providerSubscriptionId,
-      providerCustomerId: body.customer?.id,
       chargeStatus,
       paidAt: normalizePaymentDate(body.payment?.paymentDate),
     };

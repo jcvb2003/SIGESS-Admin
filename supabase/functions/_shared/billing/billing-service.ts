@@ -395,11 +395,43 @@ export async function applyWebhookEvent(
     if (event.providerSubscriptionId && event.subscriptionStatus) {
       await _applySubscriptionStatus(db, event.providerSubscriptionId, event.subscriptionStatus);
     }
+    if (event.providerCustomerId && event.eventType === 'customer.deleted') {
+      await _applyCustomerDeleted(db, event.providerCustomerId);
+    }
     await repo.markEventProcessed(db, eventId);
   } catch (err) {
     await repo.markEventFailed(db, eventId, String(err));
     throw err;
   }
+}
+
+async function _applyCustomerDeleted(db: SupabaseClient, providerCustomerId: string): Promise<void> {
+  const { data: account } = await db
+    .from('billing_accounts')
+    .select('id, admin_client_id')
+    .eq('provider_customer_id', providerCustomerId)
+    .maybeSingle();
+  if (!account) return; // não rastreado localmente
+
+  // Cancelar assinaturas ativas antes de fechar o account
+  const now = new Date().toISOString();
+  await db
+    .from('billing_subscriptions')
+    .update({ billing_status: 'cancelled', ends_at: now, updated_at: now })
+    .eq('billing_account_id', account.id)
+    .in('billing_status', ['trialing', 'pending_payment', 'active', 'overdue']);
+
+  // Fechar conta: cancelled + limpar provider_customer_id para sinalizar ausência no provider
+  await repo.updateAccount(db, account.id, {
+    lifecycle_status: 'cancelled',
+    provider_customer_id: null,
+  });
+
+  log('info', 'billing-service', 'customer_deleted_applied', {
+    account_id: account.id,
+    admin_client_id: account.admin_client_id,
+    provider_customer_id: providerCustomerId,
+  });
 }
 
 async function _applyChargeStatus(

@@ -57,6 +57,10 @@ export interface ListSubscriptionChargesInput {
   providerSubscriptionId: string;
 }
 
+export interface CustomerExistsInput {
+  providerCustomerId: string;
+}
+
 export interface ParseWebhookInput {
   rawBody: string;
   headers: Record<string, string>;
@@ -84,6 +88,9 @@ export interface BillingProvider {
 
   // Returns all charges for a subscription from the provider (for reconciliation/discovery).
   listSubscriptionCharges(input: ListSubscriptionChargesInput): Promise<ProviderCharge[]>;
+
+  // Returns false when the customer no longer exists in the provider (404). Throws on other errors.
+  customerExists(input: CustomerExistsInput): Promise<boolean>;
 
   // Parses and normalizes an incoming webhook payload.
   // Throws if signature is invalid or payload is unrecognized.

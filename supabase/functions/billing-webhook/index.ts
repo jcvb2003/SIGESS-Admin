@@ -21,6 +21,7 @@ const SUPPORTED_ASAAS_EVENTS = new Set([
   'PAYMENT_CHARGEBACK_REQUESTED',
   'SUBSCRIPTION_RENEWED',
   'SUBSCRIPTION_DELETED',
+  'CUSTOMER_DELETED',
 ]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,14 +100,25 @@ Deno.serve(async (req: Request) => {
       return json({ received: true, duplicate: true });
     }
 
+    // Para eventos de cliente, resolver adminClientId ANTES do apply — o apply limpa provider_customer_id.
+    let preResolvedAdminClientId: string | null = null;
+    if (event.providerCustomerId) {
+      const { data: acct } = await db
+        .from('billing_accounts')
+        .select('admin_client_id')
+        .eq('provider_customer_id', event.providerCustomerId)
+        .maybeSingle();
+      preResolvedAdminClientId = acct?.admin_client_id ?? null;
+    }
+
     await svc.applyWebhookEvent(db, eventId, event);
 
     // Sync billing_summary to runtime after state change so Web tab reflects immediately.
     // Resolve admin_client_id from whichever identifier the event carries.
     try {
-      let adminClientId: string | null = null;
+      let adminClientId: string | null = preResolvedAdminClientId;
 
-      if (event.providerChargeId) {
+      if (!adminClientId && event.providerChargeId) {
         const { data: charge } = await db
           .from('billing_charges')
           .select('billing_account_id')
@@ -120,7 +132,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
           adminClientId = account?.admin_client_id ?? null;
         }
-      } else if (event.providerSubscriptionId) {
+      } else if (!adminClientId && event.providerSubscriptionId) {
         const { data: sub } = await db
           .from('billing_subscriptions')
           .select('billing_account_id')

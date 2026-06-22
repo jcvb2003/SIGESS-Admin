@@ -68,6 +68,7 @@ export interface BillingWebhookEvent {
   rawEventType: string;                     // original string from provider (audit only)
   providerChargeId?: string;
   providerSubscriptionId?: string;
+  providerCustomerId?: string;              // present for customer events (e.g. customer.deleted)
   chargeStatus?: BillingChargeStatus;
   subscriptionStatus?: BillingSubscriptionStatus;
   paidAt?: string;                          // ISO datetime — use provider value, never fabricate

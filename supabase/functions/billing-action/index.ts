@@ -76,6 +76,9 @@ class StubBillingProvider implements BillingProvider {
   async listSubscriptionCharges(): Promise<ProviderCharge[]> {
     return [];
   }
+  async customerExists(): Promise<boolean> {
+    return true; // stub assume que o cliente existe
+  }
   parseWebhookEvent(): BillingWebhookEvent {
     throw new Error('StubBillingProvider does not handle webhooks');
   }
@@ -414,11 +417,48 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
 
   const { data: account } = await db
     .from('billing_accounts')
-    .select('id')
+    .select('id, provider_customer_id')
     .eq('admin_client_id', params.admin_client_id as string)
     .maybeSingle();
 
   if (!account) throw createHttpError('billing_account not found', 404);
+
+  // Verificar se o cliente ainda existe no provider antes de qualquer sync.
+  // Se 404, fechar o account localmente — não há sentido em continuar o sync.
+  if (account.provider_customer_id) {
+    const exists = await provider.customerExists({ providerCustomerId: account.provider_customer_id });
+    if (!exists) {
+      const now = new Date().toISOString();
+      await db
+        .from('billing_subscriptions')
+        .update({ billing_status: 'cancelled', ends_at: now, updated_at: now })
+        .eq('billing_account_id', account.id)
+        .in('billing_status', ['trialing', 'pending_payment', 'active', 'overdue']);
+
+      await db
+        .from('billing_accounts')
+        .update({ lifecycle_status: 'cancelled', provider_customer_id: null, updated_at: now })
+        .eq('id', account.id);
+
+      log('warn', 'billing-action', 'customer_not_found_in_provider_during_sync', {
+        admin_client_id: params.admin_client_id,
+        account_id: account.id,
+        provider_customer_id: account.provider_customer_id,
+      });
+
+      await syncSummaryOrThrow(db, params.admin_client_id as string);
+      return {
+        customer_deleted: true,
+        synced_charges: 0,
+        discovered_charges: 0,
+        provider_charge_ids: [],
+        synced_subscription: null,
+        drift_note: null,
+        missing_remote_charge_ids: [],
+        missing_remote_subscription_id: null,
+      };
+    }
+  }
 
   const { data: charges } = await db
     .from('billing_charges')

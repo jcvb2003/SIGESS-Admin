@@ -10,6 +10,7 @@ import type {
   CancelSubscriptionInput,
   CreateChargeInput,
   CreateSubscriptionInput,
+  CustomerExistsInput,
   EnsureCustomerInput,
   FetchChargeInput,
   FetchSubscriptionInput,
@@ -53,6 +54,7 @@ interface AsaasPayment {
 interface AsaasWebhookBody {
   id: string;
   event: string;
+  customer?: { id: string };
   payment?: {
     id?: string;
     status?: string;
@@ -205,6 +207,16 @@ export class AsaasAdapter implements BillingProvider {
     return (res.data ?? []).map(mapPayment);
   }
 
+  async customerExists(input: CustomerExistsInput): Promise<boolean> {
+    try {
+      await this.client.get<unknown>(`/customers/${input.providerCustomerId}`);
+      return true;
+    } catch (e) {
+      if (e instanceof AsaasApiError && e.status === 404) return false;
+      throw e;
+    }
+  }
+
   parseWebhookEvent(input: ParseWebhookInput): BillingWebhookEvent {
     if (this.webhookToken) {
       const token = input.headers['asaas-access-token'];
@@ -238,6 +250,7 @@ export class AsaasAdapter implements BillingProvider {
       rawEventType: body.event,
       providerChargeId: body.payment?.id,
       providerSubscriptionId,
+      providerCustomerId: body.customer?.id,
       chargeStatus,
       paidAt: normalizePaymentDate(body.payment?.paymentDate),
     };

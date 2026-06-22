@@ -81,7 +81,14 @@ export function CreateSubscriptionDialog({
     setNextDueDate(todayPlusDays(1));
   };
 
-  const canSubmit = planId && amount && nextDueDate;
+  const hasChanges = mode !== 'change' || !subscription || (
+    planId !== subscription.plan_id ||
+    interval !== subscription.interval ||
+    parseFloat(amount) !== subscription.amount ||
+    nextDueDate !== (subscription.next_billing_date ?? '')
+  );
+
+  const canSubmit = planId && amount && nextDueDate && hasChanges;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

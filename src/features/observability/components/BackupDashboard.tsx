@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useBackupTenants, useBackupDates, useBackupFiles } from "../hooks/useBackups";
 import { extractProjectRef, getBackupDownloadUrl } from "@/services/backups.service";
-import { toast } from "sonner";
 
 function formatBytes(bytes: number | null): string {
   if (bytes == null) return "—";

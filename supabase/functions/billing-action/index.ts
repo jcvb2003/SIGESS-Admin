@@ -306,7 +306,7 @@ async function handleChangeSubscriptionPlan(db: SupabaseClient, provider: Billin
 
   const interval = assertDomain(params.interval, 'interval', VALID_INTERVALS);
 
-  const result = await svc.changeSubscriptionPlan(db, provider, {
+  await svc.changeSubscriptionPlan(db, provider, {
     adminClientId: params.admin_client_id as string,
     planId: params.plan_id as string,
     interval: interval as 'monthly' | 'annual',
@@ -316,7 +316,7 @@ async function handleChangeSubscriptionPlan(db: SupabaseClient, provider: Billin
     updatePendingPayments: params.update_pending_payments === true,
   });
   await syncSummaryOrThrow(db, params.admin_client_id as string);
-  return result;
+  return { updated: true };
 }
 
 async function handleCancelSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {

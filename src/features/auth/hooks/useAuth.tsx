@@ -188,11 +188,16 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       } catch (error) {
         if (error instanceof Error && error.message === "auth-timeout") {
           console.warn("Auth init timed out — clearing session");
-          await supabase.auth.signOut().catch(() => {});
+          // fire-and-forget: não podemos await aqui pois signOut() também pode travar
+          // se a rede estiver indisponível, mantendo isLoading=true para sempre
+          void supabase.auth.signOut().catch(() => {});
         } else {
           console.error("Auth init error:", error);
         }
-        if (mounted) setIsLoading(false);
+        if (mounted) {
+          setUser(null);
+          setIsLoading(false);
+        }
       }
     };
 

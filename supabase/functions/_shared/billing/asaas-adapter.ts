@@ -54,6 +54,9 @@ interface AsaasPayment {
 interface AsaasWebhookBody {
   id: string;
   event: string;
+  // Presente em eventos de assinatura (SUBSCRIPTION_DELETED, SUBSCRIPTION_INACTIVATED, etc.)
+  subscription?: { id?: string; status?: string; nextDueDate?: string };
+  // Presente em eventos de pagamento (PAYMENT_*)
   payment?: {
     id?: string;
     status?: string;
@@ -226,22 +229,35 @@ export class AsaasAdapter implements BillingProvider {
 
     const body = JSON.parse(input.rawBody) as AsaasWebhookBody;
 
-    const sub = body.payment?.subscription;
-    const providerSubscriptionId: string | undefined =
-      typeof sub === 'object' && sub !== null
-        ? sub.id
-        : typeof sub === 'string'
-        ? sub
-        : undefined;
+    // Fix A: subscription ID vem de fontes distintas dependendo do tipo de evento.
+    // Eventos de pagamento: body.payment.subscription (string ou objeto)
+    // Eventos de assinatura (SUBSCRIPTION_*): body.subscription.id
+    const paymentSub = body.payment?.subscription;
+    const subFromPayment =
+      typeof paymentSub === 'object' && paymentSub !== null ? paymentSub.id
+      : typeof paymentSub === 'string' ? paymentSub
+      : undefined;
+    const providerSubscriptionId: string | undefined = subFromPayment ?? body.subscription?.id;
 
     // Asaas sends the pre-event payment.status (e.g. PENDING) for deletion/refund events,
     // not the final status. Force the correct outcome from the event type instead.
-    const FORCE_CANCELLED = new Set(['PAYMENT_DELETED', 'PAYMENT_REFUNDED', 'PAYMENT_PARTIALLY_REFUNDED']);
+    const FORCE_CANCELLED = new Set([
+      'PAYMENT_DELETED',
+      'PAYMENT_REFUNDED',
+      'PAYMENT_PARTIALLY_REFUNDED',
+      'PAYMENT_BANK_SLIP_CANCELLED',  // boleto expirado: status pode estar desatualizado
+    ]);
     const chargeStatus = FORCE_CANCELLED.has(body.event)
       ? 'cancelled'
       : body.payment?.status
         ? mapAsaasChargeStatus(body.payment.status)
         : undefined;
+
+    // Fix B: subscriptionStatus derivado de body.subscription.status para eventos de assinatura.
+    // Sem este campo, applyWebhookEvent ignora o evento mesmo com providerSubscriptionId correto.
+    const subscriptionStatus = body.subscription?.status
+      ? mapAsaasSubscriptionStatus(body.subscription.status)
+      : undefined;
 
     return {
       providerEventId: body.id,
@@ -250,6 +266,7 @@ export class AsaasAdapter implements BillingProvider {
       providerChargeId: body.payment?.id,
       providerSubscriptionId,
       chargeStatus,
+      subscriptionStatus,
       paidAt: normalizePaymentDate(body.payment?.paymentDate),
     };
   }

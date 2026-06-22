@@ -489,6 +489,29 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
     }
   }
 
+  // Auto-resolver charges órfãs (404 no provider).
+  // Premissa: 404 = recurso inexistente, não configuração errada. Válido para provider único, ambiente estável.
+  if (missingRemoteChargeIds.length > 0) {
+    const { error: cancelErr } = await db
+      .from('billing_charges')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .in('provider_charge_id', missingRemoteChargeIds);
+
+    if (cancelErr) {
+      log('error', 'billing-action', 'orphaned_charges_cancel_failed', {
+        admin_client_id: params.admin_client_id,
+        ids: missingRemoteChargeIds,
+        err: cancelErr.message,
+      });
+    } else {
+      log('warn', 'billing-action', 'orphaned_charges_auto_cancelled', {
+        admin_client_id: params.admin_client_id,
+        count: missingRemoteChargeIds.length,
+        ids: missingRemoteChargeIds,
+      });
+    }
+  }
+
   const { data: activeSub } = await db
     .from('billing_subscriptions')
     .select('id, provider_subscription_id, billing_account_id')
@@ -551,6 +574,56 @@ async function handleSyncAccount(db: SupabaseClient, provider: BillingProvider, 
           account_id: account.id,
           provider_subscription_id: activeSub.provider_subscription_id,
         });
+
+        // Auto-resolver: subscription não existe mais no provider — fechar localmente.
+        // Premissa: 404 = recurso inexistente, não configuração errada.
+        const now = new Date().toISOString();
+        const { error: subErr } = await db
+          .from('billing_subscriptions')
+          .update({ billing_status: 'cancelled', ends_at: now, updated_at: now })
+          .eq('id', activeSub.id);
+
+        if (subErr) {
+          log('error', 'billing-action', 'orphaned_subscription_cancel_failed', {
+            admin_client_id: params.admin_client_id,
+            subscription_id: activeSub.id,
+            err: subErr.message,
+          });
+        } else {
+          // Regredir account se estava em estado que pressupõe subscription ativa
+          const { data: acct, error: acctErr } = await db
+            .from('billing_accounts')
+            .select('lifecycle_status')
+            .eq('id', activeSub.billing_account_id)
+            .maybeSingle();
+
+          if (acctErr) {
+            log('error', 'billing-action', 'orphaned_subscription_account_lookup_failed', {
+              admin_client_id: params.admin_client_id,
+              account_id: activeSub.billing_account_id,
+              err: acctErr.message,
+            });
+          } else if (acct && ['active', 'payment_pending', 'past_due'].includes(acct.lifecycle_status)) {
+            const { error: acctErr2 } = await db
+              .from('billing_accounts')
+              .update({ lifecycle_status: 'cancelled', updated_at: now })
+              .eq('id', activeSub.billing_account_id);
+
+            if (acctErr2) {
+              log('error', 'billing-action', 'orphaned_subscription_account_cancel_failed', {
+                admin_client_id: params.admin_client_id,
+                account_id: activeSub.billing_account_id,
+                err: acctErr2.message,
+              });
+            } else {
+              log('warn', 'billing-action', 'orphaned_subscription_auto_cancelled', {
+                admin_client_id: params.admin_client_id,
+                subscription_id: activeSub.id,
+                account_id: activeSub.billing_account_id,
+              });
+            }
+          }
+        }
       } else {
         throw err;
       }

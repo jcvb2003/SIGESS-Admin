@@ -11,6 +11,7 @@ import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts
 // Eventos do Asaas que o sistema processa. Qualquer outro retorna 200 imediatamente
 // sem gravar em billing_events — evita poluição do inbox e ciclos de retry sem sentido.
 const SUPPORTED_ASAAS_EVENTS = new Set([
+  // Pagamentos
   'PAYMENT_RECEIVED',
   'PAYMENT_CONFIRMED',
   'PAYMENT_RECEIVED_IN_CASH',
@@ -18,9 +19,13 @@ const SUPPORTED_ASAAS_EVENTS = new Set([
   'PAYMENT_OVERDUE',
   'PAYMENT_DELETED',
   'PAYMENT_REFUNDED',
+  'PAYMENT_PARTIALLY_REFUNDED',   // estorno parcial → charge.cancelled
   'PAYMENT_CHARGEBACK_REQUESTED',
-  'SUBSCRIPTION_RENEWED',
-  'SUBSCRIPTION_DELETED',
+  'PAYMENT_BANK_SLIP_CANCELLED',  // boleto expirado → charge.cancelled
+  // Assinaturas
+  'SUBSCRIPTION_DELETED',         // parsing estava silenciosamente quebrado — agora corrigido
+  'SUBSCRIPTION_INACTIVATED',     // inativação por retries esgotados → subscription.cancelled
+  // SUBSCRIPTION_RENEWED omitido: não existe na API Asaas (docs/subscription-events.md)
 ]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

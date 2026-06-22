@@ -98,6 +98,103 @@ export interface ProviderSettings {
   api_key_configured: boolean;
 }
 
+// ─── Global dashboard queries ──────────────────────────────────────────────
+
+export interface BillingAccountSummary {
+  id: string;
+  admin_client_id: string;
+  nome_entidade: string;
+  tenant_code: string;
+  commercial_mode: 'manual' | 'recorrente_mensal' | 'anual';
+  lifecycle_status: BillingAccountLifecycleStatus;
+  is_billing_blocked: boolean;
+  billing_blocked_reason: string | null;
+  provider: string;
+}
+
+export async function getAllBillingAccountsSummary(): Promise<BillingAccountSummary[]> {
+  const { data, error } = await supabase
+    .from('billing_accounts')
+    .select(`id, admin_client_id, commercial_mode, lifecycle_status,
+             is_billing_blocked, billing_blocked_reason, provider,
+             tenants!inner(nome_entidade, tenant_code)`)
+    .order('lifecycle_status', { ascending: true });
+  if (error) throw new Error(`billing_accounts summary failed: ${error.message}`);
+  return ((data ?? []) as any[]).map((row) => ({
+    id: row.id,
+    admin_client_id: row.admin_client_id,
+    nome_entidade: row.tenants.nome_entidade,
+    tenant_code: row.tenants.tenant_code,
+    commercial_mode: row.commercial_mode,
+    lifecycle_status: row.lifecycle_status,
+    is_billing_blocked: row.is_billing_blocked,
+    billing_blocked_reason: row.billing_blocked_reason,
+    provider: row.provider,
+  }));
+}
+
+export interface UpcomingCharge {
+  id: string;
+  amount: number;
+  due_date: string;
+  status: string;
+  type: string;
+  nome_entidade: string;
+  admin_client_id: string;
+  lifecycle_status: string;
+}
+
+export async function getOpenChargesSummary(): Promise<UpcomingCharge[]> {
+  const { data, error } = await supabase
+    .from('billing_charges')
+    .select(`id, amount, due_date, status, type,
+             billing_accounts!inner(admin_client_id, lifecycle_status,
+               tenants!inner(nome_entidade))`)
+    .in('status', ['pending', 'overdue'])
+    .order('due_date', { ascending: true })
+    .limit(30);
+  if (error) throw new Error(`open charges summary failed: ${error.message}`);
+  return ((data ?? []) as any[]).map((row) => ({
+    id: row.id,
+    amount: row.amount,
+    due_date: row.due_date,
+    status: row.status,
+    type: row.type,
+    nome_entidade: row.billing_accounts.tenants.nome_entidade,
+    admin_client_id: row.billing_accounts.admin_client_id,
+    lifecycle_status: row.billing_accounts.lifecycle_status,
+  }));
+}
+
+export interface BillingEvent {
+  id: string;
+  provider: string;
+  event_type: string;
+  status: 'pending' | 'processed' | 'failed';
+  error: string | null;
+  created_at: string;
+  processed_at: string | null;
+}
+
+export async function getBillingEvents(limit = 50): Promise<BillingEvent[]> {
+  const { data, error } = await supabase
+    .from('billing_events')
+    .select('id, provider, event_type, status, error, created_at, processed_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`billing_events fetch failed: ${error.message}`);
+  return (data ?? []) as BillingEvent[];
+}
+
+export async function invokeSyncAll(): Promise<{ synced: number; total: number; results: { accountId: string; ok: boolean; error?: string }[] }> {
+  const { data, error } = await supabase.functions.invoke('billing-sync', {
+    body: { action: 'sync_all' },
+  });
+  if (error) throw new Error(`billing-sync failed: ${error.message}`);
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 export async function getAllBillingCharges(billingAccountId: string): Promise<BillingCharge[]> {
   const { data, error } = await supabase
     .from('billing_charges')

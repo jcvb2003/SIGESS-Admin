@@ -33,6 +33,7 @@ import { useProjects } from "@/features/clients/hooks/useProjects";
 import { useObservability } from "../hooks/useObservability";
 import { SchemaDriftCard } from "../components/SchemaDriftCard";
 import { BackupDashboard } from "../components/BackupDashboard";
+import { BillingEventsTable } from "../components/BillingEventsTable";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -117,6 +118,7 @@ export default function ObservabilityPage() {
           <TabsList className="bg-secondary/60">
             <TabsTrigger value="schema">Schema Sync</TabsTrigger>
             <TabsTrigger value="backups">Backups</TabsTrigger>
+            <TabsTrigger value="billing-events">Eventos Billing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="schema" className="space-y-4">
@@ -229,6 +231,13 @@ export default function ObservabilityPage() {
 
           <TabsContent value="backups" className="space-y-4">
             <BackupDashboard />
+          </TabsContent>
+
+          <TabsContent value="billing-events" className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Inbox de webhooks do provider de billing. Atualizado a cada 30 segundos.
+            </p>
+            <BillingEventsTable />
           </TabsContent>
 
         </Tabs>

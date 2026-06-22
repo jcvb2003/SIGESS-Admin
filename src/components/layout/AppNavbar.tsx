@@ -1,4 +1,4 @@
-import { Home, Users, Globe, KeyRound, Settings, Database, LogOut } from "lucide-react";
+import { Home, Users, Globe, KeyRound, Settings, Database, LogOut, CreditCard } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth";
@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 const navigation = [
   { name: "Início",          href: "/",              icon: Home },
   { name: "Projetos",        href: "/clients",       icon: Users },
+  { name: "Billing",         href: "/billing",       icon: CreditCard },
   { name: "Observabilidade", href: "/observability", icon: Globe },
   { name: "Licenças",        href: "/licenses",      icon: KeyRound },
   { name: "Configurações",   href: "/settings",      icon: Settings },

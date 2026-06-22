@@ -234,9 +234,18 @@ export default function ObservabilityPage() {
           </TabsContent>
 
           <TabsContent value="billing-events" className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Inbox de webhooks do provider de billing. Atualizado a cada 30 segundos.
-            </p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                Inbox de webhooks do provider de billing (Asaas). Atualizado a cada 30 segundos.
+                Eventos com status <strong>failed</strong> indicam falha no processamento e requerem investigação manual.
+              </p>
+              <a
+                href="/billing"
+                className="shrink-0 text-xs text-primary underline-offset-4 hover:underline"
+              >
+                Ver módulo Billing →
+              </a>
+            </div>
             <BillingEventsTable />
           </TabsContent>
 

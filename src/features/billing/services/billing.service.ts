@@ -112,6 +112,17 @@ export interface BillingAccountSummary {
   provider: string;
 }
 
+interface BillingAccountJoinRow {
+  id: string;
+  admin_client_id: string;
+  commercial_mode: string;
+  lifecycle_status: string;
+  is_billing_blocked: boolean;
+  billing_blocked_reason: string | null;
+  provider: string;
+  tenants: { nome_entidade: string; tenant_code: string };
+}
+
 export async function getAllBillingAccountsSummary(): Promise<BillingAccountSummary[]> {
   const { data, error } = await supabase
     .from('billing_accounts')
@@ -120,13 +131,13 @@ export async function getAllBillingAccountsSummary(): Promise<BillingAccountSumm
              tenants!inner(nome_entidade, tenant_code)`)
     .order('lifecycle_status', { ascending: true });
   if (error) throw new Error(`billing_accounts summary failed: ${error.message}`);
-  return ((data ?? []) as any[]).map((row) => ({
+  return (data as unknown as BillingAccountJoinRow[]).map((row) => ({
     id: row.id,
     admin_client_id: row.admin_client_id,
     nome_entidade: row.tenants.nome_entidade,
     tenant_code: row.tenants.tenant_code,
-    commercial_mode: row.commercial_mode,
-    lifecycle_status: row.lifecycle_status,
+    commercial_mode: row.commercial_mode as BillingAccountSummary['commercial_mode'],
+    lifecycle_status: row.lifecycle_status as BillingAccountLifecycleStatus,
     is_billing_blocked: row.is_billing_blocked,
     billing_blocked_reason: row.billing_blocked_reason,
     provider: row.provider,
@@ -144,6 +155,19 @@ export interface UpcomingCharge {
   lifecycle_status: string;
 }
 
+interface OpenChargeJoinRow {
+  id: string;
+  amount: number;
+  due_date: string;
+  status: string;
+  type: string;
+  billing_accounts: {
+    admin_client_id: string;
+    lifecycle_status: string;
+    tenants: { nome_entidade: string };
+  };
+}
+
 export async function getOpenChargesSummary(): Promise<UpcomingCharge[]> {
   const { data, error } = await supabase
     .from('billing_charges')
@@ -154,7 +178,7 @@ export async function getOpenChargesSummary(): Promise<UpcomingCharge[]> {
     .order('due_date', { ascending: true })
     .limit(30);
   if (error) throw new Error(`open charges summary failed: ${error.message}`);
-  return ((data ?? []) as any[]).map((row) => ({
+  return (data as unknown as OpenChargeJoinRow[]).map((row) => ({
     id: row.id,
     amount: row.amount,
     due_date: row.due_date,

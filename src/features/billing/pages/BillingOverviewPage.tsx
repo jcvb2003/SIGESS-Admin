@@ -1,47 +1,37 @@
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import {
-  getAllBillingAccountsSummary,
-  getOpenChargesSummary,
-  getTenantsProjectMap,
-  getBillingMRR,
-  invokeSyncAll,
-} from '../services/billing.service';
+import { invokeSyncAll } from '../services/billing.service';
+import { useBillingDashboard } from '../hooks/useBillingDashboard';
 import { BillingKPICards } from '../components/BillingKPICards';
 import { ClientsBillingTable } from '../components/ClientsBillingTable';
 import { UpcomingChargesCard } from '../components/UpcomingChargesCard';
 
 export default function BillingOverviewPage() {
   const queryClient = useQueryClient();
-
-  const { data: accounts = [], isLoading: loadingAccounts } =
-    useQuery({ queryKey: ['billing', 'overview-all'], queryFn: getAllBillingAccountsSummary });
-
-  const { data: openCharges = [], isLoading: loadingCharges } =
-    useQuery({ queryKey: ['billing', 'open-charges'], queryFn: getOpenChargesSummary });
-
-  const { data: projectIdByClientId = {} } =
-    useQuery({ queryKey: ['tenants', 'project-map'], queryFn: getTenantsProjectMap });
-
-  const { data: mrr = 0 } =
-    useQuery({ queryKey: ['billing', 'mrr'], queryFn: getBillingMRR });
+  const { accounts, openCharges, projectIdByClientId, mrr, isLoading } = useBillingDashboard();
 
   const syncAll = useMutation({
     mutationFn: invokeSyncAll,
     onSuccess: (result) => {
-      const msg = result.skipped
-        ? 'Sync ignorado: provider não é Asaas'
-        : `Sync concluído: ${result.synced}/${result.total} contas sincronizadas`;
-      toast.success(msg);
+      if (result.skipped) {
+        toast.info('Sync ignorado: provider configurado não é Asaas');
+        return;
+      }
+      const failed = (result.results ?? []).filter((r) => !r.ok).length;
+      if (failed > 0) {
+        toast.warning(
+          `Sync concluído com erros: ${result.synced}/${result.total} contas OK, ${failed} falharam`,
+        );
+      } else {
+        toast.success(`Sync concluído: ${result.synced}/${result.total} contas sincronizadas`);
+      }
       queryClient.invalidateQueries({ queryKey: ['billing'] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro no sync'),
   });
-
-  const isLoading = loadingAccounts || loadingCharges;
 
   return (
     <MainLayout>

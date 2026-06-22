@@ -80,9 +80,16 @@ export async function provisionBillingAccount(
 
       // provider_customer_id=null com lifecycle='provisioning' indica que outro request
       // já está criando o cliente no provider — aguardar, não duplicar.
-      // Se lifecycle for outro (ex: 'cancelled' após detecção de cliente excluído),
-      // prosseguir com ensureCustomer normalmente.
-      if (existing.provider_customer_id === null && existing.lifecycle_status === 'provisioning') {
+      // Exceção: se o estado 'provisioning' tem mais de 10 minutos, é órfão (crash entre
+      // INSERT e persistência do provider_customer_id). Nesse caso prosseguir com ensureCustomer
+      // para recuperar — 'provisioning' está em REPROVISION_ALLOWED e será sobrescrito.
+      const PROVISIONING_TIMEOUT_MS = 10 * 60 * 1000;
+      const isStaleProvisioning =
+        existing.lifecycle_status === 'provisioning' &&
+        existing.provider_customer_id === null &&
+        Date.now() - new Date(existing.updated_at).getTime() > PROVISIONING_TIMEOUT_MS;
+
+      if (existing.provider_customer_id === null && existing.lifecycle_status === 'provisioning' && !isStaleProvisioning) {
         return { account: existing, created: false, pending: true };
       }
 

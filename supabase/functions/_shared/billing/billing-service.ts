@@ -28,6 +28,7 @@ export function assertLifecycle(
 export interface ProvisionBillingAccountInput {
   adminClientId: string;
   startAsTrial?: boolean;
+  commercialMode?: 'manual' | 'recorrente_mensal' | 'anual';
   customerInfo: {
     name: string;
     email: string;
@@ -62,6 +63,7 @@ export async function provisionBillingAccount(
       provider: provider.name,
       provider_customer_id: null,
       lifecycle_status: 'provisioning',
+      commercial_mode: input.commercialMode ?? 'manual',
       trial_starts_at: null,
       trial_ends_at: null,
       current_period_start: null,

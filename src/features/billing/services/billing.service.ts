@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { BillingAccount, BillingCharge, BillingPlan, BillingSubscription } from '../types';
+import type { BillingAccount, BillingAccountLifecycleStatus, BillingCharge, BillingPlan, BillingSubscription } from '../types';
 
 // ─── Reads (direct Admin DB) ──────────────────────────────────────────────────
 
@@ -186,7 +186,30 @@ export async function getBillingEvents(limit = 50): Promise<BillingEvent[]> {
   return (data ?? []) as BillingEvent[];
 }
 
-export async function invokeSyncAll(): Promise<{ synced: number; total: number; results: { accountId: string; ok: boolean; error?: string }[] }> {
+export async function getTenantsProjectMap(): Promise<Record<string, string>> {
+  const { data } = await supabase.from('tenants').select('id, project_id');
+  const map: Record<string, string> = {};
+  (data ?? []).forEach((t: any) => { if (t.project_id) map[t.id] = t.project_id; });
+  return map;
+}
+
+export async function getBillingMRR(): Promise<number> {
+  const { data } = await supabase
+    .from('billing_subscriptions')
+    .select('amount, interval')
+    .in('billing_status', ['active', 'pending_payment'])
+    .eq('interval', 'monthly');
+  return ((data ?? []) as { amount: number }[]).reduce((sum, s) => sum + Number(s.amount), 0);
+}
+
+export interface SyncAllResult {
+  synced: number;
+  total: number;
+  results: { accountId: string; ok: boolean; error?: string }[];
+  skipped?: boolean;
+}
+
+export async function invokeSyncAll(): Promise<SyncAllResult> {
   const { data, error } = await supabase.functions.invoke('billing-sync', {
     body: { action: 'sync_all' },
   });

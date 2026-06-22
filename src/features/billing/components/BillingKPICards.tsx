@@ -28,22 +28,21 @@ interface BillingKPICardsProps {
 }
 
 export function BillingKPICards({ accounts, mrr }: Readonly<BillingKPICardsProps>) {
-  const active    = accounts.filter((a) => a.lifecycle_status === 'active').length;
-  const trial     = accounts.filter((a) => a.lifecycle_status === 'trial_active').length;
-  const pastDue   = accounts.filter((a) => a.lifecycle_status === 'past_due').length;
-  const draft     = accounts.filter((a) => a.lifecycle_status === 'draft').length;
-  const blocked   = accounts.filter((a) => a.is_billing_blocked).length;
-  const manual    = accounts.filter((a) => a.commercial_mode === 'manual').length;
+  const active  = accounts.filter((a) => a.lifecycle_status === 'active').length;
+  const trial   = accounts.filter((a) => a.lifecycle_status === 'trial_active').length;
+  const pastDue = accounts.filter((a) => a.lifecycle_status === 'past_due').length;
+  const blocked = accounts.filter((a) => a.is_billing_blocked).length;
+  const manual  = accounts.filter((a) => a.commercial_mode === 'manual').length;
+  const total   = accounts.length;
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <KPICard label="MRR estimado" value={formatBRL(mrr)} sub="assinaturas ativas mensais" />
+      <KPICard label="MRR estimado" value={formatBRL(mrr)} sub="assinaturas mensais ativas" />
+      <KPICard label="Total" value={total} sub="contas gerenciadas" />
       <KPICard label="Ativos" value={active} />
       <KPICard label="Trial" value={trial} />
       <KPICard label="Inadimplentes" value={pastDue} highlight={pastDue > 0} />
-      <KPICard label="Manual" value={manual} sub="sem assinatura Asaas" />
       <KPICard label="Bloqueados" value={blocked} highlight={blocked > 0} />
-      {draft > 0 && <KPICard label="Rascunho" value={draft} sub="sem provisão" />}
     </div>
   );
 }

@@ -3,31 +3,16 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
 import {
   getAllBillingAccountsSummary,
   getOpenChargesSummary,
+  getTenantsProjectMap,
+  getBillingMRR,
   invokeSyncAll,
 } from '../services/billing.service';
 import { BillingKPICards } from '../components/BillingKPICards';
 import { ClientsBillingTable } from '../components/ClientsBillingTable';
 import { UpcomingChargesCard } from '../components/UpcomingChargesCard';
-
-async function getTenantsProjectMap(): Promise<Record<string, string>> {
-  const { data } = await supabase.from('tenants').select('id, project_id');
-  const map: Record<string, string> = {};
-  (data ?? []).forEach((t: any) => { if (t.project_id) map[t.id] = t.project_id; });
-  return map;
-}
-
-async function getMRR(): Promise<number> {
-  const { data } = await supabase
-    .from('billing_subscriptions')
-    .select('amount, interval')
-    .in('billing_status', ['active', 'pending_payment'])
-    .eq('interval', 'monthly');
-  return ((data ?? []) as { amount: number }[]).reduce((sum, s) => sum + Number(s.amount), 0);
-}
 
 export default function BillingOverviewPage() {
   const queryClient = useQueryClient();
@@ -42,12 +27,15 @@ export default function BillingOverviewPage() {
     useQuery({ queryKey: ['tenants', 'project-map'], queryFn: getTenantsProjectMap });
 
   const { data: mrr = 0 } =
-    useQuery({ queryKey: ['billing', 'mrr'], queryFn: getMRR });
+    useQuery({ queryKey: ['billing', 'mrr'], queryFn: getBillingMRR });
 
   const syncAll = useMutation({
     mutationFn: invokeSyncAll,
     onSuccess: (result) => {
-      toast.success(`Sync concluído: ${result.synced}/${result.total} contas sincronizadas`);
+      const msg = result.skipped
+        ? 'Sync ignorado: provider não é Asaas'
+        : `Sync concluído: ${result.synced}/${result.total} contas sincronizadas`;
+      toast.success(msg);
       queryClient.invalidateQueries({ queryKey: ['billing'] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro no sync'),

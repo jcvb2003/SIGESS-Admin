@@ -32,7 +32,7 @@ export function useBillingDashboard() {
     openCharges: openCharges.data ?? [],
     projectIdByClientId: projectMap.data ?? {},
     mrr: mrr.data ?? 0,
-    isLoading: accounts.isLoading || openCharges.isLoading,
-    isError: accounts.isError || openCharges.isError,
+    isLoading: accounts.isLoading || openCharges.isLoading || projectMap.isLoading || mrr.isLoading,
+    isError: accounts.isError || openCharges.isError || projectMap.isError || mrr.isError,
   };
 }

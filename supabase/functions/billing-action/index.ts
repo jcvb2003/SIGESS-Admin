@@ -62,6 +62,7 @@ class StubBillingProvider implements BillingProvider {
     };
   }
   async cancelCharge(): Promise<void> {}
+  async updateChargeDueDate(): Promise<void> {}
   async fetchSubscription(input: Parameters<BillingProvider['fetchSubscription']>[0]): Promise<ProviderSubscription> {
     return { providerSubscriptionId: input.providerSubscriptionId, billingStatus: 'active' };
   }
@@ -398,6 +399,43 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
   if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
 
   return { cancelled: true };
+}
+
+async function handleProrrogarCharge(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
+  assert(params.provider_charge_id, 'provider_charge_id');
+  assert(params.new_due_date, 'new_due_date');
+
+  const providerChargeId = params.provider_charge_id as string;
+  const newDueDate = params.new_due_date as string;
+
+  const { data: charge } = await db
+    .from('billing_charges')
+    .select('billing_account_id, status, due_date')
+    .eq('provider_charge_id', providerChargeId)
+    .maybeSingle();
+
+  if (!charge) throw createHttpError(`Cobrança '${providerChargeId}' não encontrada`, 404);
+  if (!['pending', 'overdue'].includes(charge.status)) {
+    throw createHttpError(`Não é possível prorrogar cobrança com status '${charge.status}'. Apenas 'pending' ou 'overdue' são permitidas.`, 409);
+  }
+
+  const { data: account } = await db
+    .from('billing_accounts')
+    .select('admin_client_id')
+    .eq('id', charge.billing_account_id)
+    .maybeSingle();
+
+  await provider.updateChargeDueDate({ providerChargeId, newDueDate });
+
+  const { error } = await db
+    .from('billing_charges')
+    .update({ due_date: newDueDate, updated_at: new Date().toISOString() })
+    .eq('provider_charge_id', providerChargeId);
+  if (error) throw createHttpError(`billing_charges update failed: ${error.message}`, 500);
+
+  if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
+
+  return { prorrogued: true, new_due_date: newDueDate };
 }
 
 async function handleGeneratePortalToken(db: SupabaseClient, params: Record<string, unknown>) {
@@ -831,6 +869,9 @@ Deno.serve(async (req: Request) => {
         break;
       case 'cancel_charge':
         result = await handleCancelCharge(db, provider, params);
+        break;
+      case 'prorrogar_charge':
+        result = await handleProrrogarCharge(db, provider, params);
         break;
       case 'generate_portal_token':
         result = await handleGeneratePortalToken(db, params);

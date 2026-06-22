@@ -27,7 +27,7 @@ export default function BillingDetailPage() {
   const { data, isLoading, error } = useBillingOverview(adminClientId);
   const { data: plans = [] } = useBillingPlans();
   const { data: allCharges = [], isLoading: loadingCharges } = useAllBillingCharges(data?.account?.id);
-  const { syncAccount, cancelCharge, cancelSubscription, clearPlannedPlan, updateCommercialMode } = useBillingActions(adminClientId);
+  const { syncAccount, cancelCharge, prorrogarCharge, cancelSubscription, clearPlannedPlan, updateCommercialMode } = useBillingActions(adminClientId);
 
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
@@ -141,6 +141,12 @@ export default function BillingDetailPage() {
                   })
                 }
                 isCancellingId={cancelCharge.isPending ? (cancelCharge.variables ?? null) : null}
+                onProrrogarCharge={(providerChargeId, newDueDate) =>
+                  prorrogarCharge.mutate({ provider_charge_id: providerChargeId, new_due_date: newDueDate }, {
+                    onSuccess: () => toast.success('Cobrança prorrogada'),
+                  })
+                }
+                isProrrogandoId={prorrogarCharge.isPending ? (prorrogarCharge.variables?.provider_charge_id ?? null) : null}
               />
             )}
           </Card>

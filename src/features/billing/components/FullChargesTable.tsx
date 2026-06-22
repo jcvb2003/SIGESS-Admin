@@ -1,4 +1,5 @@
-import { ExternalLink, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarClock, ExternalLink, XCircle } from 'lucide-react';
 import { formatDate } from '@/shared/utils/date';
 import {
   Table,
@@ -9,6 +10,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { BillingCharge, BillingChargeStatus } from '../types';
 import { CHARGE_STATUS_LABEL, CHARGE_TYPE_LABEL } from '../types';
 
@@ -25,85 +36,162 @@ function formatBRL(reais: number): string {
   return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function addOneDay(isoDate: string): string {
+  const d = new Date(isoDate + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+
 interface FullChargesTableProps {
   charges: BillingCharge[];
   onCancelCharge: (providerChargeId: string) => void;
   isCancellingId: string | null;
+  onProrrogarCharge: (providerChargeId: string, newDueDate: string) => void;
+  isProrrogandoId: string | null;
 }
 
-export function FullChargesTable({ charges, onCancelCharge, isCancellingId }: Readonly<FullChargesTableProps>) {
+export function FullChargesTable({
+  charges,
+  onCancelCharge,
+  isCancellingId,
+  onProrrogarCharge,
+  isProrrogandoId,
+}: Readonly<FullChargesTableProps>) {
+  const [prorrogarTarget, setProrrogarTarget] = useState<BillingCharge | null>(null);
+  const [newDueDate, setNewDueDate] = useState('');
+
   if (charges.length === 0) {
     return <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma cobrança registrada.</p>;
   }
 
-  const canCancel = (c: BillingCharge) =>
+  const canAct = (c: BillingCharge) =>
     (c.status === 'pending' || c.status === 'overdue') && Boolean(c.provider_charge_id);
 
+  const handleProrrogarConfirm = () => {
+    if (!prorrogarTarget?.provider_charge_id || !newDueDate) return;
+    onProrrogarCharge(prorrogarTarget.provider_charge_id, newDueDate);
+    setProrrogarTarget(null);
+    setNewDueDate('');
+  };
+
   return (
-    <div className="overflow-x-auto rounded-md border border-border/40">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-secondary/30">
-            <TableHead className="text-xs">Vencimento</TableHead>
-            <TableHead className="text-xs">Descrição</TableHead>
-            <TableHead className="text-right text-xs">Valor</TableHead>
-            <TableHead className="text-xs">Tipo</TableHead>
-            <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-xs">Pago em</TableHead>
-            <TableHead className="text-xs">Link</TableHead>
-            <TableHead className="text-xs" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {charges.map((c) => (
-            <TableRow
-              key={c.id}
-              className={c.status === 'cancelled' || c.status === 'failed' ? 'opacity-40' : ''}
-            >
-              <TableCell className="text-sm">{formatDate(c.due_date)}</TableCell>
-              <TableCell className="max-w-[200px] truncate text-sm">{c.description ?? '—'}</TableCell>
-              <TableCell className="text-right text-sm">{formatBRL(c.amount)}</TableCell>
-              <TableCell className="text-sm">{CHARGE_TYPE_LABEL[c.type]}</TableCell>
-              <TableCell>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass(c.status)}`}>
-                  {CHARGE_STATUS_LABEL[c.status]}
-                </span>
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {c.paid_at ? formatDate(c.paid_at) : '—'}
-              </TableCell>
-              <TableCell>
-                {c.payment_url ? (
-                  <a
-                    href={c.payment_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    Abrir <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              <TableCell>
-                {canCancel(c) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    disabled={isCancellingId === c.provider_charge_id}
-                    onClick={() => onCancelCharge(c.provider_charge_id!)}
-                  >
-                    <XCircle className="mr-1 h-3.5 w-3.5" />
-                    Cancelar
-                  </Button>
-                )}
-              </TableCell>
+    <>
+      <div className="overflow-x-auto rounded-md border border-border/40">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-secondary/30">
+              <TableHead className="text-xs">Vencimento</TableHead>
+              <TableHead className="text-xs">Descrição</TableHead>
+              <TableHead className="text-right text-xs">Valor</TableHead>
+              <TableHead className="text-xs">Tipo</TableHead>
+              <TableHead className="text-xs">Status</TableHead>
+              <TableHead className="text-xs">Pago em</TableHead>
+              <TableHead className="text-xs">Link</TableHead>
+              <TableHead className="text-xs" />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {charges.map((c) => (
+              <TableRow
+                key={c.id}
+                className={c.status === 'cancelled' || c.status === 'failed' ? 'opacity-40' : ''}
+              >
+                <TableCell className="text-sm">{formatDate(c.due_date)}</TableCell>
+                <TableCell className="max-w-[200px] truncate text-sm">{c.description ?? '—'}</TableCell>
+                <TableCell className="text-right text-sm">{formatBRL(c.amount)}</TableCell>
+                <TableCell className="text-sm">{CHARGE_TYPE_LABEL[c.type]}</TableCell>
+                <TableCell>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass(c.status)}`}>
+                    {CHARGE_STATUS_LABEL[c.status]}
+                  </span>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {c.paid_at ? formatDate(c.paid_at) : '—'}
+                </TableCell>
+                <TableCell>
+                  {c.payment_url ? (
+                    <a
+                      href={c.payment_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Abrir <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {canAct(c) && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        disabled={isProrrogandoId === c.provider_charge_id}
+                        onClick={() => { setProrrogarTarget(c); setNewDueDate(''); }}
+                      >
+                        <CalendarClock className="mr-1 h-3.5 w-3.5" />
+                        Prorrogar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={isCancellingId === c.provider_charge_id}
+                        onClick={() => onCancelCharge(c.provider_charge_id!)}
+                      >
+                        <XCircle className="mr-1 h-3.5 w-3.5" />
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={!!prorrogarTarget}
+        onOpenChange={(v) => { if (!v) { setProrrogarTarget(null); setNewDueDate(''); } }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Prorrogar cobrança</DialogTitle>
+            <DialogDescription>
+              Vencimento atual: <strong>{prorrogarTarget ? formatDate(prorrogarTarget.due_date) : '—'}</strong>.
+              A nova data deve ser posterior.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label htmlFor="new-due-date">Nova data de vencimento</Label>
+            <Input
+              id="new-due-date"
+              type="date"
+              min={prorrogarTarget ? addOneDay(prorrogarTarget.due_date) : undefined}
+              value={newDueDate}
+              onChange={(e) => setNewDueDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setProrrogarTarget(null); setNewDueDate(''); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={!newDueDate || isProrrogandoId === prorrogarTarget?.provider_charge_id}
+              onClick={handleProrrogarConfirm}
+            >
+              Prorrogar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -16,6 +16,7 @@ import type {
   FetchSubscriptionInput,
   ListSubscriptionChargesInput,
   ParseWebhookInput,
+  UpdateChargeDueDateInput,
   UpdateSubscriptionInput,
 } from './provider.interface.ts';
 import { AsaasApiError, AsaasClient } from './asaas-client.ts';
@@ -183,6 +184,12 @@ export class AsaasAdapter implements BillingProvider {
       if (e instanceof AsaasApiError && e.status === 404) return;
       throw e;
     }
+  }
+
+  async updateChargeDueDate(input: UpdateChargeDueDateInput): Promise<void> {
+    await this.client.post<AsaasPayment>(`/payments/${input.providerChargeId}`, {
+      dueDate: input.newDueDate,
+    });
   }
 
   async fetchSubscription(input: FetchSubscriptionInput): Promise<ProviderSubscription> {

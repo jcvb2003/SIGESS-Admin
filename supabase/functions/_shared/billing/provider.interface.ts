@@ -61,6 +61,11 @@ export interface CustomerExistsInput {
   providerCustomerId: string;
 }
 
+export interface UpdateChargeDueDateInput {
+  providerChargeId: string;
+  newDueDate: string; // ISO date YYYY-MM-DD
+}
+
 export interface ParseWebhookInput {
   rawBody: string;
   headers: Record<string, string>;
@@ -82,6 +87,7 @@ export interface BillingProvider {
 
   createCharge(input: CreateChargeInput): Promise<ProviderCharge>;
   cancelCharge(input: CancelChargeInput): Promise<void>;
+  updateChargeDueDate(input: UpdateChargeDueDateInput): Promise<void>;
 
   fetchSubscription(input: FetchSubscriptionInput): Promise<ProviderSubscription>;
   fetchCharge(input: FetchChargeInput): Promise<ProviderCharge>;

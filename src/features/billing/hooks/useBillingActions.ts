@@ -77,6 +77,13 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao cancelar cobrança'),
   });
 
+  const prorrogarCharge = useMutation({
+    mutationFn: (params: { provider_charge_id: string; new_due_date: string }) =>
+      invokeBillingAction('prorrogar_charge', params),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao prorrogar cobrança'),
+  });
+
   const syncAccount = useMutation({
     mutationFn: () =>
       invokeBillingAction('sync_account', { admin_client_id: adminClientId }),
@@ -119,5 +126,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao desbloquear acesso'),
   });
 
-  return { provisionAccount, cancelSubscription, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
+  return { provisionAccount, cancelSubscription, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, prorrogarCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
 }

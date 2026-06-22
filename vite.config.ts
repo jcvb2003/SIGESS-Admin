@@ -46,10 +46,10 @@ function localBackupPlugin(): Plugin {
         // tsx está em node_modules/.bin — adicionamos ao PATH do processo filho
         const bin = resolve(process.cwd(), 'node_modules', '.bin');
         const sep = process.platform === 'win32' ? ';' : ':';
-        const child = spawn('tsx', scriptArgs, {
+        const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
+        const child = spawn(tsxBin, scriptArgs, {
           cwd: process.cwd(),
           stdio: 'inherit',
-          shell: true,
           env: { ...process.env, PATH: `${bin}${sep}${process.env.PATH ?? ''}` },
         });
         // Impedir que erro no spawn derrube o Vite

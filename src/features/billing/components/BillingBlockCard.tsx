@@ -19,6 +19,7 @@ import type { BillingAccount } from '../types';
 interface BillingBlockCardProps {
   account: BillingAccount;
   adminClientId: string;
+  hasRecurringSubscription?: boolean;
 }
 
 type PendingAction =
@@ -26,7 +27,7 @@ type PendingAction =
   | { type: 'unblock' }
   | null;
 
-export function BillingBlockCard({ account, adminClientId }: Readonly<BillingBlockCardProps>) {
+export function BillingBlockCard({ account, adminClientId, hasRecurringSubscription = false }: Readonly<BillingBlockCardProps>) {
   const { setBillingBlock, clearBillingBlock } = useBillingActions(adminClientId);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
 
@@ -100,15 +101,17 @@ export function BillingBlockCard({ account, adminClientId }: Readonly<BillingBlo
               </Button>
             ) : (
               <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-amber-700 border-amber-400 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-900/30"
-                  disabled={isMutating}
-                  onClick={() => setPendingAction({ type: 'block', reason: 'billing_delinquent' })}
-                >
-                  Marcar inadimplente
-                </Button>
+                {!hasRecurringSubscription && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-amber-700 border-amber-400 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-900/30"
+                    disabled={isMutating}
+                    onClick={() => setPendingAction({ type: 'block', reason: 'billing_delinquent' })}
+                  >
+                    Marcar inadimplente
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"

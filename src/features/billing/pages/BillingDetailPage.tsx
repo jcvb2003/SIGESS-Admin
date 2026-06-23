@@ -124,7 +124,11 @@ export default function BillingDetailPage() {
             />
           )}
 
-          <BillingBlockCard account={account} adminClientId={adminClientId} />
+          <BillingBlockCard
+            account={account}
+            adminClientId={adminClientId}
+            hasRecurringSubscription={!!subscription && subscription.billing_status !== 'cancelled'}
+          />
 
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">

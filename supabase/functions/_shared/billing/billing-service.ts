@@ -433,11 +433,16 @@ async function _applyChargeStatus(
 
   await repo.updateCharge(db, charge.id, patch);
 
-  // Promote account lifecycle status
+  // Promote account lifecycle status + invariante de past_due_since
   if (status === 'paid') {
-    await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'active' });
+    await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'active', past_due_since: null });
   } else if (status === 'overdue') {
     await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'past_due' });
+    // Setar past_due_since apenas na primeira transicao — .is(null) e no-op se ja preenchido
+    await db.from('billing_accounts')
+      .update({ past_due_since: new Date().toISOString() })
+      .eq('id', charge.billing_account_id)
+      .is('past_due_since', null);
   }
 }
 
@@ -455,11 +460,19 @@ async function _applySubscriptionStatus(
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'cancelled' });
   } else if (status === 'overdue') {
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'past_due' });
+    await db.from('billing_accounts')
+      .update({ past_due_since: new Date().toISOString() })
+      .eq('id', sub.billing_account_id)
+      .is('past_due_since', null);
   } else if (status === 'suspended') {
     // Pausado por dunning — reversível, account fica em past_due (não cancelled)
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'past_due' });
+    await db.from('billing_accounts')
+      .update({ past_due_since: new Date().toISOString() })
+      .eq('id', sub.billing_account_id)
+      .is('past_due_since', null);
   } else if (status === 'active') {
-    await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'active' });
+    await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'active', past_due_since: null });
   }
 }
 
@@ -568,9 +581,13 @@ export async function syncChargeFromProvider(
   await repo.updateCharge(db, charge.id, patch);
 
   if (snapshot.status === 'paid') {
-    await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'active' });
+    await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'active', past_due_since: null });
   } else if (snapshot.status === 'overdue') {
     await repo.updateAccount(db, charge.billing_account_id, { lifecycle_status: 'past_due' });
+    await db.from('billing_accounts')
+      .update({ past_due_since: new Date().toISOString() })
+      .eq('id', charge.billing_account_id)
+      .is('past_due_since', null);
   }
 }
 
@@ -596,8 +613,12 @@ export async function syncSubscriptionFromProvider(
     await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'cancelled' });
   } else if (snapshot.billingStatus === 'overdue') {
     await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'past_due' });
+    await db.from('billing_accounts')
+      .update({ past_due_since: new Date().toISOString() })
+      .eq('id', billingAccountId)
+      .is('past_due_since', null);
   } else if (snapshot.billingStatus === 'active') {
-    await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'active' });
+    await repo.updateAccount(db, billingAccountId, { lifecycle_status: 'active', past_due_since: null });
   }
 }
 

@@ -27,6 +27,7 @@ export interface BillingAccountRow {
   next_plan_effective_date: string | null;
   is_billing_blocked: boolean;
   billing_blocked_reason: 'billing_delinquent' | 'manual_suspend' | null;
+  past_due_since: string | null;  // ISO timestamptz — set na primeira transicao para past_due, cleared ao voltar
   created_at: string;
   updated_at: string;
 }

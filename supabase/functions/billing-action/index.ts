@@ -176,7 +176,7 @@ async function syncSummaryOrThrow(db: SupabaseClient, adminClientId: string): Pr
 async function handleGetProviderSettings(db: SupabaseClient) {
   const { data, error } = await db
     .from('billing_provider_settings')
-    .select('provider, sandbox, api_key, webhook_token, updated_at, updated_by')
+    .select('provider, sandbox, api_key, webhook_token, dunning_days_threshold, updated_at, updated_by')
     .eq('id', 'default')
     .maybeSingle();
 
@@ -199,6 +199,7 @@ async function handleGetProviderSettings(db: SupabaseClient) {
       webhook_token_configured: Boolean(envWebhookToken),
       updated_at: null,
       updated_by: null,
+      dunning_days_threshold: 15,
       source: 'env',
     };
   }
@@ -208,6 +209,7 @@ async function handleGetProviderSettings(db: SupabaseClient) {
     sandbox: data.sandbox,
     api_key_configured: data.api_key !== null && data.api_key !== '',
     webhook_token_configured: data.webhook_token !== null && data.webhook_token !== '',
+    dunning_days_threshold: data.dunning_days_threshold ?? 15,
     updated_at: data.updated_at,
     updated_by: data.updated_by,
     source: 'db',
@@ -236,6 +238,9 @@ async function handleUpsertProviderSettings(
   }
   if (typeof params.webhook_token === 'string' && params.webhook_token.trim()) {
     payload.webhook_token = params.webhook_token.trim();
+  }
+  if (typeof params.dunning_days_threshold === 'number' && params.dunning_days_threshold >= 1) {
+    payload.dunning_days_threshold = Math.floor(params.dunning_days_threshold);
   }
 
   const { error } = await db.from('billing_provider_settings').upsert(payload, { onConflict: 'id' });
@@ -404,10 +409,11 @@ async function handleResumeSubscription(db: SupabaseClient, provider: BillingPro
     db, provider, sub.id, sub.provider_subscription_id, sub.billing_account_id,
   );
 
-  // Limpar bloqueio de billing — não tratado por syncSubscriptionFromProvider
+  // Limpar bloqueio de billing e past_due_since — não tratados por syncSubscriptionFromProvider
   await repo.updateAccount(db, sub.billing_account_id, {
     is_billing_blocked: false,
     billing_blocked_reason: null,
+    past_due_since: null,
   });
 
   const { data: account } = await db

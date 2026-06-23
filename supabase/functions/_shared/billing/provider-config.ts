@@ -7,6 +7,7 @@ export interface BillingProviderConfig {
   apiKey?: string;
   sandbox: boolean;
   webhookToken?: string;
+  dunning_days_threshold: number;
   source: 'db' | 'env';
 }
 
@@ -14,7 +15,7 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
   try {
     const { data, error } = await db
       .from('billing_provider_settings')
-      .select('provider, api_key, sandbox, webhook_token')
+      .select('provider, api_key, sandbox, webhook_token, dunning_days_threshold')
       .eq('id', 'default')
       .maybeSingle();
 
@@ -24,6 +25,7 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
         apiKey: data.api_key ?? undefined,
         sandbox: data.sandbox,
         webhookToken: data.webhook_token ?? undefined,
+        dunning_days_threshold: data.dunning_days_threshold ?? 15,
         source: 'db',
       };
     }
@@ -43,6 +45,7 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
     sandbox: Deno.env.get('ASAAS_SANDBOX') !== 'false',
     // @ts-expect-error: Deno global
     webhookToken: Deno.env.get('ASAAS_WEBHOOK_TOKEN'),
+    dunning_days_threshold: 15,
     source: 'env',
   };
 }

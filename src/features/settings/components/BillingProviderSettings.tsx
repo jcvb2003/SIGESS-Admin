@@ -46,6 +46,7 @@ export function BillingProviderSettings() {
   const [sandbox, setSandbox] = useState<boolean>(true);
   const [apiKey, setApiKey] = useState("");
   const [webhookToken, setWebhookToken] = useState("");
+  const [dunningThreshold, setDunningThreshold] = useState<number>(15);
   const [editing, setEditing] = useState(false);
 
   const handleEdit = () => {
@@ -53,6 +54,7 @@ export function BillingProviderSettings() {
     setSandbox(meta?.sandbox ?? true);
     setApiKey("");
     setWebhookToken("");
+    setDunningThreshold(meta?.dunning_days_threshold ?? 15);
     setEditing(true);
   };
 
@@ -70,6 +72,7 @@ export function BillingProviderSettings() {
     // Only include secrets if the user actually typed something
     if (apiKey.trim()) input.api_key = apiKey.trim();
     if (webhookToken.trim()) input.webhook_token = webhookToken.trim();
+    input.dunning_days_threshold = Math.max(1, dunningThreshold);
 
     try {
       await upsert.mutateAsync(input);
@@ -125,6 +128,12 @@ export function BillingProviderSettings() {
             <span className="text-muted-foreground">Webhook Token</span>
             <ConfiguredBadge configured={meta?.webhook_token_configured ?? false} />
           </div>
+          {meta?.provider === "asaas" && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Suspensão automática</span>
+              <span className="text-sm">{meta.dunning_days_threshold ?? 15} dias em atraso</span>
+            </div>
+          )}
           {meta?.provider === "asaas" && (
             <div className="space-y-1.5 pt-1">
               <span className="text-muted-foreground text-sm">URL do Webhook</span>
@@ -231,6 +240,24 @@ export function BillingProviderSettings() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Preencha apenas para substituir. Campo vazio não altera o valor salvo.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dunning-threshold-input">
+                  Dias em atraso para suspensão automática
+                  <span className="ml-2 text-[11px] text-muted-foreground">(padrão: 15)</span>
+                </Label>
+                <Input
+                  id="dunning-threshold-input"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={dunningThreshold}
+                  onChange={(e) => setDunningThreshold(Math.max(1, parseInt(e.target.value) || 15))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Contas em atraso há mais de N dias são suspensas automaticamente ao sincronizar.
                 </p>
               </div>
             </>

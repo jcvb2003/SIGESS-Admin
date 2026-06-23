@@ -61,10 +61,16 @@ function handleError(err: unknown): Response {
 
 // ─── sync_all ─────────────────────────────────────────────────────────────────
 
-async function handleSyncAll(db: SupabaseClient, provider: BillingProvider, t0: number) {
+async function handleSyncAll(
+  db: SupabaseClient,
+  provider: BillingProvider,
+  dunningThreshold: number,
+  t0: number,
+) {
   const accounts = await repo.findAccountsForSync(db);
 
   const results: { accountId: string; ok: boolean; error?: string }[] = [];
+  let auto_suspended = 0;
 
   for (const account of accounts) {
     try {
@@ -82,6 +88,57 @@ async function handleSyncAll(db: SupabaseClient, provider: BillingProvider, t0: 
         }
       }
 
+      // Dunning: re-ler conta e subscription após sync — evitar snapshot stale
+      const { data: freshAccount } = await db
+        .from('billing_accounts')
+        .select('id, lifecycle_status, past_due_since')
+        .eq('id', account.id)
+        .maybeSingle();
+
+      if (!freshAccount) {
+        log('warn', 'billing-sync', 'account_disappeared_after_sync', { account_id: account.id });
+      } else if (freshAccount.lifecycle_status === 'past_due' && freshAccount.past_due_since) {
+        const daysPastDue = Math.floor(
+          (Date.now() - new Date(freshAccount.past_due_since).getTime()) / 86_400_000,
+        );
+        const threshold = Math.max(1, dunningThreshold);
+
+        if (daysPastDue >= threshold) {
+          const { data: overdueSub } = await db
+            .from('billing_subscriptions')
+            .select('id, provider_subscription_id')
+            .eq('billing_account_id', freshAccount.id)
+            .eq('billing_status', 'overdue')
+            .maybeSingle();
+
+          if (overdueSub?.provider_subscription_id) {
+            try {
+              await provider.suspendSubscription({ providerSubscriptionId: overdueSub.provider_subscription_id });
+              const now = new Date().toISOString();
+              await db.from('billing_subscriptions')
+                .update({ billing_status: 'suspended', updated_at: now })
+                .eq('id', overdueSub.id);
+              await db.from('billing_accounts')
+                .update({
+                  is_billing_blocked: true,
+                  billing_blocked_reason: 'billing_delinquent',
+                  past_due_since: null,
+                  updated_at: now,
+                })
+                .eq('id', freshAccount.id);
+              log('warn', 'billing-sync', 'dunning_auto_suspended', {
+                account_id: freshAccount.id, days_past_due: daysPastDue,
+              });
+              auto_suspended++;
+            } catch (dErr) {
+              log('error', 'billing-sync', 'dunning_suspend_failed', {
+                account_id: freshAccount.id, err: String(dErr),
+              });
+            }
+          }
+        }
+      }
+
       try {
         await syncBillingSummaryToRuntime(db, account.admin_client_id);
       } catch (e) {
@@ -96,8 +153,13 @@ async function handleSyncAll(db: SupabaseClient, provider: BillingProvider, t0: 
   }
 
   const synced = results.filter((r) => r.ok).length;
-  log('info', 'billing-sync', 'done', { accounts_total: accounts.length, synced, failed: accounts.length - synced, duration_ms: Date.now() - t0 });
-  return json({ synced, total: accounts.length, results });
+  log('info', 'billing-sync', 'done', {
+    accounts_total: accounts.length, synced,
+    failed: accounts.length - synced,
+    auto_suspended,
+    duration_ms: Date.now() - t0,
+  });
+  return json({ synced, total: accounts.length, auto_suspended, results });
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -141,7 +203,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const provider = new AsaasAdapter(new AsaasClient(config.apiKey, config.sandbox));
-      return await handleSyncAll(db, provider, t0);
+      return await handleSyncAll(db, provider, config.dunning_days_threshold, t0);
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

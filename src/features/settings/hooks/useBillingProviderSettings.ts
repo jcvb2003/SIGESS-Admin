@@ -6,6 +6,7 @@ export interface ProviderSettingsMeta {
   sandbox: boolean;
   api_key_configured: boolean;
   webhook_token_configured: boolean;
+  dunning_days_threshold: number;
   updated_at: string | null;
   updated_by: string | null;
   source: "db" | "env";
@@ -16,6 +17,7 @@ export interface UpsertProviderSettingsInput {
   sandbox: boolean;
   api_key?: string;
   webhook_token?: string;
+  dunning_days_threshold?: number;
 }
 
 const QUERY_KEY = ["settings", "billing-provider"] as const;

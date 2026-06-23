@@ -69,20 +69,20 @@ export function BillingBlockCard({ account, adminClientId, hasRecurringSubscript
     ? 'Liberar acesso'
     : pendingAction?.type === 'block' && pendingAction.reason === 'billing_delinquent'
       ? 'Marcar como inadimplente'
-      : 'Suspender manualmente';
+      : 'Bloquear acesso manualmente';
 
   const dialogDescription = pendingAction?.type === 'unblock'
-    ? 'O acesso será liberado e o lifecycle_status voltará para ativo.'
+    ? 'O acesso ao sistema será liberado.'
     : pendingAction?.type === 'block' && pendingAction.reason === 'billing_delinquent'
-      ? 'O cliente será marcado como inadimplente. O acesso ao sistema será bloqueado.'
-      : 'O cliente será suspenso manualmente e o lifecycle_status mudará para suspended.';
+      ? 'O cliente será marcado como inadimplente e o acesso ao sistema será bloqueado.'
+      : 'O acesso ao sistema será bloqueado manualmente. A assinatura no Asaas não é afetada.';
 
   return (
     <>
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bloqueio de billing</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bloqueio de acesso</p>
             <div className="flex items-center gap-1.5">
               {stateConfig.icon}
               <span className={`text-sm font-medium ${stateConfig.className}`}>{stateConfig.label}</span>
@@ -119,7 +119,7 @@ export function BillingBlockCard({ account, adminClientId, hasRecurringSubscript
                   disabled={isMutating}
                   onClick={() => setPendingAction({ type: 'block', reason: 'manual_suspend' })}
                 >
-                  Suspender
+                  Bloquear acesso
                 </Button>
               </>
             )}

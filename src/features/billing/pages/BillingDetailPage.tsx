@@ -27,7 +27,7 @@ export default function BillingDetailPage() {
   const { data, isLoading, error } = useBillingOverview(adminClientId);
   const { data: plans = [] } = useBillingPlans();
   const { data: allCharges = [], isLoading: loadingCharges } = useAllBillingCharges(data?.account?.id);
-  const { syncAccount, cancelCharge, prorrogarCharge, cancelSubscription, clearPlannedPlan, updateCommercialMode } = useBillingActions(adminClientId);
+  const { syncAccount, cancelCharge, prorrogarCharge, cancelSubscription, suspendSubscription, resumeSubscription, clearPlannedPlan, updateCommercialMode } = useBillingActions(adminClientId);
 
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
@@ -88,6 +88,18 @@ export default function BillingDetailPage() {
             onCreateSubscription={() => setSubscriptionOpen(true)}
             onChangePlan={() => setChangePlanOpen(true)}
             onReprovision={() => setProvisionOpen(true)}
+            onSuspendSubscription={() =>
+              suspendSubscription.mutate(subscription!.id, {
+                onSuccess: () => toast.success('Assinatura suspensa'),
+              })
+            }
+            onResumeSubscription={() =>
+              resumeSubscription.mutate(subscription!.id, {
+                onSuccess: () => toast.success('Assinatura reativada'),
+              })
+            }
+            isSuspending={suspendSubscription.isPending}
+            isResuming={resumeSubscription.isPending}
             onCancelSubscription={() => {
               if (!subscription) return;
               cancelSubscription.mutate(subscription.id, {

@@ -24,7 +24,8 @@ const SUPPORTED_ASAAS_EVENTS = new Set([
   'PAYMENT_BANK_SLIP_CANCELLED',  // boleto expirado → charge.cancelled
   // Assinaturas
   'SUBSCRIPTION_DELETED',         // parsing estava silenciosamente quebrado — agora corrigido
-  'SUBSCRIPTION_INACTIVATED',     // inativação por retries esgotados → subscription.cancelled
+  'SUBSCRIPTION_INACTIVATED',     // pausado por dunning → subscription.suspended
+  'SUBSCRIPTION_UPDATED',         // reativação / mudanças de plano → estado real via body.subscription.status
   // SUBSCRIPTION_RENEWED omitido: não existe na API Asaas (docs/subscription-events.md)
 ]);
 

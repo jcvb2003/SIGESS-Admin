@@ -21,7 +21,8 @@ export type BillingSubscriptionStatus =
   | 'pending_payment'
   | 'active'
   | 'overdue'
-  | 'cancelled';
+  | 'cancelled'
+  | 'suspended';
 
 export type BillingChargeStatus =
   | 'pending'

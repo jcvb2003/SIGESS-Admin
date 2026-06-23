@@ -98,6 +98,20 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao cancelar assinatura'),
   });
 
+  const suspendSubscription = useMutation({
+    mutationFn: (subscriptionId: string) =>
+      invokeBillingAction('suspend_subscription', { subscription_id: subscriptionId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao suspender assinatura'),
+  });
+
+  const resumeSubscription = useMutation({
+    mutationFn: (subscriptionId: string) =>
+      invokeBillingAction('resume_subscription', { subscription_id: subscriptionId }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao reativar assinatura'),
+  });
+
   const clearPlannedPlan = useMutation({
     mutationFn: () =>
       invokeBillingAction('clear_planned_plan', { admin_client_id: adminClientId }),
@@ -126,5 +140,5 @@ export function useBillingActions(adminClientId: string) {
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Erro ao desbloquear acesso'),
   });
 
-  return { provisionAccount, cancelSubscription, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, prorrogarCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
+  return { provisionAccount, cancelSubscription, suspendSubscription, resumeSubscription, createSubscription, changeSubscriptionPlan, createCharge, cancelCharge, prorrogarCharge, generateToken, syncAccount, clearPlannedPlan, updateCommercialMode, setBillingBlock, clearBillingBlock };
 }

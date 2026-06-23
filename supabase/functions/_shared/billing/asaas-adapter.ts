@@ -16,6 +16,8 @@ import type {
   FetchSubscriptionInput,
   ListSubscriptionChargesInput,
   ParseWebhookInput,
+  ResumeSubscriptionInput,
+  SuspendSubscriptionInput,
   UpdateChargeDueDateInput,
   UpdateSubscriptionInput,
 } from './provider.interface.ts';
@@ -164,6 +166,20 @@ export class AsaasAdapter implements BillingProvider {
       if (e instanceof AsaasApiError && e.status === 404) return;
       throw e;
     }
+  }
+
+  async suspendSubscription(input: SuspendSubscriptionInput): Promise<void> {
+    await this.client.put<AsaasSubscription>(
+      `/subscriptions/${input.providerSubscriptionId}`,
+      { status: 'INACTIVE' },
+    );
+  }
+
+  async resumeSubscription(input: ResumeSubscriptionInput): Promise<void> {
+    await this.client.put<AsaasSubscription>(
+      `/subscriptions/${input.providerSubscriptionId}`,
+      { status: 'ACTIVE' },
+    );
   }
 
   async createCharge(input: CreateChargeInput): Promise<ProviderCharge> {

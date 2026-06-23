@@ -29,7 +29,7 @@ export function mapAsaasChargeStatus(asaasStatus: string): BillingChargeStatus {
 
 const ASAAS_SUBSCRIPTION_STATUS_MAP: Record<string, BillingSubscriptionStatus> = {
   ACTIVE: 'active',
-  INACTIVE: 'cancelled',
+  INACTIVE: 'suspended',  // temporário (dunning) — não confundir com EXPIRED/DELETED que são permanentes
   EXPIRED: 'cancelled',
   TRIAL: 'trialing',
   OVERDUE: 'overdue',
@@ -66,6 +66,10 @@ const ASAAS_WEBHOOK_EVENT_MAP: Record<string, string> = {
   SUBSCRIPTION_RENEWED:      BILLING_EVENT_TYPES.SUBSCRIPTION_RENEWED,
   SUBSCRIPTION_DELETED:      BILLING_EVENT_TYPES.SUBSCRIPTION_CANCELLED,
   SUBSCRIPTION_INACTIVATED:  BILLING_EVENT_TYPES.SUBSCRIPTION_CANCELLED,
+  // SUBSCRIPTION_UPDATED canonizado como SUBSCRIPTION_RENEWED por ausência de tipo interno mais específico.
+  // Semanticamente cobre: reativação, mudança de valor/data, etc.
+  // O estado real é derivado de body.subscription.status no adapter — não do event_type.
+  SUBSCRIPTION_UPDATED:      BILLING_EVENT_TYPES.SUBSCRIPTION_RENEWED,
   PAYMENT_PARTIALLY_REFUNDED: BILLING_EVENT_TYPES.CHARGE_CANCELLED,
   PAYMENT_BANK_SLIP_CANCELLED: BILLING_EVENT_TYPES.CHARGE_CANCELLED,
 };

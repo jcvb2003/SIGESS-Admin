@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CalendarCheck, RotateCcw, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, PauseCircle, PlayCircle, RotateCcw, XCircle } from 'lucide-react';
 import { formatDate } from '@/shared/utils/date';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -33,10 +33,14 @@ interface ContractCardProps {
   onCreateSubscription: () => void;
   onChangePlan: () => void;
   onCancelSubscription: () => void;
+  onSuspendSubscription: () => void;
+  onResumeSubscription: () => void;
   onUpdateMode: (newMode: CommercialMode) => void;
   onReprovision: () => void;
   isUpdatingMode: boolean;
   isCancellingSubscription: boolean;
+  isSuspending: boolean;
+  isResuming: boolean;
 }
 
 export function ContractCard({
@@ -46,10 +50,14 @@ export function ContractCard({
   onCreateSubscription,
   onChangePlan,
   onCancelSubscription,
+  onSuspendSubscription,
+  onResumeSubscription,
   onUpdateMode,
   onReprovision,
   isUpdatingMode,
   isCancellingSubscription,
+  isSuspending,
+  isResuming,
 }: Readonly<ContractCardProps>) {
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [pendingMode, setPendingMode] = useState<CommercialMode>(commercialMode);
@@ -60,6 +68,16 @@ export function ContractCard({
 
   const needsReprovision =
     account.lifecycle_status === 'cancelled' && !account.provider_customer_id;
+
+  const canSuspend =
+    isRecorrente &&
+    subscription !== null &&
+    ['active', 'overdue'].includes(subscription.billing_status);
+
+  const canResume =
+    isRecorrente &&
+    subscription !== null &&
+    subscription.billing_status === 'suspended';
 
   const canCreateSubscription =
     isRecorrente &&
@@ -169,6 +187,30 @@ export function ContractCard({
             <Button size="sm" variant="outline" onClick={onChangePlan}>
               <CalendarCheck className="mr-2 h-3.5 w-3.5" />
               Trocar plano
+            </Button>
+          )}
+          {canSuspend && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-amber-600 border-amber-400/50 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+              disabled={isSuspending}
+              onClick={onSuspendSubscription}
+            >
+              <PauseCircle className="mr-2 h-3.5 w-3.5" />
+              {isSuspending ? 'Suspendendo...' : 'Suspender'}
+            </Button>
+          )}
+          {canResume && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-emerald-600 border-emerald-400/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              disabled={isResuming}
+              onClick={onResumeSubscription}
+            >
+              <PlayCircle className="mr-2 h-3.5 w-3.5" />
+              {isResuming ? 'Reativando...' : 'Reativar'}
             </Button>
           )}
           {canCancelSubscription && (

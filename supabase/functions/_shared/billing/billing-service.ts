@@ -454,6 +454,11 @@ async function _applySubscriptionStatus(
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'cancelled' });
   } else if (status === 'overdue') {
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'past_due' });
+  } else if (status === 'suspended') {
+    // Pausado por dunning — reversível, account fica em past_due (não cancelled)
+    await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'past_due' });
+  } else if (status === 'active') {
+    await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'active' });
   }
 }
 

@@ -17,7 +17,8 @@ export type BillingSubscriptionStatus =
   | 'pending_payment'
   | 'active'
   | 'overdue'
-  | 'cancelled';
+  | 'cancelled'
+  | 'suspended';  // pausado por inadimplência via dunning — reversível, ≠ cancelled
 
 export type BillingChargeStatus =
   | 'pending'

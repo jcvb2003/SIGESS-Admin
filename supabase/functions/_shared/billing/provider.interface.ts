@@ -66,6 +66,14 @@ export interface UpdateChargeDueDateInput {
   newDueDate: string; // ISO date YYYY-MM-DD
 }
 
+export interface SuspendSubscriptionInput {
+  providerSubscriptionId: string;
+}
+
+export interface ResumeSubscriptionInput {
+  providerSubscriptionId: string;
+}
+
 export interface ParseWebhookInput {
   rawBody: string;
   headers: Record<string, string>;
@@ -88,6 +96,10 @@ export interface BillingProvider {
   createCharge(input: CreateChargeInput): Promise<ProviderCharge>;
   cancelCharge(input: CancelChargeInput): Promise<void>;
   updateChargeDueDate(input: UpdateChargeDueDateInput): Promise<void>;
+
+  // Pausa a assinatura sem cancelar (dunning). Reversível via resumeSubscription.
+  suspendSubscription(input: SuspendSubscriptionInput): Promise<void>;
+  resumeSubscription(input: ResumeSubscriptionInput): Promise<void>;
 
   fetchSubscription(input: FetchSubscriptionInput): Promise<ProviderSubscription>;
   fetchCharge(input: FetchChargeInput): Promise<ProviderCharge>;

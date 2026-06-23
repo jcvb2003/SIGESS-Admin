@@ -63,6 +63,8 @@ class StubBillingProvider implements BillingProvider {
   }
   async cancelCharge(): Promise<void> {}
   async updateChargeDueDate(): Promise<void> {}
+  async suspendSubscription(): Promise<void> {}
+  async resumeSubscription(): Promise<void> {}
   async fetchSubscription(input: Parameters<BillingProvider['fetchSubscription']>[0]): Promise<ProviderSubscription> {
     return { providerSubscriptionId: input.providerSubscriptionId, billingStatus: 'active' };
   }
@@ -342,6 +344,80 @@ async function handleCancelSubscription(db: SupabaseClient, provider: BillingPro
   const result = await svc.cancelSubscription(db, provider, subId);
   if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
   return result;
+}
+
+async function handleSuspendSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
+  assert(params.subscription_id, 'subscription_id');
+  const subId = params.subscription_id as string;
+
+  const { data: sub } = await db
+    .from('billing_subscriptions')
+    .select('id, provider_subscription_id, billing_account_id, billing_status')
+    .eq('id', subId)
+    .maybeSingle();
+
+  if (!sub) throw createHttpError(`Assinatura '${subId}' não encontrada`, 404);
+  if (!sub.provider_subscription_id) throw createHttpError('Subscription sem provider_subscription_id', 409);
+  if (!['active', 'overdue'].includes(sub.billing_status)) {
+    throw createHttpError(`Não é possível suspender assinatura com status '${sub.billing_status}'`, 409);
+  }
+
+  await provider.suspendSubscription({ providerSubscriptionId: sub.provider_subscription_id });
+
+  await repo.updateSubscription(db, sub.id, { billing_status: 'suspended' });
+  await repo.updateAccount(db, sub.billing_account_id, {
+    lifecycle_status: 'past_due',
+    is_billing_blocked: true,
+    billing_blocked_reason: 'billing_delinquent',
+  });
+
+  const { data: account } = await db
+    .from('billing_accounts')
+    .select('admin_client_id')
+    .eq('id', sub.billing_account_id)
+    .maybeSingle();
+  if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
+
+  return { suspended: true };
+}
+
+async function handleResumeSubscription(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
+  assert(params.subscription_id, 'subscription_id');
+  const subId = params.subscription_id as string;
+
+  const { data: sub } = await db
+    .from('billing_subscriptions')
+    .select('id, provider_subscription_id, billing_account_id, billing_status')
+    .eq('id', subId)
+    .maybeSingle();
+
+  if (!sub) throw createHttpError(`Assinatura '${subId}' não encontrada`, 404);
+  if (!sub.provider_subscription_id) throw createHttpError('Subscription sem provider_subscription_id', 409);
+  if (sub.billing_status !== 'suspended') {
+    throw createHttpError(`Não é possível reativar assinatura com status '${sub.billing_status}'`, 409);
+  }
+
+  await provider.resumeSubscription({ providerSubscriptionId: sub.provider_subscription_id });
+
+  // Buscar estado real do provider em vez de assumir 'active' optimisticamente
+  await svc.syncSubscriptionFromProvider(
+    db, provider, sub.id, sub.provider_subscription_id, sub.billing_account_id,
+  );
+
+  // Limpar bloqueio de billing — não tratado por syncSubscriptionFromProvider
+  await repo.updateAccount(db, sub.billing_account_id, {
+    is_billing_blocked: false,
+    billing_blocked_reason: null,
+  });
+
+  const { data: account } = await db
+    .from('billing_accounts')
+    .select('admin_client_id')
+    .eq('id', sub.billing_account_id)
+    .maybeSingle();
+  if (account?.admin_client_id) await syncSummaryOrThrow(db, account.admin_client_id);
+
+  return { resumed: true };
 }
 
 async function handleCreateCharge(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
@@ -863,6 +939,12 @@ Deno.serve(async (req: Request) => {
         break;
       case 'cancel_subscription':
         result = await handleCancelSubscription(db, provider, params);
+        break;
+      case 'suspend_subscription':
+        result = await handleSuspendSubscription(db, provider, params);
+        break;
+      case 'resume_subscription':
+        result = await handleResumeSubscription(db, provider, params);
         break;
       case 'create_charge':
         result = await handleCreateCharge(db, provider, params);

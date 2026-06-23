@@ -18,7 +18,7 @@ export async function getActiveSubscription(billingAccountId: string): Promise<B
     .from('billing_subscriptions')
     .select('*')
     .eq('billing_account_id', billingAccountId)
-    .in('billing_status', ['active', 'trialing', 'pending_payment', 'overdue'])
+    .in('billing_status', ['active', 'trialing', 'pending_payment', 'overdue', 'suspended'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

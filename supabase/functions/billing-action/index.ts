@@ -477,6 +477,12 @@ async function handleCancelCharge(db: SupabaseClient, provider: BillingProvider,
   return { cancelled: true };
 }
 
+async function handleRetryWebhookEvent(db: SupabaseClient, params: Record<string, unknown>) {
+  assert(params.event_id, 'event_id');
+  await svc.reprocessWebhookEvent(db, params.event_id as string);
+  return { retried: true, event_id: params.event_id };
+}
+
 async function handleProrrogarCharge(db: SupabaseClient, provider: BillingProvider, params: Record<string, unknown>) {
   assert(params.provider_charge_id, 'provider_charge_id');
   assert(params.new_due_date, 'new_due_date');
@@ -954,6 +960,9 @@ Deno.serve(async (req: Request) => {
         break;
       case 'prorrogar_charge':
         result = await handleProrrogarCharge(db, provider, params);
+        break;
+      case 'retry_webhook_event':
+        result = await handleRetryWebhookEvent(db, params);
         break;
       case 'generate_portal_token':
         result = await handleGeneratePortalToken(db, params);

@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { getBillingEvents } from '@/features/billing/services/billing.service';
+import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -27,7 +28,12 @@ function formatTs(iso: string) {
   return format(new Date(iso), "dd/MM/yy HH:mm:ss", { locale: ptBR });
 }
 
-export function BillingEventsTable() {
+interface BillingEventsTableProps {
+  onRetry?: (eventId: string) => void;
+  retryingId?: string | null;
+}
+
+export function BillingEventsTable({ onRetry, retryingId }: Readonly<BillingEventsTableProps>) {
   const { data: events = [], isLoading, isError, error } = useQuery({
     queryKey: ['billing', 'events'],
     queryFn: () => getBillingEvents(50),
@@ -69,6 +75,7 @@ export function BillingEventsTable() {
             <TableHead className="text-xs">Tipo de evento</TableHead>
             <TableHead className="text-xs">Status</TableHead>
             <TableHead className="text-xs">Erro</TableHead>
+            <TableHead className="text-xs" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -86,6 +93,22 @@ export function BillingEventsTable() {
               </TableCell>
               <TableCell className="max-w-[300px] truncate text-xs text-destructive">
                 {ev.error ?? '—'}
+              </TableCell>
+              <TableCell>
+                {ev.status === 'failed' && onRetry && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    disabled={retryingId === ev.id}
+                    onClick={() => onRetry(ev.id)}
+                  >
+                    {retryingId === ev.id
+                      ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                      : <RefreshCw className="mr-1.5 h-3 w-3" />}
+                    Reprocessar
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

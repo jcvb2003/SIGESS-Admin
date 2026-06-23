@@ -4,6 +4,7 @@ import type { BillingProvider, CreateChargeInput } from './provider.interface.ts
 import type { BillingAccountLifecycleStatus, BillingInterval, BillingWebhookEvent } from './types.ts';
 import * as repo from './repositories.ts';
 import { log } from './logger.ts';
+import { mapAsaasChargeStatus, mapAsaasSubscriptionStatus } from './status-mappers.ts';
 
 // ─── assertLifecycle ─────────────────────────────────────────────────────────
 // Official guard for all billing mutations. Call before any side effect.
@@ -460,6 +461,91 @@ async function _applySubscriptionStatus(
   } else if (status === 'active') {
     await repo.updateAccount(db, sub.billing_account_id, { lifecycle_status: 'active' });
   }
+}
+
+// ─── ReprocessWebhookEvent ───────────────────────────────────────────────────
+// Reconstrói e reaaplica um evento 'failed' a partir do payload armazenado.
+// Não passa pelo adapter (sem re-validação de token) — parser centralizado aqui.
+
+const RETRY_FORCE_CANCELLED = new Set([
+  'PAYMENT_DELETED', 'PAYMENT_REFUNDED',
+  'PAYMENT_PARTIALLY_REFUNDED', 'PAYMENT_BANK_SLIP_CANCELLED',
+]);
+
+export async function reprocessWebhookEvent(
+  db: SupabaseClient,
+  eventId: string,
+): Promise<void> {
+  const { data: row, error: fetchErr } = await db
+    .from('billing_events')
+    .select('*')
+    .eq('id', eventId)
+    .single();
+
+  if (fetchErr || !row) throw new Error(`billing_event ${eventId} não encontrado`);
+  if (row.status !== 'failed') {
+    const err = Object.assign(
+      new Error(`Só é possível reprocessar eventos 'failed'. Atual: '${row.status}'`),
+      { status: 409 },
+    );
+    throw err;
+  }
+
+  // Resetar para pending — markEventProcessed exige status != processed
+  const { error: resetErr } = await db
+    .from('billing_events')
+    .update({ status: 'pending', error: null })
+    .eq('id', eventId);
+  if (resetErr) throw new Error(`Falha ao resetar evento para pending: ${resetErr.message}`);
+
+  const payload  = row.payload as Record<string, unknown>;
+  const rawEvent = payload.event as string | undefined;
+  const payment  = payload.payment  as Record<string, unknown> | undefined;
+  const subObj   = payload.subscription as Record<string, unknown> | undefined;
+
+  const paymentSubRaw = payment?.subscription;
+  const subFromPayment =
+    typeof paymentSubRaw === 'object' && paymentSubRaw !== null
+      ? (paymentSubRaw as any).id as string | undefined
+      : typeof paymentSubRaw === 'string' ? paymentSubRaw : undefined;
+
+  const chargeStatus = rawEvent && RETRY_FORCE_CANCELLED.has(rawEvent)
+    ? ('cancelled' as const)
+    : payment?.status
+      ? mapAsaasChargeStatus(payment.status as string)
+      : undefined;
+
+  const subscriptionStatus = subObj?.status
+    ? mapAsaasSubscriptionStatus(subObj.status as string)
+    : undefined;
+
+  const event: BillingWebhookEvent = {
+    providerEventId:        row.provider_event_id,
+    eventType:              row.event_type,
+    rawEventType:           rawEvent ?? row.event_type,
+    providerChargeId:       payment?.id as string | undefined,
+    providerSubscriptionId: subFromPayment ?? subObj?.id as string | undefined,
+    chargeStatus,
+    subscriptionStatus,
+    paidAt: payment?.paymentDate
+      ? `${payment.paymentDate}T00:00:00Z`
+      : undefined,
+  };
+
+  // Guard: sem alvo reaplicável = 422 — melhor falhar explicitamente que marcar processed sem efeito
+  if (!event.providerChargeId && !event.providerSubscriptionId) {
+    await db
+      .from('billing_events')
+      .update({ status: 'failed', error: 'Evento sem charge_id ou subscription_id — não reaplicável' })
+      .eq('id', eventId);
+    const err = Object.assign(
+      new Error('Evento sem identificador reaplicável (sem charge_id nem subscription_id)'),
+      { status: 422 },
+    );
+    throw err;
+  }
+
+  await applyWebhookEvent(db, eventId, event);
 }
 
 // ─── SyncChargeFromProvider ───────────────────────────────────────────────────

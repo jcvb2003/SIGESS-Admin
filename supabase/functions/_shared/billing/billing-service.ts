@@ -547,10 +547,13 @@ export async function reprocessWebhookEvent(
 
   // Guard: sem alvo reaplicável = 422 — melhor falhar explicitamente que marcar processed sem efeito
   if (!event.providerChargeId && !event.providerSubscriptionId) {
-    await db
+    const { error: markErr } = await db
       .from('billing_events')
       .update({ status: 'failed', error: 'Evento sem charge_id ou subscription_id — não reaplicável' })
       .eq('id', eventId);
+    if (markErr) {
+      log('error', 'billing-service', 'reprocess_mark_failed_error', { event_id: eventId, err: markErr.message });
+    }
     const err = Object.assign(
       new Error('Evento sem identificador reaplicável (sem charge_id nem subscription_id)'),
       { status: 422 },

@@ -19,7 +19,7 @@ import { AsaasClient } from '../_shared/billing/asaas-client.ts';
 import { AsaasAdapter } from '../_shared/billing/asaas-adapter.ts';
 import { AsaasApiError } from '../_shared/billing/asaas-client.ts';
 import { log } from '../_shared/billing/logger.ts';
-import { loadBillingProviderConfig } from '../_shared/billing/provider-config.ts';
+import { loadBillingProviderConfig, PROVIDER_SETTINGS_COLUMNS } from '../_shared/billing/provider-config.ts';
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ async function syncSummaryOrThrow(db: SupabaseClient, adminClientId: string): Pr
 async function handleGetProviderSettings(db: SupabaseClient) {
   const { data, error } = await db
     .from('billing_provider_settings')
-    .select('provider, sandbox, api_key, webhook_token, dunning_days_threshold, updated_at, updated_by')
+    .select(PROVIDER_SETTINGS_COLUMNS)
     .eq('id', 'default')
     .maybeSingle();
 

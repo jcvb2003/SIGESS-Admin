@@ -2,6 +2,12 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { log } from './logger.ts';
 
+// Colunas canônicas de billing_provider_settings — fonte única de verdade.
+// Importar em QUALQUER lugar que faça SELECT nessa tabela (billing-action, billing-sync, etc.)
+// para evitar drift silencioso quando novos campos forem adicionados.
+export const PROVIDER_SETTINGS_COLUMNS =
+  'provider, api_key, sandbox, webhook_token, dunning_days_threshold, updated_at, updated_by' as const;
+
 export interface BillingProviderConfig {
   provider: string;
   apiKey?: string;
@@ -15,7 +21,7 @@ export async function loadBillingProviderConfig(db: SupabaseClient): Promise<Bil
   try {
     const { data, error } = await db
       .from('billing_provider_settings')
-      .select('provider, api_key, sandbox, webhook_token, dunning_days_threshold')
+      .select(PROVIDER_SETTINGS_COLUMNS)
       .eq('id', 'default')
       .maybeSingle();
 

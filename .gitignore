@@ -34,3 +34,18 @@ dist-ssr
 .DS_Store
 Thumbs.db
 *.env
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# Local-only script variants and secret helpers
+scripts/*.local.*
+scripts/*-local.*
+scripts/*_local.*
+scripts/*.secrets.*
+
+# Backup and dump artifacts
+*.dump
+*.sql.gz
+*.tar.gz

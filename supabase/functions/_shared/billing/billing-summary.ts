@@ -14,6 +14,8 @@ export interface BillingSummaryProjection {
   lastSyncedAt: string;                    // ISO datetime
   isBillingBlocked: boolean;
   billingBlockedReason: 'billing_delinquent' | 'manual_suspend' | null;
+  nextPlanName: string | null;
+  nextPlanEffectiveDate: string | null;    // 'YYYY-MM-DD'
 }
 
 // Builds a point-in-time snapshot of billing state from the Admin DB.
@@ -46,7 +48,7 @@ export async function buildBillingSummaryProjection(
     .limit(1)
     .maybeSingle();
 
-  // Plan display name
+  // Plan display name (current)
   let planName: string | null = null;
   if (account.current_plan_id) {
     const { data: plan } = await db
@@ -55,6 +57,17 @@ export async function buildBillingSummaryProjection(
       .eq('id', account.current_plan_id)
       .maybeSingle();
     planName = plan?.name ?? null;
+  }
+
+  // Scheduled plan (next)
+  let nextPlanName: string | null = null;
+  if (account.next_plan_id) {
+    const { data: nextPlan } = await db
+      .from('billing_plans')
+      .select('name')
+      .eq('id', account.next_plan_id)
+      .maybeSingle();
+    nextPlanName = nextPlan?.name ?? null;
   }
 
   return {
@@ -68,5 +81,7 @@ export async function buildBillingSummaryProjection(
     lastSyncedAt: new Date().toISOString(),
     isBillingBlocked: account.is_billing_blocked,
     billingBlockedReason: account.billing_blocked_reason ?? null,
+    nextPlanName,
+    nextPlanEffectiveDate: account.next_plan_effective_date ?? null,
   };
 }

@@ -64,6 +64,22 @@ export async function getTenant(id: string): Promise<Tenant> {
   return data as Tenant;
 }
 
+export async function tenantCodeExists(tenantCode: string, excludeTenantId?: string): Promise<boolean> {
+  let query = supabase
+    .from("tenants")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_code", tenantCode.trim().toLowerCase());
+
+  if (excludeTenantId) {
+    query = query.neq("id", excludeTenantId);
+  }
+
+  const { count, error } = await query;
+
+  if (error) throw handleSupabaseError(error);
+  return (count ?? 0) > 0;
+}
+
 export async function createTenant(input: TenantCreate): Promise<Tenant> {
   const { data, error } = await supabase
     .from("tenants")

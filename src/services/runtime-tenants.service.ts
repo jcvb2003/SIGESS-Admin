@@ -70,6 +70,31 @@ export async function createSharedTenantForProject(
   }) as SharedTenant;
 }
 
+export async function reuseSharedOrphanTenantForProject(
+  project: RuntimeProjectConnection,
+  clienteId: string,
+  input: { tenantId: string; name: string; code: string; acesso_expira_em: string | null; max_socios: number | null },
+): Promise<SharedTenant> {
+  return await proxyAction(project.id, "reuse-shared-orphan-tenant", {
+    clienteId,
+    tenantId: input.tenantId,
+    name: input.name,
+    code: input.code.toLowerCase(),
+    acessoExpiraEm: input.acesso_expira_em,
+    maxSocios: input.max_socios,
+  }) as SharedTenant;
+}
+
+export async function deleteSharedOrphanTenantForProject(
+  project: RuntimeProjectConnection,
+  input: { tenantId: string; code: string },
+): Promise<{ success: true }> {
+  return await proxyAction(project.id, "delete-shared-orphan-tenant", {
+    tenantId: input.tenantId,
+    code: input.code.toLowerCase(),
+  }) as { success: true };
+}
+
 export async function syncSharedTenantLicense(
   project: RuntimeProjectConnection,
   tenantId: string,

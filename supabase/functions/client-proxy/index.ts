@@ -108,6 +108,49 @@ function isMissingRelationOrColumnError(error: unknown) {
   return code === "42P01" || code === "42703" || /relation .* does not exist/i.test(message) || /column .* does not exist/i.test(message);
 }
 
+function formatStructuredError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (!error || typeof error !== "object") {
+    return "erro desconhecido";
+  }
+
+  const err = error as {
+    message?: unknown;
+    details?: unknown;
+    hint?: unknown;
+    code?: unknown;
+    error_description?: unknown;
+    msg?: unknown;
+  };
+
+  const parts: string[] = [];
+
+  if (typeof err.message === "string" && err.message.trim()) {
+    parts.push(err.message.trim());
+  } else if (typeof err.error_description === "string" && err.error_description.trim()) {
+    parts.push(err.error_description.trim());
+  } else if (typeof err.msg === "string" && err.msg.trim()) {
+    parts.push(err.msg.trim());
+  }
+
+  if (typeof err.details === "string" && err.details.trim()) {
+    parts.push(`details: ${err.details.trim()}`);
+  }
+
+  if (typeof err.hint === "string" && err.hint.trim()) {
+    parts.push(`hint: ${err.hint.trim()}`);
+  }
+
+  if (typeof err.code === "string" && err.code.trim()) {
+    parts.push(`code: ${err.code.trim()}`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : JSON.stringify(error);
+}
+
 async function cleanupRuntimeUserReferences(
   runtimeAdmin: SupabaseClient,
   userId: string,
@@ -503,6 +546,34 @@ async function runSql(projectUrl: string, accessToken: string, sql: string) {
   }
 
   return await res.json();
+}
+
+function sqlLiteral(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function forceCleanupSharedTenantRuntime(
+  projectUrl: string,
+  accessToken: string,
+  input: { tenantId: string; unitId: string },
+) {
+  const tenantId = sqlLiteral(input.tenantId);
+  const unitId = sqlLiteral(input.unitId);
+
+  const sql = `
+BEGIN;
+ALTER TABLE public.tenant_units DISABLE TRIGGER trg_tenant_units_min_one;
+DELETE FROM public.audit_log_financeiro WHERE tenant_id = ${tenantId}::uuid OR unit_id = ${unitId}::uuid;
+DELETE FROM public.parametros_financeiros WHERE tenant_id = ${tenantId}::uuid AND unit_id = ${unitId}::uuid;
+DELETE FROM public.parametros WHERE tenant_id = ${tenantId}::uuid AND unit_id = ${unitId}::uuid;
+DELETE FROM public.configuracao_entidade WHERE tenant_id = ${tenantId}::uuid AND unit_id = ${unitId}::uuid;
+DELETE FROM public.entidade WHERE tenant_id = ${tenantId}::uuid AND unit_id = ${unitId}::uuid;
+DELETE FROM public.tenant_units WHERE id = ${unitId}::uuid;
+DELETE FROM public.tenants WHERE id = ${tenantId}::uuid;
+ALTER TABLE public.tenant_units ENABLE TRIGGER trg_tenant_units_min_one;
+COMMIT;`;
+
+  await runSql(projectUrl, accessToken, sql);
 }
 
 async function testAnonKey(clientUrl: string, anonKey: string): Promise<"ok" | "invalid"> {
@@ -2249,18 +2320,71 @@ async function cleanupSharedTenantRuntime(
   input: { tenantId: string; unitId: string },
 ) {
   const steps = [
-    runtimeAdmin.from("parametros_financeiros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
-    runtimeAdmin.from("parametros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
-    runtimeAdmin.from("configuracao_entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
-    runtimeAdmin.from("entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
-    runtimeAdmin.from("tenant_units").delete().eq("id", input.unitId),
-    runtimeAdmin.from("tenants").delete().eq("id", input.tenantId),
+    () => runtimeAdmin.from("audit_log_financeiro").delete().or(`tenant_id.eq.${input.tenantId},unit_id.eq.${input.unitId}`),
+    () => runtimeAdmin.from("parametros_financeiros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    () => runtimeAdmin.from("parametros").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    () => runtimeAdmin.from("configuracao_entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    () => runtimeAdmin.from("entidade").delete().eq("tenant_id", input.tenantId).eq("unit_id", input.unitId),
+    () => runtimeAdmin.from("tenant_units").delete().eq("id", input.unitId),
+    () => runtimeAdmin.from("tenants").delete().eq("id", input.tenantId),
   ];
 
-  const results = await Promise.all(steps);
-  for (const result of results) {
+  for (const step of steps) {
+    const result = await step();
     if (result.error) throw result.error;
   }
+}
+
+async function resolveSharedTenantUnitIds(
+  runtimeAdmin: SupabaseClient,
+  tenantId: string,
+) {
+  const { data, error } = await runtimeAdmin
+    .from("tenant_units")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+}
+
+async function deleteSharedTenantRuntimeByTenantId(
+  projectUrl: string,
+  accessToken: string,
+  tenantId: string,
+) {
+  const safeTenantId = sqlLiteral(tenantId);
+
+  const sql = `
+BEGIN;
+ALTER TABLE public.tenant_units DISABLE TRIGGER trg_tenant_units_min_one;
+DELETE FROM public.audit_log_financeiro WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.parametros_financeiros WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.parametros WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.configuracao_entidade WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.entidade WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.user_unit_memberships WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.tenant_users WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.tenant_units WHERE tenant_id = ${safeTenantId}::uuid;
+DELETE FROM public.tenants WHERE id = ${safeTenantId}::uuid;
+ALTER TABLE public.tenant_units ENABLE TRIGGER trg_tenant_units_min_one;
+COMMIT;`;
+
+  await runSql(projectUrl, accessToken, sql);
+}
+
+function isSequencePermissionError(error: unknown) {
+  const message = formatStructuredError(error).toLowerCase();
+  return message.includes("permission denied for sequence");
+}
+
+async function repairSharedSequenceGrants(projectUrl: string, accessToken: string) {
+  const sql = `
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO service_role;`;
+
+  await runSql(projectUrl, accessToken, sql);
 }
 
 async function createSharedTenantRuntime(
@@ -2268,6 +2392,7 @@ async function createSharedTenantRuntime(
   projectId: string,
   clientUrl: string,
   clientKey: string,
+  clientAccessToken: string | null | undefined,
   params?: Record<string, unknown>,
 ) {
   const clienteId = params?.clienteId as string | undefined;
@@ -2284,11 +2409,43 @@ async function createSharedTenantRuntime(
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  const normalizedCode = code.toLowerCase();
+
+  const { data: existingRuntimeTenant, error: existingRuntimeTenantError } = await runtimeAdmin
+    .from("tenants")
+    .select("id, code, name")
+    .eq("code", normalizedCode)
+    .maybeSingle();
+
+  if (existingRuntimeTenantError) throw existingRuntimeTenantError;
+
+  if (existingRuntimeTenant) {
+    const { data: linkedCentralTenant, error: linkedCentralTenantError } = await supabaseAdmin
+      .from("tenants")
+      .select("id, nome_entidade, tenant_code, runtime_tenant_id")
+      .eq("project_id", projectId)
+      .eq("runtime_tenant_id", existingRuntimeTenant.id)
+      .neq("id", clienteId)
+      .maybeSingle();
+
+    if (linkedCentralTenantError) throw linkedCentralTenantError;
+
+    if (linkedCentralTenant) {
+      throw new Error(
+        `Ja existe um tenant com o codigo "${normalizedCode}" neste runtime e ele ja esta vinculado no Admin (${linkedCentralTenant.nome_entidade ?? linkedCentralTenant.tenant_code}).`,
+      );
+    }
+
+    throw new Error(
+      `Ja existe um tenant runtime orfao com o codigo "${normalizedCode}" neste projeto (runtime_tenant_id=${existingRuntimeTenant.id}). Remova ou reutilize este tenant antes de tentar criar novamente.`,
+    );
+  }
+
   const { data: tenant, error: tenantError } = await runtimeAdmin
     .from("tenants")
     .insert({
       name,
-      code: code.toLowerCase(),
+      code: normalizedCode,
       status: "active",
       acesso_expira_em: acessoExpiraEm,
       max_socios: maxSocios,
@@ -2312,11 +2469,21 @@ async function createSharedTenantRuntime(
 
     unitId = unit.id as string;
 
-    await ensureSharedScopeRowsRuntime(runtimeAdmin, {
-      tenantId,
-      unitId,
-      entityName: name,
-    });
+    try {
+      await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+        tenantId,
+        unitId,
+        entityName: name,
+      });
+    } catch (scopeError) {
+      if (!clientAccessToken || !isSequencePermissionError(scopeError)) throw scopeError;
+      await repairSharedSequenceGrants(clientUrl, clientAccessToken);
+      await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+        tenantId,
+        unitId,
+        entityName: name,
+      });
+    }
 
     const { error: updateError } = await supabaseAdmin
       .from("tenants")
@@ -2334,10 +2501,25 @@ async function createSharedTenantRuntime(
       try {
         await cleanupSharedTenantRuntime(runtimeAdmin, { tenantId, unitId });
       } catch (cleanupError) {
+        if (clientAccessToken) {
+          try {
+            await forceCleanupSharedTenantRuntime(clientUrl, clientAccessToken, { tenantId, unitId });
+            throw new Error(
+              `Shared tenant runtime criado parcialmente, mas o cleanup forçado foi concluído. Erro original: ${formatStructuredError(error)}`,
+            );
+          } catch (forceCleanupError) {
+            throw new Error(
+              `Shared tenant runtime criado parcialmente e o rollback falhou: ${
+                formatStructuredError(cleanupError)
+              }. Cleanup forçado também falhou: ${formatStructuredError(forceCleanupError)}. Erro original: ${formatStructuredError(error)}`,
+            );
+          }
+        }
+
         throw new Error(
           `Shared tenant runtime criado parcialmente e o rollback falhou: ${
-            cleanupError instanceof Error ? cleanupError.message : "erro desconhecido"
-          }. Erro original: ${error instanceof Error ? error.message : "erro desconhecido"}`,
+            formatStructuredError(cleanupError)
+          }. Erro original: ${formatStructuredError(error)}`,
         );
       }
     }
@@ -2345,6 +2527,186 @@ async function createSharedTenantRuntime(
   }
 
   return tenant;
+}
+
+async function reuseSharedOrphanTenantRuntime(
+  supabaseAdmin: SupabaseClient,
+  projectId: string,
+  clientUrl: string,
+  clientKey: string,
+  clientAccessToken: string | null | undefined,
+  params?: Record<string, unknown>,
+) {
+  const clienteId = params?.clienteId as string | undefined;
+  const tenantId = params?.tenantId as string | undefined;
+  const name = params?.name as string | undefined;
+  const code = params?.code as string | undefined;
+  const acessoExpiraEm = (params?.acessoExpiraEm as string | null | undefined) ?? null;
+  const maxSocios = (params?.maxSocios as number | null | undefined) ?? null;
+
+  if (!clienteId || !tenantId || !name || !code) {
+    throw createHttpError("Missing fields for reuse-shared-orphan-tenant", 400);
+  }
+
+  const runtimeAdmin = createRuntimeAdminClient(clientUrl, clientKey);
+  const normalizedCode = code.toLowerCase();
+
+  const { data: runtimeTenant, error: runtimeTenantError } = await runtimeAdmin
+    .from("tenants")
+    .select("id, code, name")
+    .eq("id", tenantId)
+    .maybeSingle();
+
+  if (runtimeTenantError) throw runtimeTenantError;
+  if (!runtimeTenant) {
+    throw createHttpError(`Tenant runtime órfão ${tenantId} não foi encontrado neste projeto.`, 404);
+  }
+
+  if ((runtimeTenant.code ?? "").toLowerCase() !== normalizedCode) {
+    throw createHttpError(
+      `O tenant runtime ${tenantId} existe, mas o código é "${runtimeTenant.code}" e não "${normalizedCode}".`,
+      409,
+    );
+  }
+
+  const { data: linkedCentralTenant, error: linkedCentralTenantError } = await supabaseAdmin
+    .from("tenants")
+    .select("id, nome_entidade, tenant_code")
+    .eq("project_id", projectId)
+    .eq("runtime_tenant_id", tenantId)
+    .neq("id", clienteId)
+    .maybeSingle();
+
+  if (linkedCentralTenantError) throw linkedCentralTenantError;
+
+  if (linkedCentralTenant) {
+    throw createHttpError(
+      `O tenant runtime ${tenantId} já está vinculado no Admin (${linkedCentralTenant.nome_entidade ?? linkedCentralTenant.tenant_code}).`,
+      409,
+    );
+  }
+
+  const { error: updateTenantError } = await runtimeAdmin
+    .from("tenants")
+    .update({
+      name,
+      code: normalizedCode,
+      acesso_expira_em: acessoExpiraEm,
+      max_socios: maxSocios,
+      status: "active",
+    })
+    .eq("id", tenantId);
+
+  if (updateTenantError) throw updateTenantError;
+
+  let unitIds = await resolveSharedTenantUnitIds(runtimeAdmin, tenantId);
+  let unitId = unitIds[0] ?? null;
+
+  if (!unitId) {
+    const { data: createdUnit, error: createdUnitError } = await runtimeAdmin
+      .from("tenant_units")
+      .insert({ tenant_id: tenantId, code: "principal", name: "Sede", is_active: true })
+      .select("id")
+      .single();
+
+    if (createdUnitError) throw createdUnitError;
+    unitId = createdUnit.id as string;
+    unitIds = [unitId];
+  }
+
+  try {
+    await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+      tenantId,
+      unitId,
+      entityName: name,
+    });
+  } catch (scopeError) {
+    if (!clientAccessToken || !isSequencePermissionError(scopeError)) throw scopeError;
+    await repairSharedSequenceGrants(clientUrl, clientAccessToken);
+    await ensureSharedScopeRowsRuntime(runtimeAdmin, {
+      tenantId,
+      unitId,
+      entityName: name,
+    });
+  }
+
+  const { error: updateCentralError } = await supabaseAdmin
+    .from("tenants")
+    .update({
+      runtime_tenant_id: tenantId,
+      runtime_topology: "shared_multi_single",
+      supports_units: false,
+    })
+    .eq("id", clienteId)
+    .eq("project_id", projectId);
+
+  if (updateCentralError) throw updateCentralError;
+
+  return {
+    id: tenantId,
+    code: normalizedCode,
+    name,
+  };
+}
+
+async function deleteSharedOrphanTenantRuntime(
+  supabaseAdmin: SupabaseClient,
+  projectId: string,
+  clientUrl: string,
+  clientKey: string,
+  clientAccessToken: string | null | undefined,
+  params?: Record<string, unknown>,
+) {
+  const tenantId = params?.tenantId as string | undefined;
+  const code = params?.code as string | undefined;
+
+  if (!tenantId || !code) {
+    throw createHttpError("Missing fields for delete-shared-orphan-tenant", 400);
+  }
+
+  if (!clientAccessToken) {
+    throw createHttpError("PAT ausente para remoção de tenant órfão no runtime.", 400);
+  }
+
+  const runtimeAdmin = createRuntimeAdminClient(clientUrl, clientKey);
+  const normalizedCode = code.toLowerCase();
+
+  const { data: runtimeTenant, error: runtimeTenantError } = await runtimeAdmin
+    .from("tenants")
+    .select("id, code")
+    .eq("id", tenantId)
+    .maybeSingle();
+
+  if (runtimeTenantError) throw runtimeTenantError;
+  if (!runtimeTenant) {
+    throw createHttpError(`Tenant runtime órfão ${tenantId} não foi encontrado neste projeto.`, 404);
+  }
+
+  if ((runtimeTenant.code ?? "").toLowerCase() !== normalizedCode) {
+    throw createHttpError(
+      `O tenant runtime ${tenantId} existe, mas o código é "${runtimeTenant.code}" e não "${normalizedCode}".`,
+      409,
+    );
+  }
+
+  const { data: linkedCentralTenant, error: linkedCentralTenantError } = await supabaseAdmin
+    .from("tenants")
+    .select("id, nome_entidade, tenant_code")
+    .eq("project_id", projectId)
+    .eq("runtime_tenant_id", tenantId)
+    .maybeSingle();
+
+  if (linkedCentralTenantError) throw linkedCentralTenantError;
+
+  if (linkedCentralTenant) {
+    throw createHttpError(
+      `O tenant runtime ${tenantId} já está vinculado no Admin (${linkedCentralTenant.nome_entidade ?? linkedCentralTenant.tenant_code}) e não pode ser removido como órfão.`,
+      409,
+    );
+  }
+
+  await deleteSharedTenantRuntimeByTenantId(clientUrl, clientAccessToken, tenantId);
+  return { success: true };
 }
 
 async function ensureRuntimeUserProfileRuntime(
@@ -2970,6 +3332,35 @@ async function handleAction(clientId: string, action: string, params: Record<str
       clientId,
       client.supabase_url,
       client.supabase_secret_keys,
+      client.supabase_access_token,
+      params,
+    );
+  }
+
+  if (action === "reuse-shared-orphan-tenant") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    return await reuseSharedOrphanTenantRuntime(
+      supabaseAdmin,
+      clientId,
+      client.supabase_url,
+      client.supabase_secret_keys,
+      client.supabase_access_token,
+      params,
+    );
+  }
+
+  if (action === "delete-shared-orphan-tenant") {
+    if (!client.supabase_secret_keys) {
+      throw createHttpError(`Service role key missing for project ${clientId}`, 400);
+    }
+    return await deleteSharedOrphanTenantRuntime(
+      supabaseAdmin,
+      clientId,
+      client.supabase_url,
+      client.supabase_secret_keys,
+      client.supabase_access_token,
       params,
     );
   }

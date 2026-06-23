@@ -79,6 +79,7 @@ export async function proxyAction(
     | "process-data-import" | "apply-schema-drift" | "get-runtime-tenant-id"
     | "get-tenant-mode" | "update-tenant-mode"
     | "create-shared-tenant"
+    | "reuse-shared-orphan-tenant" | "delete-shared-orphan-tenant"
     | "list-shared-tenants" | "sync-shared-tenant-license"
     | "list-shared-tenant-units" | "create-shared-tenant-unit" | "update-shared-tenant-unit" | "delete-shared-tenant-unit"
     | "list-shared-tenant-users" | "create-shared-tenant-admin" | "create-shared-tenant-operator"
@@ -94,6 +95,8 @@ export async function proxyAction(
       "get-tenant-mode",
       "update-tenant-mode",
       "create-shared-tenant",
+      "reuse-shared-orphan-tenant",
+      "delete-shared-orphan-tenant",
       "list-shared-tenants",
       "sync-shared-tenant-license",
       "list-shared-tenant-units",

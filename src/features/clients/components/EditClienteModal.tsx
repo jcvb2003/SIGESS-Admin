@@ -17,6 +17,7 @@ import {
 import type { Cliente, Project } from "../types";
 import { useUpdateCliente, useDeleteCliente } from "../hooks/useClienteMutations";
 import { syncIsolatedProjectLicense, syncSharedTenantLicense } from "@/services/runtime-tenants.service";
+import { tenantCodeExists } from "@/services/commercial-tenants.service";
 
 interface EditClienteModalProps {
   readonly cliente: Cliente;
@@ -104,13 +105,21 @@ export function EditClienteModal({
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleSave = async () => {
+    const normalizedTenantCode = form.tenant_code.trim().toLowerCase();
+
     try {
+      const codeAlreadyExists = await tenantCodeExists(normalizedTenantCode, cliente.id);
+      if (codeAlreadyExists) {
+        toast.error(`O código de tenant "${normalizedTenantCode}" já está em uso. Escolha outro.`);
+        return;
+      }
+
       const result = await updateCliente.mutateAsync({
         id: cliente.id,
         input: {
           nome_entidade:    form.nome_entidade.trim(),
           nome_abreviado:   form.nome_abreviado.trim() || null,
-          tenant_code:      form.tenant_code.trim().toLowerCase(),
+          tenant_code:      normalizedTenantCode,
           email:            form.email.trim() || null,
           telefone:         form.telefone.trim() || null,
           cnpj_cpf:         form.cnpj_cpf.trim() || null,

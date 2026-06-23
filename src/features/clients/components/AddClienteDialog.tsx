@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { CheckCircle2, Link, Loader2, UserPlus, AlertCircle, SkipForward } from "lucide-react";
+import { CheckCircle2, Link, Loader2, UserPlus, AlertCircle, SkipForward, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   createSharedTenantForProject,
+  deleteSharedOrphanTenantForProject,
   linkIsolatedProjectRuntime,
+  reuseSharedOrphanTenantForProject,
   syncIsolatedProjectLicense,
+  verifyPassword,
 } from "@/services/runtime-tenants.service";
-import { deleteTenant } from "@/services/commercial-tenants.service";
+import { deleteTenant, tenantCodeExists } from "@/services/commercial-tenants.service";
 import {
   Dialog,
   DialogContent,
@@ -35,18 +38,23 @@ interface AddClienteDialogProps {
   onCreated?: (clienteId: string) => void;
 }
 
-type Step = "form" | "linking" | "confirm-link" | "link-error";
+type Step = "form" | "linking" | "confirm-link" | "link-error" | "shared-orphan";
+
+interface OrphanRuntimeState {
+  tenantId: string;
+  code: string;
+}
 
 const INITIAL_FORM = {
-  nome_entidade:    "",
-  nome_abreviado:   "",
-  tenant_code:      "",
-  email:            "",
-  cnpj_cpf:         "",
-  assinatura:       "trial" as "trial" | "monthly" | "annual",
+  nome_entidade: "",
+  nome_abreviado: "",
+  tenant_code: "",
+  email: "",
+  cnpj_cpf: "",
+  assinatura: "trial" as "trial" | "monthly" | "annual",
   acesso_expira_em: "",
-  max_socios:       "0",
-  supports_units:   false,
+  max_socios: "0",
+  supports_units: false,
 };
 
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -63,17 +71,20 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
   const createCliente = useCreateCliente(project.id);
   const updateCliente = useUpdateCliente(project.id);
 
-  const [form, setForm]                       = useState(INITIAL_FORM);
-  const [step, setStep]                       = useState<Step>("form");
-  const [createdCliente, setCreatedCliente]   = useState<Cliente | null>(null);
-  const [foundRuntimeId, setFoundRuntimeId]   = useState<string | null>(null);
-  const [linkError, setLinkError]             = useState<string | null>(null);
-  const [isConfirming, setIsConfirming]       = useState(false);
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [step, setStep] = useState<Step>("form");
+  const [createdCliente, setCreatedCliente] = useState<Cliente | null>(null);
+  const [foundRuntimeId, setFoundRuntimeId] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [orphanRuntime, setOrphanRuntime] = useState<OrphanRuntimeState | null>(null);
+  const [orphanPassword, setOrphanPassword] = useState("");
+  const [isResolvingOrphan, setIsResolvingOrphan] = useState(false);
 
   const update = (field: string, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const isIsolated     = !project.topology.startsWith("shared");
+  const isIsolated = !project.topology.startsWith("shared");
   const showSupportsUnits = project.topology === "shared_hybrid";
 
   const reset = () => {
@@ -83,16 +94,64 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
     setFoundRuntimeId(null);
     setLinkError(null);
     setIsConfirming(false);
+    setOrphanRuntime(null);
+    setOrphanPassword("");
+    setIsResolvingOrphan(false);
   };
 
-  const handleClose = () => {
+  const extractOrphanRuntime = (message: string): OrphanRuntimeState | null => {
+    const match = message.match(/tenant runtime orfao com o codigo "([^"]+)".*runtime_tenant_id=([a-f0-9-]+)/i);
+    if (!match) return null;
+    return {
+      code: match[1].toLowerCase(),
+      tenantId: match[2],
+    };
+  };
+
+  const rollbackPendingCentralTenant = async () => {
+    if (!createdCliente) return;
+
+    try {
+      await deleteTenant(createdCliente.id);
+    } catch (rollbackError) {
+      toast.error(
+        `O cadastro central pendente não pôde ser removido automaticamente: ${
+          rollbackError instanceof Error ? rollbackError.message : "erro desconhecido"
+        }`,
+      );
+    }
+  };
+
+  const closeDialog = () => {
     onOpenChange(false);
     reset();
+  };
+
+  const closeDialogWithoutRollback = () => {
+    closeDialog();
+  };
+
+  const closeDialogWithRollback = async () => {
+    await rollbackPendingCentralTenant();
+    closeDialog();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.nome_entidade.trim() || !form.tenant_code.trim()) return;
+
+    const normalizedTenantCode = form.tenant_code.trim().toLowerCase();
+
+    try {
+      const codeAlreadyExists = await tenantCodeExists(normalizedTenantCode);
+      if (codeAlreadyExists) {
+        toast.error(`O código de tenant "${normalizedTenantCode}" já está em uso. Escolha outro.`);
+        return;
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível validar o código do tenant.");
+      return;
+    }
 
     const clienteSupportsUnits = showSupportsUnits
       ? form.supports_units
@@ -100,24 +159,23 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
 
     try {
       const result = await createCliente.mutateAsync({
-        nome_entidade:     form.nome_entidade.trim(),
-        nome_abreviado:    form.nome_abreviado.trim() || null,
-        tenant_code:       form.tenant_code.trim().toLowerCase(),
+        nome_entidade: form.nome_entidade.trim(),
+        nome_abreviado: form.nome_abreviado.trim() || null,
+        tenant_code: normalizedTenantCode,
         runtime_tenant_id: null,
-        supports_units:    clienteSupportsUnits,
-        email:             form.email.trim() || null,
-        telefone:          null,
-        cnpj_cpf:          form.cnpj_cpf.trim() || null,
-        logo_url:          null,
-        assinatura:        form.assinatura,
-        acesso_expira_em:  form.acesso_expira_em ? form.acesso_expira_em + "T23:59:59.999Z" : null,
-        max_socios:        parseInt(form.max_socios, 10) || 0,
-        status:            "active",
+        supports_units: clienteSupportsUnits,
+        email: form.email.trim() || null,
+        telefone: null,
+        cnpj_cpf: form.cnpj_cpf.trim() || null,
+        logo_url: null,
+        assinatura: form.assinatura,
+        acesso_expira_em: form.acesso_expira_em ? `${form.acesso_expira_em}T23:59:59.999Z` : null,
+        max_socios: parseInt(form.max_socios, 10) || 0,
+        status: "active",
       });
 
       setCreatedCliente(result);
 
-      // Shared: cria tenant runtime diretamente
       if (!isIsolated) {
         try {
           await createSharedTenantForProject(project, result.id, {
@@ -128,29 +186,33 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
           });
           toast.success(`Tenant "${result.nome_entidade}" criado com sucesso.`);
           onCreated?.(result.id);
-          handleClose();
+          closeDialogWithoutRollback();
         } catch (runtimeError) {
+          const runtimeMessage = runtimeError instanceof Error ? runtimeError.message : "erro desconhecido";
+          const orphanInfo = extractOrphanRuntime(runtimeMessage);
+
+          if (orphanInfo) {
+            setOrphanRuntime(orphanInfo);
+            setStep("shared-orphan");
+            return;
+          }
+
           try {
             await deleteTenant(result.id);
           } catch (rollbackError) {
             toast.error(
               `Falha ao criar tenant no runtime e o rollback do registro central também falhou: ${
                 rollbackError instanceof Error ? rollbackError.message : "erro desconhecido"
-              }. Erro original: ${runtimeError instanceof Error ? runtimeError.message : "erro desconhecido"}`,
+              }. Erro original: ${runtimeMessage}`,
             );
             return;
           }
 
-          toast.error(
-            `Falha ao criar tenant no runtime: ${
-              runtimeError instanceof Error ? runtimeError.message : "erro desconhecido"
-            }. O registro central foi removido automaticamente.`,
-          );
+          toast.error(`Falha ao criar tenant no runtime: ${runtimeMessage}. O registro central foi removido automaticamente.`);
         }
         return;
       }
 
-      // Isolated: descoberta explícita do runtime tenant
       setStep("linking");
       try {
         const { runtime_tenant_id, runtime_tenants_count, runtime_topology } = await linkIsolatedProjectRuntime(project.id);
@@ -158,7 +220,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
           setLinkError(
             runtime_tenants_count === 0
               ? "Nenhum tenant runtime foi encontrado neste projeto."
-              : `O runtime retornou ${runtime_tenants_count} tenants (${runtime_topology ?? "topologia desconhecida"}). O vinculo isolated exige exatamente 1 tenant.`,
+              : `O runtime retornou ${runtime_tenants_count} tenants (${runtime_topology ?? "topologia desconhecida"}). O vínculo isolated exige exatamente 1 tenant.`,
           );
           setStep("link-error");
           return;
@@ -188,7 +250,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
       });
       toast.success(`Tenant "${createdCliente.nome_entidade}" vinculado ao runtime com sucesso.`);
       onCreated?.(createdCliente.id);
-      handleClose();
+      closeDialogWithoutRollback();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao gravar o vínculo.");
     } finally {
@@ -200,11 +262,73 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
     if (!createdCliente) return;
     toast.warning("Tenant criado sem vínculo runtime. Resolva depois pelo painel do projeto.");
     onCreated?.(createdCliente.id);
-    handleClose();
+    closeDialogWithoutRollback();
+  };
+
+  const handleReuseOrphan = async () => {
+    if (!createdCliente || !orphanRuntime) return;
+    setIsResolvingOrphan(true);
+    try {
+      await reuseSharedOrphanTenantForProject(project, createdCliente.id, {
+        tenantId: orphanRuntime.tenantId,
+        name: createdCliente.nome_entidade,
+        code: createdCliente.tenant_code,
+        acesso_expira_em: createdCliente.acesso_expira_em,
+        max_socios: createdCliente.max_socios,
+      });
+      toast.success("Tenant órfão reutilizado e vinculado com sucesso.");
+      onCreated?.(createdCliente.id);
+      closeDialogWithoutRollback();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível reutilizar o tenant órfão.");
+    } finally {
+      setIsResolvingOrphan(false);
+    }
+  };
+
+  const handleDeleteOrphanAndRecreate = async () => {
+    if (!createdCliente || !orphanRuntime) return;
+    if (!orphanPassword) {
+      toast.error("A senha do administrador é obrigatória para remover o tenant órfão.");
+      return;
+    }
+
+    setIsResolvingOrphan(true);
+    try {
+      await verifyPassword(orphanPassword);
+      await deleteSharedOrphanTenantForProject(project, {
+        tenantId: orphanRuntime.tenantId,
+        code: orphanRuntime.code,
+      });
+      await createSharedTenantForProject(project, createdCliente.id, {
+        name: createdCliente.nome_entidade,
+        code: createdCliente.tenant_code,
+        acesso_expira_em: createdCliente.acesso_expira_em,
+        max_socios: createdCliente.max_socios,
+      });
+      toast.success("Tenant órfão removido e o novo tenant foi criado com sucesso.");
+      onCreated?.(createdCliente.id);
+      closeDialogWithoutRollback();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível remover e recriar o tenant.");
+    } finally {
+      setIsResolvingOrphan(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          if (step === "shared-orphan" && createdCliente) {
+            void closeDialogWithRollback();
+            return;
+          }
+          closeDialogWithoutRollback();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-[460px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -218,14 +342,13 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                Projeto isolado — após criar o registro, você será solicitado a confirmar
+                Projeto isolado - após criar o registro, você será solicitado a confirmar
                 o vínculo com o tenant runtime existente no banco.
               </p>
             </div>
           )}
         </DialogHeader>
 
-        {/* ── PASSO 1: Formulário ── */}
         {step === "form" && (
           <form onSubmit={handleSubmit} className="space-y-4 pt-2 overflow-y-auto flex-1 pr-1">
             <div className="space-y-3 rounded-lg border border-border/50 bg-secondary/20 p-4">
@@ -328,7 +451,7 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={createCliente.isPending}>
+              <Button type="button" variant="outline" onClick={closeDialogWithoutRollback} disabled={createCliente.isPending}>
                 Cancelar
               </Button>
               <Button
@@ -344,17 +467,15 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
           </form>
         )}
 
-        {/* ── PASSO 2a: Consultando runtime ── */}
         {step === "linking" && (
           <div className="flex flex-col items-center gap-4 py-10">
             <Loader2 className="h-9 w-9 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
-              Consultando tenant runtime do projeto…
+              Consultando tenant runtime do projeto...
             </p>
           </div>
         )}
 
-        {/* ── PASSO 2b: Confirmar vínculo ── */}
         {step === "confirm-link" && foundRuntimeId && (
           <div className="space-y-5 pt-2">
             <div className="flex flex-col items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5 text-center">
@@ -387,13 +508,12 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
                 className="w-full text-muted-foreground"
               >
                 <SkipForward className="mr-2 h-4 w-4" />
-                Pular — resolver depois
+                Pular - resolver depois
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── PASSO 2c: Erro na descoberta ── */}
         {step === "link-error" && (
           <div className="space-y-5 pt-2">
             <div className="flex flex-col items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-5 text-center">
@@ -413,8 +533,77 @@ export function AddClienteDialog({ project, open, onOpenChange, onCreated }: Rea
               </div>
             </div>
             <Button onClick={handleSkipLink} className="w-full">
-              Entendido — fechar
+              Entendido - fechar
             </Button>
+          </div>
+        )}
+
+        {step === "shared-orphan" && createdCliente && orphanRuntime && (
+          <div className="space-y-5 pt-2">
+            <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-8 w-8 shrink-0 text-amber-500" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Já existe um tenant runtime órfão com este código
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    O cadastro central de <strong>{createdCliente.nome_entidade}</strong> já foi criado,
+                    mas o runtime encontrou um tenant órfão com o mesmo código.
+                    Escolha abaixo se deseja reutilizá-lo ou removê-lo para recriar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1 rounded-md bg-background/70 p-3 text-[11px]">
+                <p><strong>Código:</strong> {orphanRuntime.code}</p>
+                <p className="break-all"><strong>Runtime tenant ID:</strong> {orphanRuntime.tenantId}</p>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Se você fechar agora, o cadastro central pendente será removido automaticamente para não deixar estado pela metade.
+              </p>
+            </div>
+
+            <Button onClick={handleReuseOrphan} disabled={isResolvingOrphan} className="w-full">
+              {isResolvingOrphan
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <Link className="mr-2 h-4 w-4" />}
+              Reutilizar tenant órfão
+            </Button>
+
+            <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-destructive">Remover tenant órfão e criar novamente</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Esta opção apaga o tenant órfão do runtime antes de recriar o tenant corretamente.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="orphan-admin-password">Sua senha de administrador</Label>
+                <Input
+                  id="orphan-admin-password"
+                  type="password"
+                  placeholder="Digite sua senha"
+                  value={orphanPassword}
+                  onChange={(e) => setOrphanPassword(e.target.value)}
+                  disabled={isResolvingOrphan}
+                />
+              </div>
+
+              <Button
+                variant="destructive"
+                onClick={handleDeleteOrphanAndRecreate}
+                disabled={isResolvingOrphan || !orphanPassword}
+                className="w-full"
+              >
+                {isResolvingOrphan
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <Trash2 className="mr-2 h-4 w-4" />}
+                Remover órfão e recriar
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>
